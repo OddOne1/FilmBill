@@ -3,17 +3,11 @@ import { useParams, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useI18n } from "../context/I18nContext";
 import { useSettings } from "../context/SettingsContext";
+import DocPreview from "../components/DocPreview";
 
 function addDays(n) { const d=new Date(); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); }
 const today = () => new Date().toISOString().slice(0,10);
 function newLine(defaultTax) { return { key:Date.now()+Math.random(), inventory_id:"", description:"", units:"1", days:"1", unit_price:"0", tax_rate:String(defaultTax||0.20) }; }
-
-const LAYOUTS = [
-  { id:"classic", name:"Klassisch" },
-  { id:"modern",  name:"Modern" },
-  { id:"minimal", name:"Minimal" },
-  { id:"bold",    name:"Bold" },
-];
 
 export default function InvoiceEditor({ docType="invoice" }) {
   const { id } = useParams();
@@ -25,6 +19,7 @@ export default function InvoiceEditor({ docType="invoice" }) {
   const [customers, setCustomers] = useState([]);
   const [inventory, setInventory] = useState([]);
   const [templates, setTemplates] = useState([]);
+  const [layouts, setLayouts] = useState([]);
   const [doc, setDoc] = useState(null);
   const [payments, setPayments] = useState([]);
 
@@ -47,6 +42,7 @@ export default function InvoiceEditor({ docType="invoice" }) {
   const [payModal, setPayModal] = useState(false);
   const [reminderModal, setReminderModal] = useState(false);
   const [sendModal, setSendModal] = useState(false);
+  const [previewModal, setPreviewModal] = useState(false);
   const [extraEmail, setExtraEmail] = useState("");
   const [payForm, setPayForm] = useState({ amount:"", method:"Überweisung", reference:"", notes:"", paid_at: today() });
 
@@ -54,6 +50,7 @@ export default function InvoiceEditor({ docType="invoice" }) {
     api.get("/customers").then(setCustomers).catch(console.error);
     api.get("/inventory?active=true").then(setInventory).catch(console.error);
     api.get("/settings/templates").then(setTemplates).catch(console.error);
+    api.get("/settings/layouts").then(setLayouts).catch(console.error);
   }, []);
 
   useEffect(() => {
@@ -228,7 +225,10 @@ export default function InvoiceEditor({ docType="invoice" }) {
           {!isNew && !isInvoice && doc && doc.status!=="accepted" && (
             <button className="btn btn-secondary" onClick={convertToInvoice}>{t("convertToInvoice")}</button>
           )}
-          {/* Save and Send buttons next to each other */}
+          {/* Preview, Save and Send buttons */}
+          <button className="btn btn-secondary" onClick={() => setPreviewModal(true)}>
+            👁 Vorschau
+          </button>
           <button className="btn btn-secondary" onClick={() => isNew ? save(true) : setSendModal(true)} disabled={saving}>
             {saving ? t("saving") : t("send")} →
           </button>
@@ -267,7 +267,7 @@ export default function InvoiceEditor({ docType="invoice" }) {
           <div className="form-group">
             <label>{t("layout")}</label>
             <select value={form.doc_layout} onChange={f("doc_layout")} disabled={!canEdit}>
-              {LAYOUTS.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+              {layouts.map(l => <option key={l.id} value={l.key}>{l.name}</option>)}
             </select>
           </div>
         </div>
@@ -507,6 +507,35 @@ export default function InvoiceEditor({ docType="invoice" }) {
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setPayModal(false)}>{t("cancel")}</button>
               <button className="btn btn-primary" onClick={recordPayment} disabled={!payForm.amount}>{t("addPayment")}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Preview modal */}
+      {previewModal && (
+        <div className="modal-overlay" onClick={() => setPreviewModal(false)}>
+          <div className="modal modal-lg" onClick={e => e.stopPropagation()} style={{ maxWidth:900, padding:0 }}>
+            <div className="modal-header">
+              <h3>VORSCHAU</h3>
+              <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                <button className="btn btn-secondary btn-sm" onClick={() => window.print()}>🖨 Drucken</button>
+                <button className="btn btn-ghost btn-icon" onClick={() => setPreviewModal(false)}>✕</button>
+              </div>
+            </div>
+            <div className="modal-body" style={{ background:"#444", padding:20 }}>
+              <DocPreview
+                doc={{
+                  ...form,
+                  doc_type: docType,
+                  doc_no: doc?.doc_no || "PREVIEW",
+                  issue_date: doc?.issue_date || new Date().toISOString(),
+                  subtotal, tax_total: taxTotal, total: grandTotal, discount_amount: discAmt,
+                }}
+                items={lines.map(l => ({ description:l.description, units:l.units, days:l.days, unit_price:l.unit_price }))}
+                customer={customers.find(c => c.id === form.customer_id)}
+                layoutKey={form.doc_layout}
+              />
             </div>
           </div>
         </div>
