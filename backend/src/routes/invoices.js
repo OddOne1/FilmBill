@@ -2,6 +2,7 @@ const router = require("express").Router();
 const db = require("../db");
 const { authenticate } = require("../middleware/auth");
 const { sendInvoiceEmail, sendReminderEmail } = require("../services/email");
+const { generatePdf } = require("../services/pdf");
 
 router.use(authenticate);
 
@@ -226,10 +227,17 @@ router.post("/:id/send", async (req, res, next) => {
   try {
     const { extra_email } = req.body;
     const { rows } = await db.query(
-      `SELECT i.*, c.name AS customer_name FROM invoices i JOIN customers c ON c.id=i.customer_id WHERE i.id=$1`, [req.params.id]
+      `SELECT i.*, c.name AS customer_name,
+       (SELECT value FROM contact_entries WHERE entity_id=c.id AND type='address' LIMIT 1) AS customer_address
+       FROM invoices i JOIN customers c ON c.id=i.customer_id WHERE i.id=$1`, [req.params.id]
     );
     const inv = rows[0];
     if (!inv) return res.status(404).json({ error:"Not found" });
+    // Load items
+    const { rows: items } = await db.query(
+      "SELECT * FROM invoice_items WHERE invoice_id=$1 ORDER BY sort_order", [req.params.id]
+    );
+    inv.items = items;
     // Get all recipient emails
     const { rows: contacts } = await db.query(
       "SELECT value FROM contact_entries WHERE entity_id=$1 AND type='email' AND (is_primary=true OR is_billing=true)",
@@ -242,14 +250,65 @@ router.post("/:id/send", async (req, res, next) => {
       );
       recipients = allEmails.map(c=>c.value);
     }
-    // Add extra recipients from invoice field
     if (inv.extra_recipients) recipients.push(...inv.extra_recipients.split(',').map(e=>e.trim()).filter(Boolean));
-    // Add extra_email from request
     if (extra_email) recipients.push(...extra_email.split(',').map(e=>e.trim()).filter(Boolean));
     recipients = [...new Set(recipients)];
-    await sendInvoiceEmail(inv, { name: inv.customer_name, email: recipients.join(',') });
+
+    // Generate PDF attachment
+    let pdfBuffer = null;
+    try { pdfBuffer = await generatePdf(inv); }
+    catch (e) { console.error("PDF generation failed:", e.message); }
+
+    const label = inv.doc_type === "quote" ? "Angebot" : "Rechnung";
+    const filename = `${label}_${inv.doc_no}.pdf`;
+    const attachments = pdfBuffer ? [{ filename, content: pdfBuffer, contentType:"application/pdf" }] : [];
+
+    await sendInvoiceEmail(inv, { name: inv.customer_name, email: recipients.join(',') }, attachments);
     await db.query("UPDATE invoices SET status=CASE WHEN status='draft' THEN 'sent'::doc_status ELSE status END, sent_at=NOW() WHERE id=$1",[req.params.id]);
-    res.json({ ok:true, recipients });
+    res.json({ ok:true, recipients, hasPdf: !!pdfBuffer });
+  } catch (e) { next(e); }
+});
+
+// Download PDF
+router.get("/:id/pdf", async (req, res, next) => {
+  try {
+    const { rows } = await db.query(
+      `SELECT i.*, c.name AS customer_name,
+       (SELECT value FROM contact_entries WHERE entity_id=c.id AND type='address' LIMIT 1) AS customer_address
+       FROM invoices i JOIN customers c ON c.id=i.customer_id WHERE i.id=$1`, [req.params.id]
+    );
+    const inv = rows[0];
+    if (!inv) return res.status(404).json({ error:"Not found" });
+    const { rows: items } = await db.query(
+      "SELECT * FROM invoice_items WHERE invoice_id=$1 ORDER BY sort_order", [req.params.id]
+    );
+    inv.items = items;
+    const pdf = await generatePdf(inv);
+    const label = inv.doc_type === "quote" ? "Angebot" : "Rechnung";
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="${label}_${inv.doc_no}.pdf"`);
+    res.send(pdf);
+  } catch (e) { next(e); }
+});
+
+// HTML preview (for live preview in browser)
+router.get("/:id/preview", async (req, res, next) => {
+  try {
+    const { rows } = await db.query(
+      `SELECT i.*, c.name AS customer_name,
+       (SELECT value FROM contact_entries WHERE entity_id=c.id AND type='address' LIMIT 1) AS customer_address
+       FROM invoices i JOIN customers c ON c.id=i.customer_id WHERE i.id=$1`, [req.params.id]
+    );
+    const inv = rows[0];
+    if (!inv) return res.status(404).json({ error:"Not found" });
+    const { rows: items } = await db.query(
+      "SELECT * FROM invoice_items WHERE invoice_id=$1 ORDER BY sort_order", [req.params.id]
+    );
+    inv.items = items;
+    const { buildDocHtml } = require("../services/pdf");
+    const html = await buildDocHtml(inv);
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.send(html);
   } catch (e) { next(e); }
 });
 

@@ -188,7 +188,8 @@ export default function InvoiceEditor({ docType="invoice" }) {
   }
 
   const f = k => e => setForm(p => ({...p, [k]: e.target.type==="checkbox"?e.target.checked:e.target.value}));
-  const canEdit = !doc || doc.status==="draft";
+  const canEdit = !doc || doc.status !== "paid" && doc.status !== "cancelled";
+  const wasSent = doc && (doc.status === "sent" || doc.status === "partial" || doc.status === "overdue" || doc.sent_at);
   const isInvoice = docType==="invoice";
   const backPath = `/${docType}s`;
   const title = isNew ? (isInvoice?t("newInvoice"):t("newQuote")) : doc?.doc_no||"";
@@ -225,10 +226,15 @@ export default function InvoiceEditor({ docType="invoice" }) {
           {!isNew && !isInvoice && doc && doc.status!=="accepted" && (
             <button className="btn btn-secondary" onClick={convertToInvoice}>{t("convertToInvoice")}</button>
           )}
-          {/* Preview, Save and Send buttons */}
+          {/* Preview, PDF, Save and Send buttons */}
           <button className="btn btn-secondary" onClick={() => setPreviewModal(true)}>
             👁 Vorschau
           </button>
+          {!isNew && doc && (
+            <a className="btn btn-secondary" href={`/api/invoices/${doc.id}/pdf`} target="_blank" rel="noopener noreferrer">
+              📄 PDF
+            </a>
+          )}
           <button className="btn btn-secondary" onClick={() => isNew ? save(true) : setSendModal(true)} disabled={saving}>
             {saving ? t("saving") : t("send")} →
           </button>
@@ -244,6 +250,15 @@ export default function InvoiceEditor({ docType="invoice" }) {
         <div style={{ display:"flex", gap:12, marginBottom:16, alignItems:"center" }}>
           <span className={`badge badge-${doc.status}`}>{doc.status.toUpperCase()}</span>
           {amtPaid > 0 && <span className="text-green" style={{ fontSize:13 }}>{t("paid")}: {fmt(amtPaid)}</span>}
+        </div>
+      )}
+
+      {wasSent && canEdit && (
+        <div style={{
+          background:"rgba(255,180,0,0.1)", border:"1px solid rgba(255,180,0,0.4)",
+          color:"#ffa500", padding:"12px 16px", borderRadius:6, marginBottom:16, fontSize:13,
+        }}>
+          ⚠️ <strong>Achtung:</strong> Dieses Dokument wurde bereits versendet. Änderungen sind möglich, aber der Empfänger hat eventuell schon die alte Version. Bei Änderungen empfehlen wir, das Dokument erneut zu versenden.
         </div>
       )}
 
@@ -519,23 +534,35 @@ export default function InvoiceEditor({ docType="invoice" }) {
             <div className="modal-header">
               <h3>VORSCHAU</h3>
               <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-                <button className="btn btn-secondary btn-sm" onClick={() => window.print()}>🖨 Drucken</button>
+                {!isNew && doc && (
+                  <a className="btn btn-secondary btn-sm" href={`/api/invoices/${doc.id}/pdf`} target="_blank" rel="noopener noreferrer">📄 PDF</a>
+                )}
                 <button className="btn btn-ghost btn-icon" onClick={() => setPreviewModal(false)}>✕</button>
               </div>
             </div>
-            <div className="modal-body" style={{ background:"#444", padding:20 }}>
-              <DocPreview
-                doc={{
-                  ...form,
-                  doc_type: docType,
-                  doc_no: doc?.doc_no || "PREVIEW",
-                  issue_date: doc?.issue_date || new Date().toISOString(),
-                  subtotal, tax_total: taxTotal, total: grandTotal, discount_amount: discAmt,
-                }}
-                items={lines.map(l => ({ description:l.description, units:l.units, days:l.days, unit_price:l.unit_price }))}
-                customer={customers.find(c => c.id === form.customer_id)}
-                layoutKey={form.doc_layout}
-              />
+            <div className="modal-body" style={{ background:"#444", padding:0, height:"75vh" }}>
+              {!isNew && doc ? (
+                <iframe
+                  src={`/api/invoices/${doc.id}/preview`}
+                  style={{ width:"100%", height:"100%", border:"none", background:"#fff" }}
+                  title="Vorschau"
+                />
+              ) : (
+                <div style={{ padding:20 }}>
+                  <DocPreview
+                    doc={{
+                      ...form,
+                      doc_type: docType,
+                      doc_no: doc?.doc_no || "PREVIEW",
+                      issue_date: doc?.issue_date || new Date().toISOString(),
+                      subtotal, tax_total: taxTotal, total: grandTotal, discount_amount: discAmt,
+                    }}
+                    items={lines.map(l => ({ description:l.description, units:l.units, days:l.days, unit_price:l.unit_price }))}
+                    customer={customers.find(c => c.id === form.customer_id)}
+                    layoutKey={form.doc_layout}
+                  />
+                </div>
+              )}
             </div>
           </div>
         </div>

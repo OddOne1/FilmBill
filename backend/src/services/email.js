@@ -77,7 +77,7 @@ function tpl(content, primary='#f5c842', bg='#0f0f0f') {
     </div></div>`;
 }
 
-async function sendInvoiceEmail(invoice, customer) {
+async function sendInvoiceEmail(invoice, customer, attachments = []) {
   const lang = invoice.doc_language||'de';
   const T = TEXTS[lang]||TEXTS.de;
   const isQuote = invoice.doc_type === 'quote';
@@ -93,7 +93,7 @@ async function sendInvoiceEmail(invoice, customer) {
     ${invoice.notes_text ? `<hr style="border:none;border-top:1px solid #eee;margin:24px 0"><p>${invoice.notes_text}</p>` : ''}
     <p style="color:#666;font-size:13px;margin-top:24px">${invoice.terms||''}</p>
   `);
-  return sendMail({ to: customer.email, subject: `${label} ${invoice.doc_no} – ${process.env.COMPANY_NAME}`, html });
+  return sendMail({ to: customer.email, subject: `${label} ${invoice.doc_no} – ${process.env.COMPANY_NAME}`, html, attachments });
 }
 
 async function sendReminderEmail(invoice, customer, level, fee, interest, settings) {

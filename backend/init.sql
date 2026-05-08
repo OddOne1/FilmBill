@@ -32,10 +32,14 @@ INSERT INTO settings (key, value) VALUES
   ('company_email',       'office@meinefirma.at'),
   ('company_website',     'https://meinefirma.at'),
   ('company_vat',         'ATU00000000'),
+  ('company_court',       ''),
+  ('company_fn',          ''),
+  ('company_tax_no',      ''),
   ('company_bank',        ''),
   ('company_iban',        ''),
   ('company_bic',         ''),
   ('company_logo',        ''),
+  ('signature_name',      ''),
   ('currency_symbol',     '€'),
   ('currency_code',       'EUR'),
   ('currency_locale',     'de-AT'),
@@ -141,7 +145,7 @@ INSERT INTO doc_layouts (key, name, description, html, css, is_default, is_built
 .doc-grand{font-size:18px;font-weight:bold;border-top:2px solid #1a1a1a;padding-top:8px;margin-top:8px}
 .doc-agb{margin-top:30px;padding-top:20px;border-top:1px solid #ccc;font-size:10px;color:#666}
 .doc-agb h3{font-size:12px;margin-bottom:8px}
-.doc footer{margin-top:40px;padding-top:20px;border-top:1px solid #ccc;font-size:11px;color:#666;text-align:center}', true, true),
+.doc footer{margin-top:40px;padding-top:20px;border-top:1px solid #ccc;font-size:11px;color:#666;text-align:center}', false, true),
 
 ('modern', 'Modern', 'Modernes Layout mit farbigem Header',
 '<div class="doc">
@@ -251,7 +255,109 @@ INSERT INTO doc_layouts (key, name, description, html, css, is_default, is_built
 .doc-totals{font-size:13px}
 .doc-totals div{margin:4px 0}
 .doc-grand{font-size:36px;font-weight:900}
-.doc footer{margin-top:30px;text-align:center;font-size:11px;color:#666}', false, true);
+.doc footer{margin-top:30px;text-align:center;font-size:11px;color:#666}', false, true),
+
+('yon-studio', 'Yon Studio', 'Professionelles 257 Studio Layout mit Logo oben rechts',
+'<div class="doc">
+  <header class="doc-head">
+    {{#if logo}}<img src="{{logo}}" class="doc-logo" alt="Logo">{{/if}}
+  </header>
+  <section class="doc-meta">
+    <div class="doc-customer">
+      <strong>{{customer_name}}</strong><br>
+      {{customer_address}}
+    </div>
+    <table class="doc-info">
+      <tr><td>{{doc_label_no}}</td><td>{{doc_no}}</td></tr>
+      <tr><td>{{doc_label_date}}</td><td>{{issue_date}}</td></tr>
+      {{#if rental_end}}<tr><td>{{doc_label_delivery}}</td><td>{{rental_end}}</td></tr>{{/if}}
+      {{#if customer_vat}}<tr><td>{{doc_label_vat}}</td><td>{{customer_vat}}</td></tr>{{/if}}
+    </table>
+  </section>
+  {{#if subject}}<h1 class="doc-subject">{{doc_no}} | {{subject}}</h1>{{/if}}
+  {{#if intro_text}}<div class="doc-intro">{{intro_text}}</div>{{/if}}
+  <table class="doc-items">
+    <thead><tr>
+      <th class="num">#</th>
+      <th class="desc">Description</th>
+      <th class="qty">Quantity</th>
+      <th class="price">Unit price</th>
+      <th class="total">Total price</th>
+    </tr></thead>
+    <tbody>{{#each items}}
+      <tr>
+        <td class="num">{{@index}}.</td>
+        <td class="desc">{{description}}</td>
+        <td class="qty">{{units_days}}</td>
+        <td class="price">{{unit_price}}</td>
+        <td class="total">{{line_total}}</td>
+      </tr>
+    {{/each}}</tbody>
+  </table>
+  <div class="doc-totals">
+    <div class="row"><span>Sum positions</span><span class="amt">{{subtotal}}</span></div>
+    {{#if production_fee_amount}}<div class="row"><span>Production Fee</span><span class="amt">{{production_fee_pct}} % ({{production_fee_amount}})</span></div>{{/if}}
+    {{#if discount_amount}}<div class="row"><span>Discount</span><span class="amt">− {{discount_amount}}</span></div>{{/if}}
+    <div class="row"><span>Total net</span><span class="amt">{{total_net}}</span></div>
+    <div class="row"><span>Included VAT {{tax_rate_pct}}%</span><span class="amt">{{tax_total}}</span></div>
+    <div class="row grand"><span>Total gross</span><span class="amt">{{total}}</span></div>
+  </div>
+  {{#if terms}}<p class="doc-terms">Terms of payment: {{terms}}</p>{{/if}}
+  {{#if closing_text}}<p class="doc-closing">{{closing_text}}</p>{{/if}}
+  {{#if signature_name}}<p class="doc-sig">{{signature_name}}</p>{{/if}}
+  {{#if include_agb}}<div class="doc-agb">{{agb_text}}</div>{{/if}}
+  <footer class="doc-footer">
+    <div class="col">
+      <strong>{{company_name}}</strong><br>
+      {{company_address}}<br>
+      {{company_email}}<br>
+      {{company_website}}
+    </div>
+    <div class="col">
+      {{#if company_court}}{{company_court}}<br>{{/if}}
+      {{#if company_fn}}FN: {{company_fn}}<br>{{/if}}
+      VAT/UID: {{company_vat}}
+      {{#if company_tax_no}}<br>TAX-NO: {{company_tax_no}}{{/if}}
+    </div>
+    <div class="col right">
+      <strong>BANK ACCOUNT:</strong><br>
+      IBAN: {{company_iban}}<br>
+      BIC: {{company_bic}}
+    </div>
+  </footer>
+  <div class="doc-pageno">1/1</div>
+</div>',
+'@page { margin: 18mm 18mm 22mm 18mm; }
+.doc { font-family: var(--doc-font); color: #1a1a1a; font-size: 10pt; line-height: 1.45; }
+.doc-head { display: flex; justify-content: flex-end; align-items: flex-start; min-height: 80px; margin-bottom: 30px; }
+.doc-logo { max-height: 70px; max-width: 200px; object-fit: contain; }
+.doc-meta { display: grid; grid-template-columns: 1fr auto; gap: 40px; margin-bottom: 60px; align-items: start; }
+.doc-customer { font-size: 11pt; line-height: 1.6; }
+.doc-customer strong { display: block; margin-bottom: 2px; }
+.doc-info { font-size: 9pt; border-collapse: collapse; }
+.doc-info td { padding: 2px 0; vertical-align: top; }
+.doc-info td:first-child { color: #666; padding-right: 20px; }
+.doc-subject { font-size: 18pt; font-weight: 400; margin: 30px 0 25px 0; color: #1a1a1a; }
+.doc-intro { margin-bottom: 18px; font-size: 10pt; }
+.doc-items { width: 100%; border-collapse: collapse; margin: 20px 0 30px 0; }
+.doc-items thead th { font-weight: 400; font-size: 9pt; color: #666; padding: 8px 0; border-bottom: 1px solid #d0d0d0; text-align: right; }
+.doc-items thead th.num { width: 28px; text-align: left; }
+.doc-items thead th.desc { text-align: left; }
+.doc-items tbody td { padding: 10px 8px 10px 0; border-bottom: 1px solid #eee; vertical-align: top; font-size: 9.5pt; text-align: right; }
+.doc-items tbody td.num { color: #888; text-align: left; padding-left: 0; }
+.doc-items tbody td.desc { text-align: left; }
+.doc-totals { width: 100%; margin: 0 0 30px 0; }
+.doc-totals .row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 9.5pt; }
+.doc-totals .row .amt { font-variant-numeric: tabular-nums; }
+.doc-totals .row.grand { border-top: 1px solid #d0d0d0; padding-top: 10px; margin-top: 6px; font-weight: 700; font-size: 10pt; }
+.doc-terms { margin-top: 30px; font-size: 9.5pt; }
+.doc-closing { margin-top: 20px; font-size: 9.5pt; }
+.doc-sig { margin-top: 8px; font-size: 9.5pt; }
+.doc-agb { margin-top: 30px; padding-top: 20px; border-top: 1px solid #ccc; font-size: 8.5pt; color: #555; }
+.doc-footer { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-top: 60px; padding-top: 12px; border-top: 1px solid #d0d0d0; font-size: 8pt; color: #666; line-height: 1.5; }
+.doc-footer strong { color: #1a1a1a; }
+.doc-footer .right { text-align: right; }
+.doc-pageno { text-align: right; font-size: 8pt; color: #999; margin-top: 10px; }', true, true);
 
 -- ─── Inventory Categories ────────────────────────────────────────────────────
 CREATE TABLE inventory_categories (

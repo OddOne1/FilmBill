@@ -170,9 +170,13 @@ export default function Settings() {
                 <Field label={t("companyCity")}><input value={form.company_city||""} onChange={f("company_city")} /></Field>
                 <Field label={t("companyCountry")}><input value={form.company_country||""} onChange={f("company_country")} /></Field>
                 <Field label={t("companyVat")}><input value={form.company_vat||""} onChange={f("company_vat")} /></Field>
+                <Field label="Handelsgericht"><input value={form.company_court||""} onChange={f("company_court")} placeholder="Handelsgericht Wien" /></Field>
+                <Field label="FN-Nummer"><input value={form.company_fn||""} onChange={f("company_fn")} placeholder="FN 649055 V" /></Field>
+                <Field label="Steuernummer"><input value={form.company_tax_no||""} onChange={f("company_tax_no")} placeholder="06421/4836" /></Field>
                 <Field label={t("companyBank")}><input value={form.company_bank||""} onChange={f("company_bank")} /></Field>
                 <Field label={t("companyIban")}><input value={form.company_iban||""} onChange={f("company_iban")} /></Field>
                 <Field label={t("companyBic")}><input value={form.company_bic||""} onChange={f("company_bic")} /></Field>
+                <Field label="Unterschrift (Name)"><input value={form.signature_name||""} onChange={f("signature_name")} placeholder="Mathias Sonnleitner" /></Field>
                 <div className="form-group full">
                   <label>{t("companyLogo")}</label>
                   <input value={form.company_logo||""} onChange={f("company_logo")} placeholder="https://... oder data:image/png;base64,..." />
