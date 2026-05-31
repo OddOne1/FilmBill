@@ -76,7 +76,7 @@ INSERT INTO settings (key, value) VALUES
   ('app_font',            'DM Sans'),
   ('doc_font',            'DM Sans'),
   ('custom_font_url',     ''),
-  ('invoice_layout',      'classic');
+  ('invoice_layout',      'yon-studio');
 
 -- ─── Document Layouts ────────────────────────────────────────────────────────
 CREATE TABLE doc_layouts (
@@ -270,11 +270,11 @@ INSERT INTO doc_layouts (key, name, description, html, css, is_default, is_built
     <table class="doc-info">
       <tr><td>{{doc_label_no}}</td><td>{{doc_no}}</td></tr>
       <tr><td>{{doc_label_date}}</td><td>{{issue_date}}</td></tr>
-      {{#if rental_end}}<tr><td>{{doc_label_delivery}}</td><td>{{rental_end}}</td></tr>{{/if}}
+      {{#if rental_period}}<tr><td>{{doc_label_delivery}}</td><td>{{rental_period}}</td></tr>{{/if}}
       {{#if customer_vat}}<tr><td>{{doc_label_vat}}</td><td>{{customer_vat}}</td></tr>{{/if}}
     </table>
   </section>
-  {{#if subject}}<h1 class="doc-subject">{{doc_no}} | {{subject}}</h1>{{/if}}
+  {{#if subject}}<h1 class="doc-subject">{{subject}}</h1>{{/if}}
   {{#if intro_text}}<div class="doc-intro">{{intro_text}}</div>{{/if}}
   <table class="doc-items">
     <thead><tr>
@@ -302,7 +302,7 @@ INSERT INTO doc_layouts (key, name, description, html, css, is_default, is_built
     <div class="row"><span>Included VAT {{tax_rate_pct}}%</span><span class="amt">{{tax_total}}</span></div>
     <div class="row grand"><span>Total gross</span><span class="amt">{{total}}</span></div>
   </div>
-  {{#if terms}}<p class="doc-terms">Terms of payment: {{terms}}</p>{{/if}}
+  {{#if terms}}<p class="doc-terms">{{payment_label}}: {{terms}}</p>{{/if}}
   {{#if closing_text}}<p class="doc-closing">{{closing_text}}</p>{{/if}}
   {{#if signature_name}}<p class="doc-sig">{{signature_name}}</p>{{/if}}
   {{#if include_agb}}<div class="doc-agb">{{agb_text}}</div>{{/if}}

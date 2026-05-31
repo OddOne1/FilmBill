@@ -75,10 +75,13 @@ async function buildDocHtml(invoice) {
     const days = Number(it.days || 1);
     const lineTotal = units * days * Number(it.unit_price || 0);
     let unitsDaysLabel;
-    if (days > 1) {
-      unitsDaysLabel = `${units.toFixed(2)} ${lang === "en" ? "day(s)" : "Tag(e)"}`;
+    if (days > 1 || (days === 1 && units > 1)) {
+      const qty = days > 1 ? days : units;
+      unitsDaysLabel = `${qty.toFixed(2)} ${lang === "en" ? "day(s)" : "Tag(e)"}`;
+    } else if (units === 1 && days === 1) {
+      unitsDaysLabel = lang === "en" ? "blanket" : "Pausch.";
     } else {
-      unitsDaysLabel = `${units.toFixed(2)} ${lang === "en" ? "piece" : "Stk."}`;
+      unitsDaysLabel = `${units.toFixed(2)}`;
     }
     return {
       description: it.description || "",
@@ -102,8 +105,11 @@ async function buildDocHtml(invoice) {
   const firstTaxRate = (invoice.items && invoice.items[0]?.tax_rate) || 0.20;
   const taxRatePct = Math.round(Number(firstTaxRate) * 100);
 
+  const paymentLabel = lang === "en" ? "Terms of payment" : "Zahlungsbedingungen";
+
   const data = {
     doc_label: isQuote ? L.quote : L.invoice,
+    payment_label: paymentLabel,
     doc_label_no: isQuote ? L.quoteNo : L.invoiceNo,
     doc_label_date: isQuote ? L.quoteDate : L.date,
     doc_label_delivery: L.delivery,
@@ -116,6 +122,12 @@ async function buildDocHtml(invoice) {
     valid_until: invoice.valid_until ? new Date(invoice.valid_until).toLocaleDateString(locale) : "",
     rental_start: invoice.rental_start ? new Date(invoice.rental_start).toLocaleDateString(locale, { day:'numeric', month:'long', year:'numeric' }) : "",
     rental_end: invoice.rental_end ? new Date(invoice.rental_end).toLocaleDateString(locale, { day:'numeric', month:'long', year:'numeric' }) : "",
+    rental_period: (() => {
+      const s = invoice.rental_start ? new Date(invoice.rental_start).toLocaleDateString(locale, { day:'numeric', month:'long', year:'numeric' }) : "";
+      const e = invoice.rental_end ? new Date(invoice.rental_end).toLocaleDateString(locale, { day:'numeric', month:'long', year:'numeric' }) : "";
+      if (s && e) return `${s} – ${e}`;
+      return s || e;
+    })(),
     customer_name: invoice.customer_name || "—",
     customer_address: invoice.customer_address || "",
     customer_vat: invoice.customer_vat || "",

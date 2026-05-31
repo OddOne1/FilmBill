@@ -8,7 +8,7 @@ router.get("/", async (req, res, next) => {
   try {
     const year = new Date().getFullYear();
 
-    const [statusStats, overdueCount, monthlyRevenue, topItems, userStats] = await Promise.all([
+    const [statusStats, overdueCount, monthlyRevenue, topItems, userStats, recentInvoices] = await Promise.all([
       db.query(`SELECT doc_type, status, COUNT(*) AS count, COALESCE(SUM(total),0) AS total
                 FROM invoices WHERE status != 'cancelled' GROUP BY doc_type, status`),
       db.query(`SELECT COUNT(*) AS count FROM invoices
@@ -32,6 +32,11 @@ router.get("/", async (req, res, next) => {
                   AND i.status != 'cancelled'
                 WHERE u.active=true
                 GROUP BY u.id, u.name ORDER BY invoice_total DESC`, [year]),
+      db.query(`SELECT i.id, i.doc_no, i.doc_type, i.status, i.total, i.due_date, i.issue_date, i.subject,
+                  c.name AS customer_name
+                FROM invoices i JOIN customers c ON c.id=i.customer_id
+                WHERE i.status != 'cancelled'
+                ORDER BY i.created_at DESC LIMIT 10`),
     ]);
 
     res.json({
@@ -40,6 +45,7 @@ router.get("/", async (req, res, next) => {
       monthlyRevenue: monthlyRevenue.rows,
       topItems: topItems.rows,
       userStats: userStats.rows,
+      recentInvoices: recentInvoices.rows,
       year,
     });
   } catch (e) { next(e); }
