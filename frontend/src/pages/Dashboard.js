@@ -47,9 +47,28 @@ export default function Dashboard() {
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:20, marginBottom:20 }}>
         <div className="card">
           <h3 style={{ fontFamily:"var(--display)", letterSpacing:2, marginBottom:16, fontSize:16 }}>{t("recentInvoices").toUpperCase()}</h3>
-          {(data?.byStatus||[]).length === 0
+          {!(data?.recentInvoices?.length)
             ? <p className="text-dim" style={{ fontSize:13 }}>{t("noInvoicesYet")}</p>
-            : <p className="text-dim" style={{ fontSize:13 }}>—</p>
+            : <div className="table-wrap">
+                <table>
+                  <thead><tr>
+                    <th>{t("docNo")}</th>
+                    <th>{t("customer")}</th>
+                    <th>{t("total")}</th>
+                    <th>{t("status")}</th>
+                  </tr></thead>
+                  <tbody>
+                    {(data.recentInvoices).map(d => (
+                      <tr key={d.id}>
+                        <td className="mono text-gold" style={{ fontSize:12 }}>{d.doc_no}</td>
+                        <td style={{ fontSize:13 }}>{d.customer_name}</td>
+                        <td className="mono" style={{ fontSize:13 }}>{fmt(d.total)}</td>
+                        <td><span className={`badge badge-${d.status}`}>{d.status}</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
           }
         </div>
         <div className="card">

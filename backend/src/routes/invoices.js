@@ -228,8 +228,11 @@ router.post("/:id/send", async (req, res, next) => {
     const { extra_email } = req.body;
     const { rows } = await db.query(
       `SELECT i.*, c.name AS customer_name,
-       (SELECT value FROM contact_entries WHERE entity_id=c.id AND type='address' LIMIT 1) AS customer_address
-       FROM invoices i JOIN customers c ON c.id=i.customer_id WHERE i.id=$1`, [req.params.id]
+       (SELECT value FROM contact_entries WHERE entity_id=c.id AND type='address' LIMIT 1) AS customer_address,
+       co.vat AS customer_vat
+       FROM invoices i JOIN customers c ON c.id=i.customer_id
+       LEFT JOIN companies co ON co.id=c.company_id
+       WHERE i.id=$1`, [req.params.id]
     );
     const inv = rows[0];
     if (!inv) return res.status(404).json({ error:"Not found" });
@@ -274,8 +277,11 @@ router.get("/:id/pdf", async (req, res, next) => {
   try {
     const { rows } = await db.query(
       `SELECT i.*, c.name AS customer_name,
-       (SELECT value FROM contact_entries WHERE entity_id=c.id AND type='address' LIMIT 1) AS customer_address
-       FROM invoices i JOIN customers c ON c.id=i.customer_id WHERE i.id=$1`, [req.params.id]
+       (SELECT value FROM contact_entries WHERE entity_id=c.id AND type='address' LIMIT 1) AS customer_address,
+       co.vat AS customer_vat
+       FROM invoices i JOIN customers c ON c.id=i.customer_id
+       LEFT JOIN companies co ON co.id=c.company_id
+       WHERE i.id=$1`, [req.params.id]
     );
     const inv = rows[0];
     if (!inv) return res.status(404).json({ error:"Not found" });
@@ -296,8 +302,11 @@ router.get("/:id/preview", async (req, res, next) => {
   try {
     const { rows } = await db.query(
       `SELECT i.*, c.name AS customer_name,
-       (SELECT value FROM contact_entries WHERE entity_id=c.id AND type='address' LIMIT 1) AS customer_address
-       FROM invoices i JOIN customers c ON c.id=i.customer_id WHERE i.id=$1`, [req.params.id]
+       (SELECT value FROM contact_entries WHERE entity_id=c.id AND type='address' LIMIT 1) AS customer_address,
+       co.vat AS customer_vat
+       FROM invoices i JOIN customers c ON c.id=i.customer_id
+       LEFT JOIN companies co ON co.id=c.company_id
+       WHERE i.id=$1`, [req.params.id]
     );
     const inv = rows[0];
     if (!inv) return res.status(404).json({ error:"Not found" });
