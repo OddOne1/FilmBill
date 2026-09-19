@@ -1,0 +1,593 @@
+<title>FilmBill Job Equipment</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Tokens copied from FreeFrame packages/design-tokens/tokens.css (dark = default). */
+:root{
+  --bg-primary:#0d0d10;--bg-secondary:#16161a;--bg-tertiary:#1e1e24;--bg-elevated:#24242c;--bg-hover:#2a2a34;
+  --border-primary:#2e2e3a;--border-secondary:#222230;--border-focus:#5b8def;
+  --text-primary:#eaeaed;--text-secondary:#94949e;--text-tertiary:#5e5e6e;--text-inverse:#0d0d10;
+  --accent:#5b8def;--accent-hover:#7aa3f5;--accent-muted:#253556;--accent-foreground:#0d0d10;
+  --status-success:#34d399;--status-warning:#fbbf24;--status-error:#f87171;--status-info:#60a5fa;--status-turquoise:#2dd4bf;
+  --warn-muted:rgba(251,191,36,.12);--error-muted:rgba(248,113,113,.13);--ok-muted:rgba(52,211,153,.12);--turq-muted:rgba(45,212,191,.12);
+  --paper:#ffffff;--paper-ink:#1a1a2e;--paper-line:#e0e0e6;--paper-muted:#5a5a6e;
+  --shadow:0 12px 40px rgba(0,0,0,.45);
+  --font-sans:'DM Sans',system-ui,-apple-system,sans-serif;--font-mono:'JetBrains Mono','Fira Code',ui-monospace,monospace;
+  --r-sm:4px;--r-md:6px;--r-lg:8px;--r-xl:12px;
+  color-scheme:dark;
+}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){
+    --bg-primary:#ffffff;--bg-secondary:#f8f8fa;--bg-tertiary:#f0f0f4;--bg-elevated:#ffffff;--bg-hover:#eaeaef;
+    --border-primary:#e0e0e6;--border-secondary:#d0d0d8;--border-focus:#4a7de8;
+    --text-primary:#1a1a2e;--text-secondary:#5a5a6e;--text-tertiary:#8a8a9e;--text-inverse:#ffffff;
+    --accent:#4a7de8;--accent-hover:#3a6dd8;--accent-muted:#e8eef8;--accent-foreground:#ffffff;
+    --status-success:#16a34a;--status-warning:#ca8a04;--status-error:#dc2626;--status-info:#2563eb;--status-turquoise:#0d9488;
+    --warn-muted:rgba(202,138,4,.1);--error-muted:rgba(220,38,38,.08);--ok-muted:rgba(22,163,74,.09);--turq-muted:rgba(13,148,136,.09);
+    --paper:#ffffff;--paper-line:#e0e0e6;--shadow:0 12px 40px rgba(26,26,46,.14);
+    color-scheme:light;
+  }
+}
+:root[data-theme="light"]{
+  --bg-primary:#ffffff;--bg-secondary:#f8f8fa;--bg-tertiary:#f0f0f4;--bg-elevated:#ffffff;--bg-hover:#eaeaef;
+  --border-primary:#e0e0e6;--border-secondary:#d0d0d8;--border-focus:#4a7de8;
+  --text-primary:#1a1a2e;--text-secondary:#5a5a6e;--text-tertiary:#8a8a9e;--text-inverse:#ffffff;
+  --accent:#4a7de8;--accent-hover:#3a6dd8;--accent-muted:#e8eef8;--accent-foreground:#ffffff;
+  --status-success:#16a34a;--status-warning:#ca8a04;--status-error:#dc2626;--status-info:#2563eb;--status-turquoise:#0d9488;
+  --warn-muted:rgba(202,138,4,.1);--error-muted:rgba(220,38,38,.08);--ok-muted:rgba(22,163,74,.09);--turq-muted:rgba(13,148,136,.09);
+  --paper:#ffffff;--paper-line:#e0e0e6;--shadow:0 12px 40px rgba(26,26,46,.14);
+  color-scheme:light;
+}
+:root[data-theme="dark"]{color-scheme:dark}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg-primary);color:var(--text-primary);font:13px/1.45 var(--font-sans);-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:1px;border-radius:var(--r-sm)}
+.mono{font-family:var(--font-mono);font-size:11.5px}
+.num{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+svg.i{width:16px;height:16px;flex:none;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+svg.i.sm{width:13px;height:13px}
+
+/* ── Shell (FreeFrame: nav rail + 44px header) ── */
+.shell{display:grid;grid-template-columns:208px 1fr;min-height:100%}
+.rail{background:var(--bg-secondary);border-right:1px solid var(--border-primary);display:flex;flex-direction:column;position:sticky;top:0;height:100vh}
+.brand{height:44px;display:flex;align-items:center;gap:8px;padding:0 14px;border-bottom:1px solid var(--border-primary);font-weight:600;letter-spacing:-.01em}
+.brand b{width:22px;height:22px;border-radius:6px;background:var(--accent);color:var(--accent-foreground);display:grid;place-items:center;font-size:11px;font-weight:700}
+.rail nav{padding:8px;display:flex;flex-direction:column;gap:2px}
+.nav{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:var(--r-md);color:var(--text-secondary)}
+.nav:hover{background:var(--bg-hover);color:var(--text-primary)}
+.nav.on{background:var(--bg-tertiary);color:var(--text-primary);font-weight:500}
+.rail .foot{margin-top:auto;border-top:1px solid var(--border-primary);padding:8px}
+.company{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:var(--r-md);color:var(--text-secondary);font-size:12px}
+.company i{width:20px;height:20px;border-radius:50%;background:var(--bg-elevated);border:1px solid var(--border-primary);display:grid;place-items:center;font-style:normal;font-size:9px;font-weight:700;color:var(--text-primary)}
+
+.main{min-width:0;display:flex;flex-direction:column}
+.topbar{position:sticky;top:0;z-index:20;height:44px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 16px;background:var(--bg-secondary);border-bottom:1px solid var(--border-primary)}
+.crumbs{display:flex;align-items:center;gap:6px;min-width:0;white-space:nowrap;overflow:hidden}
+.crumbs span{color:var(--text-secondary)}
+.crumbs strong{font-weight:500;overflow:hidden;text-overflow:ellipsis}
+.search{display:flex;align-items:center;gap:6px;border:1px solid var(--border-primary);border-radius:var(--r-md);padding:4px 10px;color:var(--text-secondary);font-size:12px}
+kbd{font-family:var(--font-mono);font-size:10px;border:1px solid var(--border-primary);border-radius:3px;padding:0 4px}
+
+/* ── Job header ── */
+.jobhead{padding:18px 20px 0;border-bottom:1px solid var(--border-primary);display:flex;flex-direction:column;gap:14px}
+.jh-row{display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:12px 24px}
+.jobno{color:var(--text-tertiary);font-family:var(--font-mono);font-size:11.5px}
+h1{font-size:20px;line-height:1.25;margin:2px 0 4px;font-weight:600;letter-spacing:-.015em;text-wrap:balance}
+.client{color:var(--text-secondary)}
+.chip{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:999px;font-size:11.5px;font-weight:500;border:1px solid var(--border-primary);color:var(--text-secondary);white-space:nowrap}
+.chip.ok{border-color:transparent;background:var(--ok-muted);color:var(--status-success)}
+.chip.warn{border-color:transparent;background:var(--warn-muted);color:var(--status-warning)}
+.chip.err{border-color:transparent;background:var(--error-muted);color:var(--status-error)}
+.chip.kit{border-color:transparent;background:var(--turq-muted);color:var(--status-turquoise)}
+.chip .dot{width:6px;height:6px;border-radius:50%;background:currentColor}
+.periods{display:flex;flex-wrap:wrap;gap:6px}
+.period{display:flex;flex-direction:column;border:1px solid var(--border-primary);border-radius:var(--r-md);padding:4px 10px;background:var(--bg-secondary);min-width:92px}
+.period small{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary)}
+.period span{font-variant-numeric:tabular-nums;font-weight:500}
+.period.shoot{border-color:var(--accent);background:var(--accent-muted)}
+.tabs{display:flex;gap:2px;overflow-x:auto;margin:0 -4px}
+.tab{padding:8px 10px 10px;color:var(--text-secondary);border-bottom:2px solid transparent;white-space:nowrap}
+.tab.on{color:var(--text-primary);border-color:var(--accent);font-weight:500}
+.tab em{font-style:normal;color:var(--text-tertiary);margin-left:4px;font-size:11px}
+
+/* ── Work area ── */
+.work{display:grid;grid-template-columns:minmax(0,1fr) 320px;flex:1;min-height:0}
+.list{min-width:0;padding:14px 20px 28px;display:flex;flex-direction:column;gap:12px}
+.toolbar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px}
+.tgroup{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.btn{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 11px;border-radius:var(--r-md);border:1px solid var(--border-primary);background:var(--bg-secondary);color:var(--text-primary);font-size:12.5px;white-space:nowrap}
+.btn:hover{background:var(--bg-hover)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-foreground);font-weight:500}
+.btn.primary:hover{background:var(--accent-hover)}
+.btn.ghost{background:none;border-color:transparent;color:var(--text-secondary)}
+.btn.ghost:hover{color:var(--text-primary);background:var(--bg-hover)}
+.seg{display:inline-flex;border:1px solid var(--border-primary);border-radius:var(--r-md);padding:2px;background:var(--bg-secondary)}
+.seg button{height:24px;padding:0 10px;border-radius:4px;color:var(--text-secondary);font-size:12px}
+.seg button[aria-pressed="true"]{background:var(--bg-elevated);color:var(--text-primary);box-shadow:0 0 0 1px var(--border-primary)}
+.seglabel{font-size:11.5px;color:var(--text-tertiary)}
+
+.alert{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:var(--r-lg);background:var(--error-muted);color:var(--status-error);font-size:12.5px}
+.alert b{font-weight:600}
+.alert button{margin-left:auto;text-decoration:underline;text-underline-offset:2px}
+.alert[data-state="ok"]{background:var(--ok-muted);color:var(--status-success)}
+
+.tablewrap{border:1px solid var(--border-primary);border-radius:var(--r-lg);background:var(--bg-secondary);overflow-x:auto}
+table.eq{width:100%;border-collapse:collapse;min-width:860px}
+.eq th{position:sticky;top:0;background:var(--bg-secondary);text-align:left;font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-tertiary);padding:8px 10px;border-bottom:1px solid var(--border-primary);white-space:nowrap}
+.eq th.num{text-align:right}
+.eq td{padding:6px 10px;border-bottom:1px solid var(--border-secondary);vertical-align:middle}
+.eq tr:last-child td{border-bottom:0}
+.eq tr.dev:hover td,.eq tr.assoc:hover td{background:var(--bg-hover)}
+.eq tr.grp td{background:var(--bg-tertiary);padding-top:9px;padding-bottom:9px;border-bottom:1px solid var(--border-primary)}
+.gname{display:flex;align-items:center;gap:8px;font-weight:600}
+.gname .caret{color:var(--text-tertiary);transition:transform .15s}
+.grp.closed .caret{transform:rotate(-90deg)}
+.gmeta{color:var(--text-tertiary);font-weight:400;font-size:12px}
+.dname{display:flex;align-items:center;gap:8px;padding-left:22px;min-width:0}
+.thumb{width:26px;height:26px;border-radius:5px;background:var(--bg-elevated);border:1px solid var(--border-primary);display:grid;place-items:center;color:var(--text-tertiary);flex:none}
+.dname .t{display:flex;flex-direction:column;min-width:0}
+.dname .t strong{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dname .t .mono{color:var(--text-tertiary)}
+.assoc .dname{padding-left:52px;color:var(--text-secondary)}
+.assoc .dname .t strong{font-weight:400}
+.tag{font-size:10.5px;color:var(--text-tertiary);border:1px solid var(--border-primary);border-radius:3px;padding:0 4px;white-space:nowrap}
+.units{display:flex;flex-wrap:wrap;gap:4px;padding-left:56px}
+.unit{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 7px;border-radius:var(--r-sm);background:var(--bg-primary);border:1px solid var(--border-primary);font-family:var(--font-mono);font-size:11px;color:var(--text-secondary)}
+.unit b{color:var(--text-primary);font-weight:500}
+.unit.empty{border-style:dashed;color:var(--text-tertiary);font-family:var(--font-sans)}
+.qty{display:inline-flex;align-items:center;border:1px solid var(--border-primary);border-radius:var(--r-sm);height:24px;background:var(--bg-primary)}
+.qty button{width:20px;height:22px;color:var(--text-tertiary)}
+.qty button:hover{color:var(--text-primary)}
+.qty span{min-width:20px;text-align:center;font-variant-numeric:tabular-nums}
+.muted{color:var(--text-tertiary)}
+.days{display:inline-flex;gap:2px;vertical-align:middle}
+.days i{width:9px;height:14px;border-radius:2px;background:var(--bg-elevated);border:1px solid var(--border-primary)}
+.days i.b{background:var(--accent);border-color:var(--accent);opacity:.75}
+.days i.x{background:var(--status-error);border-color:var(--status-error);opacity:1}
+.avail{display:inline-flex;align-items:center;gap:5px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.avail.ok{color:var(--status-success)}
+.avail.err{color:var(--status-error);font-weight:500}
+.avail.err:hover{text-decoration:underline}
+.rowact{opacity:0;display:inline-flex;gap:2px}
+tr:hover .rowact,.rowact:focus-within{opacity:1}
+.icbtn{width:24px;height:24px;display:grid;place-items:center;border-radius:var(--r-sm);color:var(--text-tertiary)}
+.icbtn:hover{background:var(--bg-elevated);color:var(--text-primary)}
+.gwarn{display:flex;align-items:flex-start;gap:8px;padding:7px 10px 7px 32px;background:var(--warn-muted);color:var(--status-warning);font-size:12px}
+.kitprice{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.strike{text-decoration:line-through;color:var(--text-tertiary)}
+
+.totals{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;background:var(--border-primary);border:1px solid var(--border-primary);border-radius:var(--r-lg);overflow:hidden}
+.totals div{background:var(--bg-secondary);padding:10px 12px;display:flex;flex-direction:column;gap:2px}
+.totals small{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary)}
+.totals span{font-size:15px;font-weight:600;font-variant-numeric:tabular-nums}
+.totals .g span{color:var(--accent)}
+
+/* ── Customer preview (paper, like Mathias' sketch) ── */
+.previewhead{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin-top:6px}
+.previewhead h2{font-size:13px;margin:0;font-weight:600}
+.previewhead p{margin:0;color:var(--text-tertiary);font-size:12px}
+.paperwrap{overflow-x:auto;border-radius:var(--r-lg)}
+.paper{background:var(--paper);color:var(--paper-ink);border-radius:var(--r-lg);padding:22px 26px;min-width:640px;box-shadow:0 0 0 1px var(--border-primary)}
+.paper .ptitle{text-align:center;font-weight:700;font-size:14px;margin:0 0 12px}
+.paper table{width:100%;border-collapse:collapse;font-size:11.5px}
+.paper th{text-align:left;font-weight:500;font-size:10px;letter-spacing:.04em;text-transform:uppercase;border-bottom:1.5px solid var(--paper-ink);padding:5px 6px;color:var(--paper-ink)}
+.paper th.num{text-align:right}
+.paper td{padding:4px 6px;border-bottom:1px solid var(--paper-line)}
+.paper .pg td{font-weight:700;padding-top:9px}
+.paper .pg td:first-child{text-decoration:underline;text-underline-offset:2px}
+.paper .pk td:first-child{font-weight:700;font-style:italic;padding-left:14px}
+.paper .pd td:first-child{padding-left:14px}
+.paper .pd.in td:first-child{padding-left:26px}
+.paper .pu td{font-style:italic;color:var(--paper-muted);font-size:10.5px}
+.paper .pu td:first-child{padding-left:28px}
+.paper .pu.in td:first-child{padding-left:40px}
+.paper .psum td{border-bottom:0;padding-top:3px}
+.paper .psum.first td{border-top:1.5px solid var(--paper-ink);padding-top:8px}
+.paper .psum.grand td{font-weight:700}
+
+/* ── Catalog panel (Rentman/easyjob picker, FreeFrame side panel) ── */
+.panel{border-left:1px solid var(--border-primary);background:var(--bg-secondary);display:flex;flex-direction:column;min-width:0;position:sticky;top:44px;height:calc(100vh - 44px)}
+.panel header{padding:12px 14px 10px;border-bottom:1px solid var(--border-primary);display:flex;flex-direction:column;gap:8px}
+.panel h2{margin:0;font-size:13px;font-weight:600;display:flex;justify-content:space-between;align-items:center}
+.panel h2 small{font-weight:400;color:var(--text-tertiary);font-size:11.5px}
+.field{display:flex;align-items:center;gap:6px;height:30px;padding:0 9px;border:1px solid var(--border-primary);border-radius:var(--r-md);background:var(--bg-primary);color:var(--text-tertiary)}
+.field input{flex:1;min-width:0;border:0;background:none;color:var(--text-primary);font:inherit;outline:none}
+.cats{display:flex;gap:4px;overflow-x:auto;padding-bottom:2px}
+.cat{height:24px;padding:0 9px;border-radius:999px;border:1px solid var(--border-primary);color:var(--text-secondary);font-size:12px;white-space:nowrap}
+.cat[aria-pressed="true"]{background:var(--accent-muted);border-color:var(--accent);color:var(--text-primary)}
+.catalog{overflow-y:auto;padding:6px}
+.citem{display:grid;grid-template-columns:30px 1fr auto;gap:8px;align-items:center;padding:7px 8px;border-radius:var(--r-md)}
+.citem:hover{background:var(--bg-hover)}
+.citem .thumb{width:30px;height:30px}
+.citem strong{font-weight:500;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.citem small{color:var(--text-tertiary);font-size:11.5px;display:flex;gap:6px;align-items:center}
+.bar{height:4px;border-radius:2px;background:var(--bg-elevated);overflow:hidden;width:54px}
+.bar i{display:block;height:100%;background:var(--status-success)}
+.bar i.low{background:var(--status-warning)}.bar i.none{background:var(--status-error)}
+.add{width:26px;height:26px;border-radius:var(--r-md);display:grid;place-items:center;border:1px solid var(--border-primary);color:var(--text-secondary)}
+.add:hover{border-color:var(--accent);color:var(--accent)}
+.csection{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary);padding:10px 8px 4px}
+.panel .legend{margin-top:auto;border-top:1px solid var(--border-primary);padding:10px 14px;color:var(--text-tertiary);font-size:11.5px;display:flex;flex-direction:column;gap:4px}
+
+/* ── Popovers / dialog ── */
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:40;display:grid;place-items:center;padding:16px}
+.dialog{width:min(460px,100%);background:var(--bg-elevated);border:1px solid var(--border-primary);border-radius:var(--r-xl);box-shadow:var(--shadow);overflow:hidden}
+.dialog header{padding:14px 16px 10px;display:flex;gap:10px;align-items:flex-start}
+.dialog header .ic{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;background:var(--error-muted);color:var(--status-error);flex:none}
+.dialog header .ic.info{background:var(--accent-muted);color:var(--accent)}
+.dialog h3{margin:0;font-size:14px;font-weight:600}
+.dialog header p{margin:2px 0 0;color:var(--text-secondary);font-size:12.5px}
+.dbody{padding:0 16px 12px;display:flex;flex-direction:column;gap:8px}
+.dlabel{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary);margin-top:4px}
+.opt{display:grid;grid-template-columns:30px 1fr auto;gap:10px;align-items:center;padding:8px 10px;border:1px solid var(--border-primary);border-radius:var(--r-lg);background:var(--bg-secondary)}
+.opt[aria-disabled="true"]{opacity:.55}
+.opt strong{font-weight:500}
+.opt small{display:block;color:var(--text-tertiary);font-size:11.5px}
+.diffbox{display:grid;grid-template-columns:1fr auto;gap:4px 12px;padding:10px 12px;border-radius:var(--r-lg);background:var(--bg-secondary);border:1px solid var(--border-primary);font-variant-numeric:tabular-nums}
+.diffbox .neg{color:var(--status-success)}
+.dfoot{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;padding:10px 16px;border-top:1px solid var(--border-primary);background:var(--bg-secondary)}
+.note{font-size:11.5px;color:var(--text-tertiary)}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--bg-elevated);border:1px solid var(--border-primary);box-shadow:var(--shadow);border-radius:var(--r-lg);padding:8px 14px;z-index:50;font-size:12.5px}
+.example{font-size:11px;color:var(--text-tertiary);border:1px dashed var(--border-primary);border-radius:999px;padding:1px 8px}
+
+@media (max-width:1100px){.work{grid-template-columns:1fr}.panel{position:static;height:auto;border-left:0;border-top:1px solid var(--border-primary)}.catalog{max-height:420px}}
+@media (max-width:760px){.shell{grid-template-columns:1fr}.rail{display:none}.jobhead,.list{padding-left:16px;padding-right:16px}.search span,.search kbd{display:none}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></symbol>
+  <symbol id="i-clap" viewBox="0 0 24 24"><path d="M4 11h16v9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><path d="m4 11-.9-3.6a1 1 0 0 1 .7-1.2l13.5-3.4a1 1 0 0 1 1.2.7L19.4 7"/><path d="m8 5.2 3 4M13 4l3 4"/></symbol>
+  <symbol id="i-box" viewBox="0 0 24 24"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="m3 8 9 5 9-5M12 13v8"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18.5 20a6.5 6.5 0 0 0-3-5.5"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></symbol>
+  <symbol id="i-archive" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M10 13h4"/></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="1.5"/><path d="M3 10h18M8 3v4M16 3v4"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-right" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></symbol>
+  <symbol id="i-swap" viewBox="0 0 24 24"><path d="M16 3l4 4-4 4M20 7H4M8 21l-4-4 4-4M4 17h16"/></symbol>
+  <symbol id="i-kit" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2M2 13h20"/></symbol>
+  <symbol id="i-cam" viewBox="0 0 24 24"><rect x="2" y="7" width="14" height="11" rx="2"/><path d="m16 11 6-3v9l-6-3"/></symbol>
+  <symbol id="i-lens" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></symbol>
+  <symbol id="i-light" viewBox="0 0 24 24"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V16h8v-1.3A7 7 0 0 0 12 2z"/></symbol>
+  <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4"/></symbol>
+  <symbol id="i-dolly" viewBox="0 0 24 24"><path d="M4 16h16M6 16l2-8h8l2 8"/><circle cx="7" cy="19" r="2"/><circle cx="17" cy="19" r="2"/></symbol>
+  <symbol id="i-dots" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+  <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M9.9 4.2A10 10 0 0 1 22 12a14 14 0 0 1-2.2 3.2M6.6 6.6A14 14 0 0 0 2 12s3.5 7 10 7a9.7 9.7 0 0 0 5.4-1.6M2 2l20 20M14.1 14.1A3 3 0 1 1 9.9 9.9"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
+</svg>
+
+<div class="shell">
+  <aside class="rail" aria-label="Main navigation">
+    <div class="brand"><b>FB</b>FilmBill</div>
+    <nav>
+      <a class="nav"><svg class="i"><use href="#i-grid"/></svg>Dashboard</a>
+      <a class="nav on"><svg class="i"><use href="#i-clap"/></svg>Jobs</a>
+      <a class="nav"><svg class="i"><use href="#i-cal"/></svg>Planner</a>
+      <a class="nav"><svg class="i"><use href="#i-box"/></svg>Inventory</a>
+      <a class="nav"><svg class="i"><use href="#i-users"/></svg>Contacts</a>
+      <a class="nav"><svg class="i"><use href="#i-file"/></svg>Documents</a>
+      <a class="nav"><svg class="i"><use href="#i-archive"/></svg>Archive</a>
+      <a class="nav"><svg class="i"><use href="#i-bell"/></svg>Notifications</a>
+    </nav>
+    <div class="foot">
+      <a class="nav"><svg class="i"><use href="#i-gear"/></svg>Settings</a>
+      <div class="company"><i>YS</i>YON Studio OG<svg class="i sm" style="margin-left:auto"><use href="#i-chev"/></svg></div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div class="crumbs"><span>Jobs</span><svg class="i sm muted"><use href="#i-right"/></svg><span>JB-2026-114</span><svg class="i sm muted"><use href="#i-right"/></svg><strong>Equipment</strong></div>
+      <div class="search"><svg class="i sm"><use href="#i-search"/></svg><span>Search</span><kbd>⌘K</kbd></div>
+    </header>
+
+    <section class="jobhead">
+      <div class="jh-row">
+        <div>
+          <div class="jobno">JB-2026-114 <span class="example">example data</span></div>
+          <h1>Northlight Coffee — Brand Film</h1>
+          <div class="client">Kaltenbach Media GmbH · Marketing · Contact: Lena Hofer</div>
+        </div>
+        <div class="tgroup">
+          <span class="chip ok"><span class="dot"></span>Confirmed</span>
+          <span class="chip">Quote AN-2026-0087 · v2 accepted</span>
+          <button class="btn"><svg class="i sm"><use href="#i-list"/></svg>Packing list</button>
+          <button class="btn primary"><svg class="i sm"><use href="#i-file"/></svg>Update quote</button>
+        </div>
+      </div>
+      <div class="periods" aria-label="Booking periods">
+        <div class="period"><small>Prep / pick-up</small><span>Sun 11.10.</span></div>
+        <div class="period shoot"><small>Shoot</small><span>Mon 12.–Wed 14.10.</span></div>
+        <div class="period"><small>Return</small><span>Thu 15.10.</span></div>
+        <div class="period"><small>Charged days</small><span>3</span></div>
+      </div>
+      <nav class="tabs" aria-label="Job sections">
+        <a class="tab">Overview</a><a class="tab">Schedule</a><a class="tab on">Equipment<em>14</em></a><a class="tab">Crew<em>6</em></a><a class="tab">Documents<em>3</em></a><a class="tab">Time</a><a class="tab">Files</a>
+      </nav>
+    </section>
+
+    <div class="work">
+      <section class="list" aria-label="Equipment list">
+        <div class="toolbar">
+          <div class="tgroup">
+            <button class="btn"><svg class="i sm"><use href="#i-plus"/></svg>Group</button>
+            <button class="btn"><svg class="i sm"><use href="#i-kit"/></svg>Insert kit</button>
+            <button class="btn ghost"><svg class="i sm"><use href="#i-swap"/></svg>Assign units</button>
+          </div>
+          <div class="tgroup">
+            <span class="seglabel" id="viewlabel">Customer documents</span>
+            <div class="seg" role="group" aria-labelledby="viewlabel">
+              <button id="v-full" aria-pressed="true">Full view</button>
+              <button id="v-groups" aria-pressed="false">Groups only</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="alert" id="alert" role="status"></div>
+
+        <div class="tablewrap">
+          <table class="eq">
+            <thead><tr>
+              <th style="width:34%">Device</th><th>Qty</th><th>Days</th><th>Availability 11.–15.10.</th><th class="num">Price/day</th><th class="num">Disc.</th><th class="num">Sum</th><th style="width:56px"></th>
+            </tr></thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+
+        <div class="totals" id="totals"></div>
+
+        <div class="previewhead">
+          <div><h2>Customer document preview</h2><p id="previewnote"></p></div>
+          <span class="chip">Layout: YON default</span>
+        </div>
+        <div class="paperwrap"><div class="paper" id="paper"></div></div>
+      </section>
+
+      <aside class="panel" aria-label="Inventory">
+        <header>
+          <h2>Inventory <small>for 11.–15.10.</small></h2>
+          <label class="field"><svg class="i sm"><use href="#i-search"/></svg><input id="csearch" placeholder="Name, D-ID, inventory or serial no."></label>
+          <div class="cats" role="group" aria-label="Categories">
+            <button class="cat" aria-pressed="true">All</button><button class="cat" aria-pressed="false">Camera</button><button class="cat" aria-pressed="false">Lenses</button><button class="cat" aria-pressed="false">Light</button><button class="cat" aria-pressed="false">Audio</button><button class="cat" aria-pressed="false">Grip</button>
+          </div>
+        </header>
+        <div class="catalog" id="catalog"></div>
+        <div class="legend">
+          <span><b style="color:var(--text-secondary)">1 / 2</b> = available / owned for the whole period (lowest day)</span>
+          <span>Options count as booked · hover a row for day-by-day</span>
+        </div>
+      </aside>
+    </div>
+  </div>
+</div>
+
+<div class="scrim" id="scrim" hidden></div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+const eur = n => '€ ' + n.toLocaleString('de-AT',{minimumFractionDigits:2,maximumFractionDigits:2});
+const DAYS = ['Sun 11','Mon 12','Tue 13','Wed 14','Thu 15'];
+const ic = (id,cls='i sm') => `<svg class="${cls}"><use href="#i-${id}"/></svg>`;
+
+const state = {
+  view:'full',
+  overbookResolved:false,
+  groups:[
+    {id:'g1',name:'Camera',disc:10,open:true,lines:[
+      {id:'l1',dev:'ARRI Alexa 35',did:'D-0042',icon:'cam',qty:2,days:3,price:1200,owned:2,avail:1,short:'Tue 13',
+        span:[0,1,1,1,0],units:[{uid:'D-0042-01',inv:'YON-CAM-001',sn:'35-00481'}],
+        assoc:[
+          {dev:'Battery V-Mount 150 Wh',did:'D-0107',qty:4,price:25,mode:'ask',charged:true,shown:true},
+          {dev:'Charger V-Mount dual',did:'D-0108',qty:4,price:0,mode:'always',charged:false,shown:false,via:'Battery V-Mount 150 Wh'},
+          {dev:'Camera cage 35',did:'D-0044',qty:2,price:0,mode:'always',charged:false,shown:false}
+        ]},
+      {id:'l2',dev:'Cooke S4/i lens set (6)',did:'D-0051',icon:'lens',qty:1,days:3,price:450,owned:1,avail:1,span:[0,1,1,1,0],units:[{uid:'D-0051-01',inv:'YON-LNS-004',sn:'CS4-1180'}]}
+    ]},
+    {id:'g2',name:'Podcast kit',kit:true,calcPrice:800,kitPrice:700,open:true,lines:[
+      {id:'k1',dev:'Sony FX6',did:'D-0060',icon:'cam',qty:2,days:2,price:250,owned:4,avail:2,span:[0,0,1,1,0],units:[]},
+      {id:'k2',dev:'Aputure LS 600d',did:'D-0071',icon:'light',qty:3,days:2,price:60,owned:6,avail:3,span:[0,0,1,1,0],units:[]},
+      {id:'k3',dev:'Podcast audio set',did:'D-0090',icon:'mic',qty:1,days:2,price:120,owned:2,avail:2,span:[0,0,1,1,0],units:[]}
+    ]},
+    {id:'g3',name:'Grip',open:true,lines:[
+      {id:'l5',dev:'Doorway dolly',did:'D-0120',icon:'dolly',qty:1,days:3,price:180,owned:2,avail:2,span:[0,1,1,1,0],units:[]},
+      {id:'l6',dev:'Jib arm 3 m',did:'D-0123',icon:'dolly',qty:1,days:1,price:400,owned:1,avail:1,span:[0,0,1,0,0],units:[]}
+    ]}
+  ]
+};
+
+function lineSum(l){return l.qty*l.days*l.price + (l.assoc||[]).filter(a=>a.charged).reduce((s,a)=>s+a.qty*l.days*a.price,0)}
+function groupCalc(g){
+  if(g.kit){const days=g.lines[0].days;return {gross:g.kitPrice*days,net:g.kitPrice*days,days,uniform:true,perDay:g.kitPrice}}
+  const gross=g.lines.reduce((s,l)=>s+lineSum(l),0);
+  const net=gross*(1-(g.disc||0)/100);
+  const ds=new Set(g.lines.map(l=>l.days));const uniform=ds.size===1;const days=uniform?[...ds][0]:null;
+  return {gross,net,uniform,days,perDay:uniform?net/days:null};
+}
+
+function availCell(l){
+  const short = l.qty > l.avail && !state.overbookResolved;
+  const strip = l.span.map((b,i)=>`<i class="${b?(short&&DAYS[i]===l.short?'x':'b'):''}" title="${DAYS[i]}"></i>`).join('');
+  const title = l.span.map((b,i)=>b?`${DAYS[i]}: ${i===2&&l.short?l.avail:l.owned} free`:'').filter(Boolean).join(' · ');
+  const a = short
+    ? `<button class="avail err" data-overbook="${l.id}">${ic('alert')}${l.avail} / ${l.owned} · ${l.qty-l.avail} short</button>`
+    : `<span class="avail ok">${l.avail} / ${l.owned}</span>`;
+  return `<span class="days" title="${title}">${strip}</span> ${a}`;
+}
+
+function render(){
+  const rows=[];let total=0,gross=0,shortCount=0;
+  for(const g of state.groups){
+    const c=groupCalc(g);total+=c.net;gross+=g.kit?g.calcPrice*c.days:c.gross;
+    const meta=g.kit
+      ? `<span class="chip kit">${ic('kit')}Kit</span><span class="gmeta">${c.days} days · ${g.lines.length} devices</span>`
+      : `<span class="gmeta">${c.uniform?c.days+' days':'mixed days'} · ${g.lines.length} devices${g.disc?` · group discount ${g.disc} %`:''}</span>`;
+    const priceCell=g.kit
+      ? `<div class="kitprice">${g.kitPrice!==g.calcPrice?`<span class="strike">${eur(g.calcPrice)}</span>`:''}<strong>${eur(g.kitPrice)}</strong></div>`
+      : (c.uniform?`<span class="muted">${eur(c.perDay)}</span>`:`<span class="muted">—</span>`);
+    const discCell=g.kit?(g.kitPrice!==g.calcPrice?`<span class="muted">${(100-g.kitPrice/g.calcPrice*100).toFixed(1).replace('.',',')} %</span>`:''):(g.disc?`<span class="muted">${g.disc} %</span>`:'');
+    rows.push(`<tr class="grp ${g.open?'':'closed'}"><td colspan="4"><button class="gname" data-toggle="${g.id}" aria-expanded="${g.open}">${ic('chev','i sm caret')}${g.name} ${meta}</button></td><td class="num">${priceCell}</td><td class="num">${discCell}</td><td class="num"><strong>${eur(c.net)}</strong></td><td><span class="rowact"><button class="icbtn" aria-label="Group options">${ic('dots')}</button></span></td></tr>`);
+    if(!g.uniformWarned && !c.uniform && g.open){
+      rows.push(`<tr><td colspan="8" style="padding:0"><div class="gwarn">${ic('alert')}<span>Items in this group are charged for different numbers of days. In <b>Groups only</b> the document shows the total without days. To show days, move the items with a different number of days into their own group.</span></div></td></tr>`);
+    }
+    if(!g.open) continue;
+    for(const l of g.lines){
+      if(l.qty>l.avail && !state.overbookResolved) shortCount++;
+      const swap=g.kit?`<button class="icbtn" data-kitswap="${l.id}" aria-label="Swap device in kit">${ic('swap')}</button>`:'';
+      rows.push(`<tr class="dev"><td><div class="dname"><span class="thumb">${ic(l.icon)}</span><span class="t"><strong>${l.dev}</strong><span class="mono">${l.did}</span></span></div></td>
+        <td><span class="qty"><button aria-label="Less">−</button><span>${l.qty}</span><button aria-label="More">+</button></span></td>
+        <td><span class="muted" style="font-variant-numeric:tabular-nums">${l.days}</span></td>
+        <td>${availCell(l)}</td>
+        <td class="num">${eur(l.price)}</td><td class="num"></td>
+        <td class="num">${g.kit?`<span class="muted">${eur(l.qty*l.days*l.price)}</span>`:eur(l.qty*l.days*l.price)}</td>
+        <td><span class="rowact">${swap}<button class="icbtn" aria-label="More">${ic('dots')}</button></span></td></tr>`);
+      if(l.did==='D-0042'||l.did==='D-0051'){
+        const chips=l.units.map(u=>`<span class="unit" title="Serial ${u.sn}"><b>${u.uid}</b>${u.inv}</span>`).join('');
+        const empties=Math.max(0,l.qty-l.units.length);
+        rows.push(`<tr class="unitrow"><td colspan="8" style="padding-top:0"><div class="units">${chips}${Array.from({length:empties},()=>`<span class="unit empty">unit assigned at check-out</span>`).join('')}</div></td></tr>`);
+      }
+      for(const a of (l.assoc||[])){
+        rows.push(`<tr class="assoc"><td><div class="dname">${ic('link')}<span class="t"><strong>${a.dev}</strong><span class="mono">${a.did}${a.via?' · added via '+a.via:''}</span></span></div></td>
+          <td><span class="muted" style="font-variant-numeric:tabular-nums">${a.qty}</span></td><td><span class="muted">${l.days}</span></td>
+          <td><span class="tgroup" style="gap:4px"><span class="tag">${a.mode==='ask'?'asked at booking':'always'}</span>${a.shown?'':`<span class="tag" title="Hidden on customer documents">${ic('eye-off')} hidden</span>`}</span></td>
+          <td class="num">${a.charged?eur(a.price):'<span class="muted">included</span>'}</td><td></td>
+          <td class="num">${a.charged?eur(a.qty*l.days*a.price):'<span class="muted">€ 0,00</span>'}</td><td></td></tr>`);
+      }
+    }
+  }
+  document.getElementById('rows').innerHTML=rows.join('');
+
+  const al=document.getElementById('alert');
+  if(shortCount){al.dataset.state='err';al.innerHTML=`${ic('alert','i')}<span><b>1 device overbooked:</b> ARRI Alexa 35 is 1 short on Tue 13.10. (held by JB-2026-109).</span><button data-overbook="l1">Resolve</button>`}
+  else{al.dataset.state='ok';al.innerHTML=`${ic('link','i')}<span><b>All devices available</b> for 11.–15.10.</span>`}
+
+  const vat=total*0.2;
+  document.getElementById('totals').innerHTML=`
+    <div><small>List value</small><span>${eur(gross)}</span></div>
+    <div><small>Discounts</small><span>− ${eur(gross-total)}</span></div>
+    <div class="g"><small>Equipment net</small><span>${eur(total)}</span></div>
+    <div><small>VAT 20 %</small><span>${eur(vat)}</span></div>
+    <div><small>Conflicts</small><span style="color:${shortCount?'var(--status-error)':'var(--status-success)'}">${shortCount?shortCount+' overbooked':'none'}</span></div>`;
+  renderPaper(total,vat);
+  renderCatalog();
+}
+
+function renderPaper(total,vat){
+  const p=[];const full=state.view==='full';
+  document.getElementById('previewnote').textContent= full
+    ? 'Full view: groups, devices, kit contents and unit serials. Hidden associated items stay off the document.'
+    : 'Groups only: one line per group. Days appear only when every item in the group has the same days.';
+  p.push(`<p class="ptitle">AN-2026-0087 · Northlight Coffee — Brand Film</p><table><thead><tr><th>Name</th><th>Description / Serial</th><th class="num">Amount</th><th class="num">Days</th><th class="num">Price</th><th class="num">Discount</th><th class="num">VAT</th><th class="num">Sum</th></tr></thead><tbody>`);
+  for(const g of state.groups){
+    const c=groupCalc(g);
+    if(!full){
+      p.push(`<tr class="pg"><td>${g.name}</td><td></td><td class="num">1</td><td class="num">${c.uniform?c.days:''}</td><td class="num">${c.uniform?eur(c.perDay):eur(c.net)}</td><td class="num"></td><td class="num">20 %</td><td class="num">${eur(c.net)}</td></tr>`);
+      continue;
+    }
+    if(g.kit){
+      p.push(`<tr class="pg"><td>${g.name}</td><td></td><td></td><td></td><td></td><td></td><td></td><td class="num">${eur(c.net)}</td></tr>`);
+      p.push(`<tr class="pk"><td>KIT ${g.name}</td><td></td><td class="num">1</td><td class="num">${c.days}</td><td class="num">${eur(g.calcPrice)}</td><td class="num">${eur((g.calcPrice-g.kitPrice)*c.days)}</td><td class="num">20 %</td><td class="num">${eur(c.net)}</td></tr>`);
+      for(const l of g.lines){p.push(`<tr class="pd in"><td>${l.dev}</td><td></td><td class="num">${l.qty}</td><td class="num">${l.days}</td><td></td><td></td><td></td><td></td></tr>`)}
+      continue;
+    }
+    p.push(`<tr class="pg"><td>${g.name}</td><td></td><td></td><td></td><td></td><td class="num">${g.disc?g.disc+' %':''}</td><td></td><td class="num">${eur(c.net)}</td></tr>`);
+    for(const l of g.lines){
+      p.push(`<tr class="pd"><td>${l.dev}</td><td></td><td class="num">${l.qty}</td><td class="num">${l.days}</td><td class="num">${eur(l.price)}</td><td></td><td class="num">20 %</td><td class="num">${eur(l.qty*l.days*l.price)}</td></tr>`);
+      for(const u of (l.units||[])) p.push(`<tr class="pu"><td>Unit</td><td>SN ${u.sn}</td><td></td><td></td><td></td><td></td><td></td><td></td></tr>`);
+      for(const a of (l.assoc||[]).filter(a=>a.shown)) p.push(`<tr class="pd in"><td>${a.dev}</td><td></td><td class="num">${a.qty}</td><td class="num">${l.days}</td><td class="num">${eur(a.price)}</td><td></td><td class="num">20 %</td><td class="num">${eur(a.qty*l.days*a.price)}</td></tr>`);
+    }
+  }
+  p.push(`<tr class="psum first"><td colspan="7">Sum positions net</td><td class="num">${eur(total)}</td></tr><tr class="psum"><td colspan="7">VAT 20 %</td><td class="num">${eur(vat)}</td></tr><tr class="psum grand"><td colspan="7">Gesamtbetrag brutto</td><td class="num">${eur(total+vat)}</td></tr></tbody></table>`);
+  document.getElementById('paper').innerHTML=p.join('');
+}
+
+const CATALOG=[
+  {sec:'Camera',items:[
+    {n:'ARRI Alexa 35',id:'D-0042',ic:'cam',a:1,o:2},{n:'ARRI Alexa Mini LF',id:'D-0043',ic:'cam',a:1,o:1},{n:'Sony Venice 2',id:'D-0048',ic:'cam',a:0,o:1},{n:'Sony FX6',id:'D-0060',ic:'cam',a:2,o:4},{n:'Sony FX3',id:'D-0061',ic:'cam',a:3,o:3}]},
+  {sec:'Light',items:[{n:'Aputure LS 600d',id:'D-0071',ic:'light',a:3,o:6},{n:'Nanlite Forza 500',id:'D-0074',ic:'light',a:4,o:4}]},
+  {sec:'Audio',items:[{n:'Podcast audio set',id:'D-0090',ic:'mic',a:2,o:2},{n:'Sennheiser MKH 416',id:'D-0093',ic:'mic',a:5,o:6}]},
+  {sec:'Kits',items:[{n:'Podcast kit',id:'KIT-003',ic:'kit',kit:'6 devices · € 700,00/day'},{n:'Interview kit – 2 cam',id:'KIT-004',ic:'kit',kit:'9 devices · calculated'}]}
+];
+function renderCatalog(){
+  const q=(document.getElementById('csearch').value||'').toLowerCase();
+  document.getElementById('catalog').innerHTML=CATALOG.map(s=>{
+    const items=s.items.filter(i=>!q||(i.n+i.id).toLowerCase().includes(q));
+    if(!items.length) return '';
+    return `<div class="csection">${s.sec}</div>`+items.map(i=>{
+      const pct=i.o?i.a/i.o*100:0;const cls=i.a===0?'none':(pct<50?'low':'');
+      const sub=i.kit?`<small>${i.id} · ${i.kit}</small>`:`<small><span class="mono">${i.id}</span><span class="bar"><i class="${cls}" style="width:${Math.max(pct,6)}%"></i></span><span style="font-variant-numeric:tabular-nums">${i.a} / ${i.o}</span></small>`;
+      return `<div class="citem"><span class="thumb">${ic(i.ic)}</span><span style="min-width:0"><strong>${i.n}</strong>${sub}</span><button class="add" aria-label="Add ${i.n}">${ic('plus')}</button></div>`;
+    }).join('');
+  }).join('');
+}
+
+/* ── Dialogs ── */
+const scrim=document.getElementById('scrim');
+function openDialog(html){scrim.innerHTML=`<div class="dialog" role="dialog" aria-modal="true">${html}</div>`;scrim.hidden=false;scrim.querySelector('button')?.focus()}
+function closeDialog(){scrim.hidden=true;scrim.innerHTML=''}
+function toast(t){const el=document.getElementById('toast');el.textContent=t;el.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>el.hidden=true,2600)}
+
+function overbookDialog(){
+  openDialog(`<header><span class="ic">${ic('alert','i')}</span><div><h3>ARRI Alexa 35 is overbooked</h3><p>You need 2, only 1 is free on Tue 13.10. The other unit is held by <b>JB-2026-109 · Wien Energie spot</b> (confirmed).</p></div></header>
+  <div class="dbody">
+    <div class="dlabel">Alternative devices for 12.–14.10.</div>
+    <div class="opt"><span class="thumb">${ic('cam')}</span><span><strong>ARRI Alexa Mini LF</strong><small>D-0043 · 1 / 1 free · € 950,00/day (−€ 250,00/day)</small></span><button class="btn primary" data-alt="mini">Swap 1</button></div>
+    <div class="opt" aria-disabled="true"><span class="thumb">${ic('cam')}</span><span><strong>Sony Venice 2</strong><small>D-0048 · 0 / 1 free · € 1.300,00/day · note: needs PL-LPL adapter</small></span><button class="btn" disabled>Unavailable</button></div>
+    <p class="note">Alternatives are set per device in Inventory. Nothing is swapped automatically.</p>
+  </div>
+  <div class="dfoot"><button class="btn ghost" data-close>Cancel</button><button class="btn" data-subrent>Sub-rent…</button><button class="btn" data-anyway>Book anyway</button></div>`);
+}
+function kitSwapDialog(){
+  openDialog(`<header><span class="ic info">${ic('swap','i')}</span><div><h3>Swap Sony FX6 → Sony FX3 in Podcast kit</h3><p>1 of 2 units, 2 days. Kit contents change for this job only; the kit template stays as it is.</p></div></header>
+  <div class="dbody">
+    <div class="diffbox"><span>Sony FX6</span><span>€ 250,00/day</span><span>Sony FX3</span><span>€ 150,00/day</span><span>Difference</span><span class="neg">−€ 100,00/day · −€ 200,00 total</span></div>
+    <div class="diffbox"><span>Kit price now</span><span>€ 700,00/day</span><span>If adjusted</span><span>€ 600,00/day</span></div>
+    <p class="note">Quote AN-2026-0087 v2 is already accepted. Adjusting does not change that quote; the difference goes into “Changes & additions” on the final invoice.</p>
+  </div>
+  <div class="dfoot"><button class="btn ghost" data-close>Cancel</button><button class="btn" data-keep>Keep € 700,00/day</button><button class="btn primary" data-adjust>Adjust to € 600,00/day</button></div>`);
+}
+
+document.addEventListener('click',e=>{
+  const t=e.target.closest('button');if(!t) return;
+  if(t.dataset.toggle){const g=state.groups.find(g=>g.id===t.dataset.toggle);g.open=!g.open;render();return}
+  if(t.dataset.overbook){overbookDialog();return}
+  if(t.dataset.kitswap){kitSwapDialog();return}
+  if('close' in t.dataset){closeDialog();return}
+  if('anyway' in t.dataset){closeDialog();toast('Booked anyway — marked overbooked in the planner');return}
+  if('subrent' in t.dataset){closeDialog();toast('Sub-rent request — coming with the planner (P7)');return}
+  if(t.dataset.alt){
+    const g=state.groups[0];const l=g.lines[0];l.qty=1;
+    g.lines.splice(1,0,{id:'l1b',dev:'ARRI Alexa Mini LF',did:'D-0043',icon:'cam',qty:1,days:3,price:950,owned:1,avail:1,span:[0,1,1,1,0],units:[]});
+    l.assoc[0].qty=2;l.assoc[1].qty=2;l.assoc[2].qty=1;
+    state.overbookResolved=true;closeDialog();render();toast('Swapped 1× Alexa 35 → Alexa Mini LF');return;
+  }
+  if('keep' in t.dataset||'adjust' in t.dataset){
+    const g=state.groups[1];const fx6=g.lines[0];fx6.qty=1;
+    if(!g.lines.find(x=>x.did==='D-0061')) g.lines.splice(1,0,{id:'k1b',dev:'Sony FX3',did:'D-0061',icon:'cam',qty:1,days:2,price:150,owned:3,avail:3,span:[0,0,1,1,0],units:[]});
+    g.calcPrice=700; if('adjust' in t.dataset) g.kitPrice=600;
+    closeDialog();render();toast('adjust' in t.dataset?'Kit price adjusted to € 600,00/day':'Kit price kept at € 700,00/day');return;
+  }
+  if(t.id==='v-full'||t.id==='v-groups'){
+    state.view=t.id==='v-full'?'full':'groups';
+    document.getElementById('v-full').setAttribute('aria-pressed',state.view==='full');
+    document.getElementById('v-groups').setAttribute('aria-pressed',state.view==='groups');
+    render();return;
+  }
+  if(t.classList.contains('cat')){document.querySelectorAll('.cat').forEach(c=>c.setAttribute('aria-pressed',c===t));return}
+});
+scrim.addEventListener('click',e=>{if(e.target===scrim)closeDialog()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!scrim.hidden)closeDialog()});
+document.getElementById('csearch').addEventListener('input',renderCatalog);
+render();
+</script>
