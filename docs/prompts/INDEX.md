@@ -64,6 +64,9 @@ Alembic baseline, five tables. No business features.
   only after first paint.
 - The baseline migration declared eight columns nullable that the models make
   NOT NULL. Caught by `alembic check`, which now runs in CI.
+- `PATCH /admin/users/{id}/disable-2fa` had no button on either side of the
+  port, so the documented recovery for a user who lost every factor was a curl
+  command. Added to the admin user table, confirmed before it fires.
 
 **Acceptance.** A–D ran green. E ran green against the live stack over HTTP;
 the two browser-rendered halves of E were not observed in a browser, because

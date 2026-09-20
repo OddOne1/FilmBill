@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ResetTwoFactorButton } from "@/components/settings/reset-two-factor-button";
 import { Avatar } from "@/components/shared/avatar";
 import { RequireTwoFactorSection } from "@/components/settings/require-two-factor-section";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -763,6 +764,9 @@ export default function AdminPage() {
             >
               {u.role === "superadmin" ? "Remove Admin" : "Make Admin"}
             </Button>
+          )}
+          {u.id !== user?.id && u.two_factor_enabled && (
+            <ResetTwoFactorButton user={u} onDone={() => mutate("/admin/users")} />
           )}
           {u.id !== user?.id && u.status === "active" ? (
             <Button
