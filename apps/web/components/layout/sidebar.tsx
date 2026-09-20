@@ -1,0 +1,213 @@
+'use client'
+
+import * as React from 'react'
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
+import {
+  LayoutDashboard,
+  Bell,
+  ChevronsLeft,
+} from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { useAuthStore } from '@/stores/auth-store'
+import { useNotificationStore } from '@/stores/notification-store'
+import { useSiteSettings } from '@/hooks/use-site-settings'
+import { useThemeStore } from '@/stores/theme-store'
+import { Avatar } from '@/components/shared/avatar'
+import { NotificationDrawer } from './notification-drawer'
+
+interface NavItem {
+  href: string
+  label: string
+  icon: React.ElementType
+}
+
+// One entry in P0a. Parties, Catalog, Projects, Documents and Archive land
+// with the phases that build them (SCOPE §13); each one is a line here.
+const navItems: NavItem[] = [
+  { href: '/', label: 'Dashboard', icon: LayoutDashboard },
+]
+
+interface SidebarProps {
+  collapsed: boolean
+  onToggle: () => void
+}
+
+export function Sidebar({ collapsed, onToggle }: SidebarProps) {
+  const pathname = usePathname()
+  const { user } = useAuthStore()
+  const { unreadCount, fetchNotifications } = useNotificationStore()
+  const { orgName, logoDarkUrl, logoLightUrl } = useSiteSettings()
+  const { resolvedTheme } = useThemeStore()
+    // Pick logo based on resolved theme; fall back to the other if only one is set.
+    // Uses resolvedTheme (not theme) because theme can be 'system', which never
+    // strictly equals 'light' — that bug pinned the logo to the dark variant
+    // whenever the user had 'system' selected instead of an explicit theme.
+  const customLogo = resolvedTheme === 'light'
+    ? (logoLightUrl ?? logoDarkUrl)
+    : (logoDarkUrl ?? logoLightUrl)
+  const [notifOpen, setNotifOpen] = React.useState(false)
+
+  // Fetch notifications on mount
+  React.useEffect(() => { fetchNotifications() }, [fetchNotifications])
+
+  return (
+    <>
+    <aside
+      className={cn(
+        'fixed left-0 top-0 z-30 flex h-screen flex-col border-r border-nav-border',
+        // bg-nav-bg defaults to the same token as the rest of the theme (see
+        // globals.css) but can be overridden per theme in Branding settings ->
+        // Theme colors.
+        'bg-nav-bg transition-[width] duration-200 overflow-hidden',
+        collapsed ? 'w-[52px]' : 'w-[192px]',
+      )}
+    >
+      {/* Logo — click to go home. h-11 (44px) to match the global Header
+          bar's height (also h-11) so the border-b line here lines up with
+          the Header's border-b across the whole app. */}
+      <Link
+        href="/"
+        className={cn(
+          'flex h-11 items-center shrink-0 border-b border-nav-border hover:bg-nav-text/10 transition-colors',
+          collapsed ? 'justify-center px-0' : 'px-4 gap-2.5',
+        )}
+        title="Go to dashboard"
+      >
+        {/* Logo: theme-aware custom logo, or the default FilmBill icons */}
+        {customLogo ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={customLogo}
+            alt={orgName}
+            className="h-7 w-7 shrink-0 object-contain rounded"
+          />
+        ) : (
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/logo-icon.png"
+              alt={orgName}
+              className="h-7 w-7 shrink-0 object-contain logo-dark"
+            />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/logo-icon-dark.png"
+              alt={orgName}
+              className="h-7 w-7 shrink-0 object-contain logo-light"
+            />
+          </>
+        )}
+        {!collapsed && (
+          <span className="text-sm font-semibold text-nav-text tracking-tight">
+            {orgName}
+          </span>
+        )}
+      </Link>
+
+      {/* Navigation */}
+      <nav className="flex-1 overflow-y-auto overflow-x-hidden py-2 px-2 space-y-0.5">
+        {navItems.map((item) => {
+          const isActive =
+            item.href === '/' ? pathname === '/' : pathname.startsWith(item.href)
+          const Icon = item.icon
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={() => setNotifOpen(false)}
+              className={cn(
+                'group relative flex items-center rounded-md transition-colors duration-100',
+                collapsed ? 'justify-center h-9 w-9 mx-auto' : 'gap-2.5 px-2.5 h-9',
+                isActive
+                  ? 'bg-nav-text/15 text-nav-text'
+                  : 'text-nav-text/60 hover:bg-nav-text/10 hover:text-nav-text',
+              )}
+              title={collapsed ? item.label : undefined}
+            >
+              <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={isActive ? 2 : 1.5} />
+              {!collapsed && (
+                <span className={cn('text-[13px]', isActive && 'font-medium')}>
+                  {item.label}
+                </span>
+              )}
+            </Link>
+          )
+        })}
+
+        {/* Notifications button */}
+        <button
+          onClick={() => setNotifOpen((v) => !v)}
+          className={cn(
+            'group relative flex w-full items-center rounded-md transition-colors duration-100',
+            collapsed ? 'justify-center h-9 w-9 mx-auto' : 'gap-2.5 px-2.5 h-9',
+            notifOpen
+              ? 'bg-nav-text/15 text-nav-text'
+              : 'text-nav-text/60 hover:bg-nav-text/10 hover:text-nav-text',
+          )}
+          title={collapsed ? 'Notifications' : undefined}
+        >
+          <div className="relative shrink-0">
+            <Bell className="h-[18px] w-[18px]" strokeWidth={notifOpen ? 2 : 1.5} />
+            {unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-status-error px-0.5 text-[9px] font-bold text-white">
+                {unreadCount}
+              </span>
+            )}
+          </div>
+          {!collapsed && (
+            <span className={cn('text-[13px]', notifOpen && 'font-medium')}>
+              Notifications
+            </span>
+          )}
+        </button>
+
+      </nav>
+
+      {/* Bottom section */}
+      <div className="border-t border-nav-border p-2 space-y-1 shrink-0">
+        {/* A plain link, not a menu. Settings gates what each user sees
+            once they arrive, so routing by role here would be picking a
+            destination the destination already handles. Log out lives on
+            the Profile page, which is where this lands. */}
+        <Link
+          href="/settings/profile"
+          title={collapsed ? (user?.name ?? 'Account') : undefined}
+          className={cn(
+            'flex w-full items-center rounded-md text-nav-text/60 hover:bg-nav-text/10 hover:text-nav-text transition-colors',
+            collapsed ? 'justify-center h-9 w-9 mx-auto' : 'gap-2.5 px-2 py-1.5',
+          )}
+        >
+          <Avatar src={user?.avatar_url} name={user?.name} size="sm" />
+          {!collapsed && (
+            <div className="flex flex-col items-start overflow-hidden min-w-0">
+              <span className="truncate text-[13px] font-medium text-nav-text leading-tight w-full text-left">
+                {user?.name ?? 'User'}
+              </span>
+              <span className="truncate text-[10px] text-nav-text/50 leading-tight w-full text-left">
+                {user?.email ?? ''}
+              </span>
+            </div>
+          )}
+        </Link>
+
+        {/* Collapse toggle */}
+        <button
+          onClick={onToggle}
+          className={cn(
+            'flex w-full items-center rounded-md text-nav-text/50 hover:bg-nav-text/10 hover:text-nav-text transition-colors',
+            collapsed ? 'justify-center h-8 w-8 mx-auto' : 'gap-2 px-2.5 h-8',
+          )}
+          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        >
+          <ChevronsLeft className={cn('h-4 w-4 transition-transform', collapsed && 'rotate-180')} />
+          {!collapsed && <span className="text-xs">Collapse</span>}
+        </button>
+      </div>
+    </aside>
+
+    {/* Notification Drawer */}
+    <NotificationDrawer open={notifOpen} onClose={() => setNotifOpen(false)} />
+  </>
+  )
+}

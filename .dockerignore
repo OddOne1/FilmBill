@@ -1,0 +1,41 @@
+# Applies to every image built here — api, worker, email_worker, beat and web
+# all use the repo ROOT as their build context.
+#
+# This file is not a size optimisation, it is load-bearing. Without it,
+# `COPY apps/web/ ./` in apps/web/Dockerfile.prod copies the HOST's
+# apps/web/node_modules straight over the node_modules installed in the deps
+# stage — replacing a Linux install with whatever the developer's machine
+# happens to have, native binaries for the wrong platform included.
+
+# Dependencies — always reinstalled inside the image, never copied in.
+**/node_modules
+
+# Build output
+**/.next
+**/dist
+**/.turbo
+**/out
+
+# Python bytecode and local virtualenvs
+**/__pycache__
+**/*.py[cod]
+**/.venv
+**/venv
+
+# VCS and editor noise
+.git
+.gitignore
+**/.DS_Store
+.vscode
+.idea
+
+# Local env / secrets. .env.prod is supplied to containers via env_file at
+# RUN time, and must never be baked into an image layer.
+.env
+.env.*
+**/.env.local
+
+# Caches no runtime image needs
+**/.pytest_cache
+**/coverage
+**/.pnpm-store

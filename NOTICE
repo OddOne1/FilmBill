@@ -1,0 +1,74 @@
+FilmBill
+Copyright (c) 2026 YON Studio OG, Vienna
+
+This product is licensed under the GNU Affero General Public License v3.0 or
+later. See LICENSE for the full text.
+
+--------------------------------------------------------------------------
+Portions derived from FreeFrame (MIT)
+--------------------------------------------------------------------------
+
+Portions of this software are derived from FreeFrame (MIT), commit
+`929f5f5306b54958c9c4f11bd1a283c8255eff76` ("2FA part 2 of 2: settings UI,
+and two backend gaps found tracing it", 2026-09-19).
+
+FreeFrame's MIT licence, which continues to apply to those portions, is
+reproduced in LICENSES/MIT-FreeFrame.txt.
+
+Files were copied from that commit's tracked tree — not forked, and with no
+git history. FilmBill is a separate repository; FreeFrame is not a remote of
+it, and fixes to shared modules are ported by hand in both directions.
+
+Top-level directories and modules copied, and then trimmed:
+
+  apps/api/
+    config.py, database.py, main.py
+    middleware/      auth, global_rate_limit, no_cache_errors, rate_limit,
+                     setup_guard
+    models/          user (incl. the two-factor columns), activity,
+                     site_settings, email_settings
+    routers/         auth (incl. every /auth/2fa/* endpoint), admin, users,
+                     setup, notifications, events, site_settings,
+                     email_settings; files.py is derived from FreeFrame's
+                     hls_proxy.py with all HLS handling removed
+    schemas/         auth, site_settings, email_settings, notification,
+                     activity
+    services/        auth_service, totp_service, site_settings_service,
+                     activity_service, email_service, email_config,
+                     event_service, notification_prefs, redis_service,
+                     s3_service, secrets_service, schedule_window,
+                     permissions
+    tasks/           celery_app, email_tasks
+    templates/email/ base, invite, magic_code, password_reset_code
+    tests/           the suites covering the modules above
+    alembic/         env.py and scaffolding only — FreeFrame's migration
+                     history was NOT carried over
+
+  apps/web/
+    app/(auth)/            login, setup, invite
+    app/(dashboard)/       layout shell, notifications, settings (profile,
+                           appearance, notifications, branding, admin)
+    components/            auth/, layout/, settings/, shared/, ui/
+    hooks/, lib/, stores/  the ones the pages above use
+    design tokens          inlined into app/globals.css from FreeFrame's
+                           packages/design-tokens
+
+  root
+    docker-compose.dev.yml, docker-compose.prod.yml, .dockerignore,
+    .gitignore, .env.example, .github/workflows/ci.yml
+
+Not copied: everything media-related — assets, uploads, the HLS proxy,
+transcoding, transcription and Whisper, LUTs, sidecars, metadata, approvals,
+votes, comments, folders, FreeFrame projects, share links, zip export, the
+purge service, storage limits and prefixes, the contact form, poster and
+thumbnail handling, and the desktop app.
+
+--------------------------------------------------------------------------
+Third-party services
+--------------------------------------------------------------------------
+
+FilmBill calls Gotenberg (https://gotenberg.dev, MIT) as a separate container
+to render HTML to PDF. No Gotenberg code is included in this repository.
+
+Python and JavaScript dependencies keep their own licences; see
+apps/api/requirements.txt and apps/web/package.json.

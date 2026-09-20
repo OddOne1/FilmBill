@@ -1,0 +1,73 @@
+# Built from the REPO ROOT as context (docker-compose.prod.yml: `context: .`),
+# not from apps/web.
+#
+# Why the root: this is a pnpm workspace. pnpm-workspace.yaml and the single
+# pnpm-lock.yaml live at the repo root, and `--frozen-lockfile` needs both.
+# FreeFrame scoped this context to ./apps/web, which silently excluded a
+# workspace package apps/web depended on and left the image unbuildable for
+# two months before anyone tried. The container therefore mirrors the repo's
+# own layout — /repo/apps/web with /repo alongside — so a relative path
+# resolves the same inside the image as in a checkout.
+
+# Stage 1: Install dependencies
+FROM node:20-alpine AS deps
+RUN corepack enable && corepack prepare pnpm@9.12.3 --activate
+WORKDIR /repo
+
+# Only the manifests, so this layer caches until a dependency actually
+# changes rather than on every source edit.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/web/package.json apps/web/
+RUN pnpm install --frozen-lockfile --filter web...
+
+# Stage 2: Build the application
+FROM node:20-alpine AS builder
+RUN corepack enable && corepack prepare pnpm@9.12.3 --activate
+WORKDIR /repo
+
+COPY --from=deps /repo/node_modules ./node_modules
+COPY --from=deps /repo/apps/web/node_modules ./apps/web/node_modules
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+# Trailing slash: copy the CONTENTS of apps/web into apps/web. Without the
+# root .dockerignore excluding **/node_modules, this would drop the host's
+# node_modules on top of the one just installed above.
+COPY apps/web/ ./apps/web/
+
+ARG NEXT_PUBLIC_API_URL=/api
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_TELEMETRY_DISABLED=1
+
+RUN pnpm --filter web build
+
+# Stage 3: Production runner
+FROM node:20-alpine AS runner
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV HOSTNAME=0.0.0.0
+ENV PORT=3000
+# CLAUDE.md rule 15. Docker multi-stage builds do NOT carry ENV across
+# stages: the NEXT_PUBLIC_API_URL set in the builder existed only during
+# `pnpm build`, to be inlined into the client bundle. Server-side code that
+# runs at request time in THIS stage (generateMetadata in app/layout.tsx,
+# the server-seeded site settings) reads process.env fresh, and without
+# redeclaring it here that lookup returns undefined and falls back to a
+# hardcoded localhost default — pointing every visitor's browser at their
+# own machine instead of the real API.
+ENV NEXT_PUBLIC_API_URL=/api
+
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
+
+# Next's standalone output is self-contained and its tracing root is the
+# workspace root, so the server entrypoint lands under apps/web inside it.
+COPY --from=builder /repo/apps/web/public ./public
+COPY --from=builder --chown=nextjs:nodejs /repo/apps/web/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /repo/apps/web/.next/static ./apps/web/.next/static
+
+USER nextjs
+
+EXPOSE 3000
+
+CMD ["node", "apps/web/server.js"]

@@ -1,0 +1,257 @@
+/**
+ * FilmBill design tokens — THE canonical source for colour.
+ *
+ * Inlined here rather than kept as a workspace package: FreeFrame shared
+ * these with a desktop app that FilmBill does not have, and a package with
+ * one consumer is indirection without a reader.
+ *
+ * Every value is overridable per theme from Settings → Branding → Theme
+ * colors, which writes CSS custom properties onto :root at runtime (see
+ * components/shared/theme-colors-initializer.tsx). These are the defaults
+ * those overrides fall back to.
+ */
+
+:root,
+[data-theme="dark"] {
+  /* Background — dark theme */
+  --bg-primary: #0d0d10;
+  --bg-secondary: #16161a;
+  --bg-tertiary: #1e1e24;
+  --bg-elevated: #24242c;
+  --bg-hover: #2a2a34;
+
+  /* Borders */
+  --border-primary: #2e2e3a;
+  --border-secondary: #222230;
+  --border-focus: #5b8def;
+
+  /* Text */
+  --text-primary: #eaeaed;
+  --text-secondary: #94949e;
+  --text-tertiary: #5e5e6e;
+  --text-inverse: #0d0d10;
+
+  /* Accent — blue */
+  --accent: #5b8def;
+  --accent-hover: #7aa3f5;
+  --accent-muted: #253556;
+  /* Text drawn on top of --accent-colored surfaces (buttons, badges, etc). */
+  --accent-foreground: #0d0d10;
+
+  /* Chrome (top bar + left nav rail). Defaults follow the rest of the theme
+     via var() indirection — a custom nav color (set in Branding settings ->
+     Theme colors) overrides these three with solid hex values; until then
+     the nav rail just looks like the rest of the chrome, same as before the
+     navy/ivory test. See theme-colors-initializer.tsx. */
+  --nav-bg: var(--bg-secondary);
+  --nav-border: var(--border-primary);
+  --nav-text: var(--text-primary);
+
+  /* Status */
+  --status-success: #34d399;
+  --status-warning: #fbbf24;
+  --status-error: #f87171;
+  --status-info: #60a5fa;
+  --status-turquoise: #2dd4bf;
+  --status-draft: #e4e4e7;
+
+  /* Fonts */
+  --font-sans: var(--font-geist), system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+
+  /* Spacing rhythm */
+  --space-unit: 4px;
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+}
+
+[data-theme="light"] {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8f8fa;
+  --bg-tertiary: #f0f0f4;
+  --bg-elevated: #ffffff;
+  --bg-hover: #eaeaef;
+
+  --border-primary: #e0e0e6;
+  --border-secondary: #d0d0d8;
+  --border-focus: #4a7de8;
+
+  --text-primary: #1a1a2e;
+  --text-secondary: #5a5a6e;
+  --text-tertiary: #8a8a9e;
+  --text-inverse: #ffffff;
+
+  --accent: #4a7de8;
+  --accent-hover: #3a6dd8;
+  --accent-muted: #e8eef8;
+  --accent-foreground: #ffffff;
+
+  --nav-bg: var(--bg-secondary);
+  --nav-border: var(--border-primary);
+  --nav-text: var(--text-primary);
+
+  --status-success: #16a34a;
+  --status-warning: #ca8a04;
+  --status-error: #dc2626;
+  --status-info: #2563eb;
+  --status-turquoise: #0d9488;
+  --status-draft: #71717a;
+}
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+
+@layer base {
+  * {
+    border-color: var(--border-primary);
+  }
+
+  body {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--border-primary);
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--text-tertiary);
+  }
+
+  /* Selection */
+  ::selection {
+    background-color: var(--accent-muted);
+    color: var(--text-primary);
+  }
+}
+
+@layer components {
+  /* Theme-aware logo switching */
+  [data-theme="dark"] .logo-dark { display: block; }
+  [data-theme="dark"] .logo-light { display: none; }
+  [data-theme="light"] .logo-dark { display: none; }
+  [data-theme="light"] .logo-light { display: block; }
+
+  /* Smooth focus ring for interactive elements */
+  .focus-ring {
+    @apply outline-none ring-0 transition-shadow duration-150;
+  }
+  .focus-ring:focus-visible {
+    @apply ring-2 ring-[var(--accent)] ring-offset-1 ring-offset-[var(--bg-primary)];
+  }
+
+  /* Glass card effect */
+  .glass-card {
+    @apply rounded-xl border border-[var(--border-primary)] bg-[var(--bg-secondary)] backdrop-blur-md shadow-lg;
+  }
+
+  /* Skeleton shimmer gradient */
+  .skeleton-shimmer {
+    background: linear-gradient(
+      90deg,
+      var(--bg-secondary) 0%,
+      var(--bg-tertiary) 50%,
+      var(--bg-secondary) 100%
+    );
+    background-size: 200% 100%;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+/* ─── Asset card: its own container, for the version badge ─────────
+ *
+ * The GRID is already a container (FreeFrame below), but the badge has to adapt to
+ * the width of one CARD, not of the grid: at XS the same grid holds cards a
+ * quarter of the width it holds at L. Raw CSS for the same reason FreeFrame gives —
+ * @container needs a Tailwind plugin, and a dependency change to apps/web is
+ * what left the production image unbuildable for eleven days.
+ */
+.asset-card-media {
+  container-type: inline-size;
+  container-name: assetcard;
+}
+
+/* Below this the card cannot hold "V3 · New Version" alongside a comment
+ * count without clipping, so the chip keeps the version number — which is
+ * the part that must always be readable — and drops the words. The accent
+ * colour still marks it as unseen. */
+.version-badge-label { display: none; }
+@container assetcard (min-width: 200px) {
+  .version-badge-label { display: inline; }
+}
+
+/* ─── Asset grid: container queries, not viewport queries ────────────
+ *
+ * The grid's column count used to key off viewport breakpoints while its
+ * available width came from a flex sibling — so opening the 360px
+ * Comments/Fields panel kept the column count and shrank every card to fit.
+ * Card size is what the user wants held constant; column count is what gives.
+ *
+ * Written as plain CSS rather than through @tailwindcss/container-queries on
+ * purpose: Tailwind 3.4 needs a plugin for `@container`, and adding a
+ * dependency to apps/web is exactly what left the production image
+ * unbuildable for eleven days (CLAUDE.md FreeFrame). This needs no install, no
+ * lockfile change and nothing new in the Docker build, and the breakpoints
+ * are the same numbers Tailwind's own sm/lg/xl use.
+ */
+.asset-grid-container {
+  container-type: inline-size;
+  container-name: assetgrid;
+}
+
+.asset-grid {
+  display: grid;
+}
+
+.asset-grid[data-size='XS'] { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.asset-grid[data-size='S']  { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.asset-grid[data-size='M']  { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.asset-grid[data-size='L']  { grid-template-columns: repeat(1, minmax(0, 1fr)); }
+
+@container assetgrid (min-width: 640px) {
+  .asset-grid[data-size='XS'] { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .asset-grid[data-size='S']  { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .asset-grid[data-size='M']  { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .asset-grid[data-size='L']  { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@container assetgrid (min-width: 1024px) {
+  .asset-grid[data-size='XS'] { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+  .asset-grid[data-size='S']  { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .asset-grid[data-size='M']  { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .asset-grid[data-size='L']  { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+@container assetgrid (min-width: 1280px) {
+  .asset-grid[data-size='XS'] { grid-template-columns: repeat(9, minmax(0, 1fr)); }
+  .asset-grid[data-size='S']  { grid-template-columns: repeat(8, minmax(0, 1fr)); }
+  .asset-grid[data-size='M']  { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+  .asset-grid[data-size='L']  { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+}

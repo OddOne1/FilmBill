@@ -25,8 +25,17 @@ Roles: `owner`, `admin`, `accountant`, `producer`, `staff`, `tax_advisor`.
 - `apps/api/core/permissions.py`: a single matrix `PERMISSIONS: dict[str, set[Role]]` with dotted permission keys. Seed it now with keys for P0b features plus placeholders used later (e.g. `company.settings.edit`, `company.members.manage`, `number_series.manage`, `audit.view`, `archive.view`, `archive.download`, `documents.finalize`, `documents.revise`, `ledger.view` …). Unused keys are fine.
 - Dependency `require(permission)`; every endpoint added in this prompt uses it.
 - `tax_advisor`: only `archive.view`, `archive.download` (+ optionally `reports.view`, `exports.download` via company setting). Everything else 404.
-- 2FA policy: FreeFrame's login flow asks `require_2fa_enabled(db)` (install-wide), and §195 additionally **closes magic-code sign-in and self-registration entirely** while that flag is on. Replace that call in the post-first-factor helper with **one** function `two_factor_required_for(db, user) -> bool`: True if the install-wide `require_2fa` is on, **or** the user holds an active `tax_advisor` membership in any company, **or** holds a role listed in any of their companies' `require_2fa_roles`. Every first-factor path (password, magic code, invite) must use it — add it to the parametrised first-factor tests.
-  **Careful with §195:** FilmBill requires 2FA *per user/role* (tax advisors), not instance-wide, so magic-code sign-in must stay open for everyone else and, for a user who is required or enrolled, must chain into the 2FA challenge (§193) instead of being switched off. Keep FreeFrame's instance-wide switch as an additional company/site setting; only that switch may close magic-code sign-in globally. Test both: required user via magic code → 2FA challenge; unaffected user via magic code → normal login.
+- **2FA requirement per role — exactly one condition changes** (refined 2026-09-19 after the FreeFrame session traced it; [Certain] from the code at §198):
+  FreeFrame has two independent levers, and only the first one is ours to change:
+  | Lever | Where | What it does | FilmBill |
+  |---|---|---|---|
+  | forced enrolment | `_login_outcome()` in `routers/auth.py`, branch `if require_2fa_enabled(db):` (runs **after** `if user.two_factor_enabled:`) | user not enrolled → pending token with `setup_required=True` instead of real tokens | **replace the condition** with `two_factor_required_for(db, user)` |
+  | code issuance | `send_magic_code()`, `if body.purpose != "password_reset" and require_2fa_enabled(db)` (§195) | refuses to issue magic codes instance-wide, 403 | **leave reading the instance-wide flag only** — it is a global policy switch, not a per-person rule |
+  - `user.two_factor_enabled` (the user's own enrolment) stays untouched and is checked first, so an enrolled user is always challenged.
+  - The **third state** that does not exist in FreeFrame today — *not enrolled, instance-wide switch off, but their role requires it* — is created entirely by the first row. No other file needs to change for it.
+  - `two_factor_required_for(db, user) -> bool`: `require_2fa_enabled(db)` **or** the user holds an active, unrevoked `tax_advisor` membership in any company **or** holds a role listed in any of their companies' `require_2fa_roles`. Derived from `CompanyMembership` + company settings — no new column on `User` (a denormalised flag would drift the moment a membership is revoked). One query, called once per login; add an index on `(user_id, revoked_at)`.
+  - Sequence for a role-required, not yet enrolled user: magic code or password correct → `_login_outcome` → `setup_required=True` → they must enrol before any token exists. Magic-code issuance is untouched, so they can still receive the code.
+- **Session invalidation (new work, not in FreeFrame):** [Certain] FreeFrame's tokens carry only `sub`, `type`, `exp` — there is no way to end a session. Granting a `tax_advisor` membership to someone who is already logged in therefore does **not** force 2FA until their token expires, and revoking a membership leaves their session alive. Add a `token_version` integer on `User`, stamp it into access and refresh tokens as `tv`, reject a mismatch in `get_current_user` and `/auth/refresh` (a token **without** `tv` counts as `tv = 0`, so existing sessions survive the migration), and bump it on: membership granted/revoked, role changed, 2FA enabled/disabled/reset, password changed. Report this back to the FreeFrame session — it is worth having there too.
 - Web: navigation items are shown only if the user holds the permission; a placeholder **Archive** page (gated by `archive.view`, text "Archive — coming in P5") exists so the tax-advisor view can be accepted now.
 - Membership management UI: Settings → Company → Members (invite existing or new user by email with role, expiry date for tax advisors, revoke). Emails via existing email worker.
 
@@ -66,10 +75,17 @@ Settings → **Company** (new group, per active company): General (legal data, b
 3. **Number series concurrency:** real Postgres, 20 threads allocate 50 numbers each for one series → 1 000 distinct numbers, no gaps, in order; a thread that rolls back does not consume a number; yearly reset on 1 Jan in company timezone.
 4. **Audit append-only:** UPDATE and DELETE on `audit_events` raise at DB level.
 5. **Money:** float JSON rejected; `"0.005"` quantizes to `"0.01"`; string round-trip preserves trailing zeros `"12.30"`.
-6. **2FA policy:** granting a `tax_advisor` membership to a user without 2FA → next login (via password, magic code and invite each) returns `requires_2fa: true, setup_required: true`.
-7. **Codegen drift:** CI step fails if a schema field is added without regenerating (demonstrate once, then revert).
+6. **2FA policy**, all with the instance-wide `require_2fa` **off**:
+   a. grant `tax_advisor` membership to a user without 2FA → password login and magic-code login each return `requires_2fa: true, setup_required: true`, and no access/refresh token;
+   b. `/auth/send-magic-code` for that user still returns 200 (issuance is not blocked — §195 is a separate lever);
+   c. an unaffected user logs in with a magic code normally;
+   d. an enrolled user is challenged regardless of role or switch;
+   e. instance-wide switch **on** → `/auth/send-magic-code` returns 403 for everyone (unchanged FreeFrame behaviour);
+   f. revoke the membership → that user logs in without 2FA again (unless enrolled themselves).
+7. **Session invalidation:** user is logged in; grant `tax_advisor` → their existing access and refresh tokens are rejected (`tv` mismatch) and the next login runs into forced enrolment; a legacy token without `tv` works while `token_version = 0`.
+8. **Codegen drift:** CI step fails if a schema field is added without regenerating (demonstrate once, then revert).
 
-Mutation checks with real FAIL lines for: removing the company filter from one scoped query (test 1), removing `FOR UPDATE` (test 3 must fail — if it doesn't fail reliably, increase contention and say so), dropping the trigger (test 4).
+Mutation checks with real FAIL lines for: removing the role branch from `two_factor_required_for` (test 6a must fail), skipping the `tv` check (test 7), removing the company filter from one scoped query (test 1), removing `FOR UPDATE` (test 3 must fail — if it doesn't fail reliably, increase contention and say so), dropping the trigger (test 4).
 
 ## Acceptance in the browser (dev compose)
 1. Superadmin creates company "YON Studio OG" (AT, EUR, de) and a second test company.

@@ -1,0 +1,37 @@
+FROM python:3.11-slim
+
+WORKDIR /workspace
+
+RUN apt-get update && apt-get install -y \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install API dependencies
+COPY apps/api/requirements.txt /workspace/apps/api/requirements.txt
+RUN pip install --no-cache-dir -r /workspace/apps/api/requirements.txt
+RUN pip install --no-cache-dir gunicorn
+
+COPY apps/__init__.py /workspace/apps/__init__.py
+COPY apps/api /workspace/apps/api
+
+# Non-root, WITH a home directory. `--no-create-home` was the literal cause
+# of "PermissionError: [Errno 13] Permission denied: '/home/appuser'" in
+# FreeFrame: HOME is still /home/appuser for this user, so anything
+# defaulting to ~/.cache tried to create a directory under root-owned /home.
+RUN adduser --disabled-password --gecos "" appuser
+
+WORKDIR /workspace
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+USER appuser
+
+EXPOSE 8000
+
+CMD ["gunicorn", "apps.api.main:app", \
+     "-w", "4", \
+     "-k", "uvicorn.workers.UvicornWorker", \
+     "--bind", "0.0.0.0:8000", \
+     "--timeout", "120", \
+     "--graceful-timeout", "30"]

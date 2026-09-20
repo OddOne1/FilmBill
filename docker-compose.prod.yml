@@ -1,0 +1,275 @@
+# ============================================================
+# FilmBill — Production Docker Compose
+# ============================================================
+# Usage:
+#   cp .env.example .env.prod        # configure your settings
+#   docker compose --env-file .env.prod -f docker-compose.prod.yml build --no-cache
+#   docker compose --env-file .env.prod -f docker-compose.prod.yml up -d
+#
+# CLAUDE.md rule 14: build and up are ALWAYS two separate commands, and every
+# buildable service is rebuilt together (api worker email_worker beat web) —
+# Compose tags one image per service even from the same Dockerfile, and a
+# stale worker has broken mail before.
+# CLAUDE.md rule 18: no image is pushed to any registry until release gate R1.
+#
+# SSL: Set DOMAIN and ACME_EMAIL in .env.prod for automatic
+#      Let's Encrypt certificates. Without a domain, it runs
+#      on HTTP only (port 80).
+# ============================================================
+
+name: filmbill
+
+services:
+  traefik:
+    container_name: filmbill_traefik
+    image: traefik:v2.11
+    command:
+      - --api.dashboard=false
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      # Let's Encrypt automatic certificates (requires DOMAIN and ACME_EMAIL)
+      - --certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL:-}
+      - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web
+    ports:
+      - "8081:80"
+    volumes:
+      - ${DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
+      - letsencrypt:/letsencrypt
+    restart: unless-stopped
+
+  postgres:
+    container_name: filmbill_postgres
+    image: postgres:15-alpine
+    env_file:
+      - .env.prod
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-filmbill}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    container_name: filmbill_redis
+    image: redis:7-alpine
+    command: >
+      sh -c "if [ -n \"$$REDIS_PASSWORD\" ]; then
+        redis-server --requirepass \"$$REDIS_PASSWORD\" --appendonly yes;
+      else
+        redis-server --appendonly yes;
+      fi"
+    env_file:
+      - .env.prod
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" --no-auth-warning ping || redis-cli ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # HTML → PDF. The only renderer in the system (SCOPE §7.3).
+  #
+  # Exact tag, no floating major: a Chromium version change alters page
+  # rendering, and an invoice that silently re-flows is a document problem,
+  # not a dependency problem. No published port and no Traefik label — it is
+  # reachable on the internal network only.
+  gotenberg:
+    container_name: filmbill_gotenberg
+    image: gotenberg/gotenberg:8.21.1
+    command:
+      - "gotenberg"
+      - "--chromium-disable-javascript=false"
+      - "--api-timeout=60s"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    restart: unless-stopped
+
+  api:
+    container_name: filmbill_api
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile.prod
+    env_file:
+      - .env.prod
+    environment:
+      - DISABLE_DOCS=true
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      gotenberg:
+        condition: service_started
+    command: >
+      sh -c "cd /workspace/apps/api && alembic upgrade head && cd /workspace &&
+      gunicorn apps.api.main:app
+      -w $${API_WORKERS:-4}
+      -k uvicorn.workers.UvicornWorker
+      --bind 0.0.0.0:8000
+      --timeout 120
+      --graceful-timeout 30"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    labels:
+      - traefik.enable=true
+      # HTTP router (always active)
+      - traefik.http.routers.api.rule=PathPrefix(`/api`)
+      - traefik.http.routers.api.entrypoints=web
+      - traefik.http.routers.api.middlewares=strip-api-prefix
+      # HTTPS router (active when SSL is configured)
+      - traefik.http.routers.api-secure.rule=PathPrefix(`/api`)
+      - traefik.http.routers.api-secure.entrypoints=websecure
+      - traefik.http.routers.api-secure.tls.certresolver=letsencrypt
+      - traefik.http.routers.api-secure.middlewares=strip-api-prefix
+      - traefik.http.routers.api-secure.service=api
+      # Shared
+      - traefik.http.middlewares.strip-api-prefix.stripprefix.prefixes=/api
+      - traefik.http.services.api.loadbalancer.server.port=8000
+    restart: unless-stopped
+
+  worker:
+    container_name: filmbill_worker
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile.prod
+    env_file:
+      - .env.prod
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: sh -c "celery -A apps.api.tasks.celery_app worker -Q documents -c $${DOCUMENT_CONCURRENCY:-2} --loglevel=warning"
+    # Override the image's HEALTHCHECK, which is the API's
+    # `curl localhost:8000/health`. A Celery worker serves no HTTP, so that
+    # probe can never pass: in FreeFrame all four Celery services were
+    # permanently `(unhealthy)` from the day they were added, which is why
+    # nobody noticed one of them actually being gone.
+    #
+    # `inspect ping` is a real liveness check — it round-trips through the
+    # broker to this node's own mailbox and back, so it fails if the worker
+    # process is wedged OR if Redis is unreachable. Scoped to this container
+    # with -d so it cannot pass on a sibling worker's reply.
+    #
+    # A worker with every concurrency slot inside a long render still
+    # answers: control messages are served by its pidbox consumer, not by
+    # the task pool, so this reports "wedged" only when it truly is.
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A apps.api.tasks.celery_app inspect ping -d celery@$$HOSTNAME --timeout 10 > /dev/null 2>&1 || exit 1"]
+      interval: 60s
+      timeout: 15s
+      # A cold worker has to import its deps and connect to the broker
+      # before it can answer; failing it during that is noise.
+      start_period: 60s
+      retries: 3
+    restart: unless-stopped
+
+  email_worker:
+    container_name: filmbill_email_worker
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile.prod
+    env_file:
+      - .env.prod
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: sh -c "celery -A apps.api.tasks.celery_app worker -Q email_high,email_low -c $${EMAIL_CONCURRENCY:-2} --loglevel=warning"
+    # Same override and reasoning as `worker` above.
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A apps.api.tasks.celery_app inspect ping -d celery@$$HOSTNAME --timeout 10 > /dev/null 2>&1 || exit 1"]
+      interval: 60s
+      timeout: 15s
+      # A cold worker has to import its deps and connect to the broker
+      # before it can answer; failing it during that is noise.
+      start_period: 60s
+      retries: 3
+    restart: unless-stopped
+
+  beat:
+    container_name: filmbill_beat
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile.prod
+    env_file:
+      - .env.prod
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: sh -c "celery -A apps.api.tasks.celery_app beat --loglevel=warning -s /tmp/celerybeat-schedule"
+    # Beat answers no `inspect ping` (it is a scheduler, not a
+    # worker) and serves no HTTP, so the inherited API healthcheck is
+    # meaningless here too.
+    #
+    # What is actually worth checking is the one dependency whose loss stops
+    # beat dispatching anything while the process stays happily alive:
+    # the broker. A schedule-file mtime check would be a more direct proxy
+    # for "is it still ticking", but the shelve backend's real filename is
+    # not guaranteed to be exactly -s's argument, and a healthcheck that
+    # goes red on a filename detail is worse than none.
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"from apps.api.tasks.celery_app import celery_app; celery_app.connection().ensure_connection(max_retries=1)\" || exit 1"]
+      interval: 60s
+      timeout: 15s
+      start_period: 30s
+      retries: 3
+    restart: unless-stopped
+
+  web:
+    container_name: filmbill_web
+    build:
+      # Repo root, matching api/worker/beat/email_worker. Keeping every
+      # build context at the root is deliberate: FreeFrame's web build was
+      # scoped to ./apps/web and silently excluded a workspace package it
+      # depended on, and every build failed for two months.
+      context: .
+      dockerfile: apps/web/Dockerfile.prod
+      args:
+        NEXT_PUBLIC_API_URL: /api
+    env_file:
+      - .env.prod
+    environment:
+      - API_INTERNAL_URL=http://api:8000
+    depends_on:
+      - api
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3000"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    labels:
+      - traefik.enable=true
+      # HTTP router (always active)
+      - traefik.http.routers.web.rule=PathPrefix(`/`)
+      - traefik.http.routers.web.entrypoints=web
+      - traefik.http.routers.web.priority=1
+      # HTTPS router (active when SSL is configured)
+      - traefik.http.routers.web-secure.rule=PathPrefix(`/`)
+      - traefik.http.routers.web-secure.entrypoints=websecure
+      - traefik.http.routers.web-secure.tls.certresolver=letsencrypt
+      - traefik.http.routers.web-secure.priority=1
+      - traefik.http.routers.web-secure.service=web
+      - traefik.http.services.web.loadbalancer.server.port=3000
+    restart: unless-stopped
+  
+    
+volumes:
+  pgdata:
+  redisdata:
+  letsencrypt:

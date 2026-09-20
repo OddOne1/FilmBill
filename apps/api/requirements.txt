@@ -1,0 +1,59 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+sqlalchemy==2.0.49
+alembic==1.13.3
+psycopg2-binary==2.9.11
+pydantic==2.9.2
+pydantic-settings==2.5.2
+python-jose[cryptography]==3.5.0
+bcrypt==4.2.0
+python-multipart==0.0.12
+boto3==1.35.30
+celery[redis]==5.4.0
+redis==5.1.0
+httpx==0.27.2
+pytest==8.4.2
+pytest-asyncio==0.24.0
+email-validator==2.3.0
+jinja2==3.1.6
+# Pinned explicitly rather than relying on python-jose[cryptography] to pull
+# it in transitively: it encrypts stored mail credentials at rest
+# (services/secrets_service.py), so it should not silently disappear if that
+# package ever reorganizes its extras.
+cryptography==43.0.1
+kombu==5.4.2
+# Imported DIRECTLY by our own code (botocore in s3_service and email_service,
+# starlette in two middlewares) while only ever arriving as someone else's
+# transitive dependency. Both are bounded today by boto3 and fastapi
+# respectively, so neither is currently broken — but that is exactly the shape
+# that broke transcription in FreeFrame: code importing a package nothing in
+# this file declares, held up by another package's private choices. Left
+# unpinned so pip keeps resolving them jointly with their parents; the point
+# is that the dependency is now stated.
+botocore
+starlette
+# Gotenberg is called over HTTP (services/pdf_service.py). Declared for the
+# same reason as botocore/starlette above: it is imported by our own code.
+requests==2.32.3
+
+# The IANA zone database, for `zoneinfo` (services/schedule_window.py).
+#
+# Not currently load-bearing: python:3.11-slim inherits Debian's
+# /usr/share/zoneinfo and resolves Europe/Vienna without this. It is declared
+# anyway because the failure mode if a future base image drops it is the worst
+# kind — ZoneInfo raises, resolve_zone falls back to UTC, and every scheduled
+# job silently runs at the wrong local hour while the settings page insists
+# otherwise. zoneinfo prefers the system database and uses this only as a
+# fallback, so it costs nothing here.
+tzdata==2024.2
+
+# Two-factor authentication.
+#
+# pyotp is the TOTP implementation (RFC 6238); qrcode renders the
+# provisioning URI as a scannable image server-side, so the browser never
+# needs a QR library and the secret never has to reach a third-party
+# rendering service. [pil] pulls in Pillow as the PNG backend.
+#
+# The secret's encryption at rest uses `cryptography`, already pinned above.
+pyotp==2.9.0
+qrcode[pil]==7.4.2

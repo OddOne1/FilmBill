@@ -1,0 +1,230 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# NO IMAGE IS EVER PUSHED FROM HERE. CLAUDE.md rule 18: pushing images to any
+# registry is forbidden until release gate R1.
+#
+# The reason is concrete, not procedural. A FilmBill v1 is running on the
+# production server and is auto-updated by Watchtower from Docker Hub. An
+# image published under a v1-shaped name would be pulled and would REPLACE
+# a live production system that is still issuing real invoices. The
+# docker-build job below therefore builds every image and pushes none — it
+# proves the Dockerfiles work, nothing more. Do not add a login or a push
+# step to this file before R1.
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ─── API ───────────────────────────────────────────────────────────────────
+  api-tests:
+    name: API tests
+    runs-on: ubuntu-latest
+
+    # Real Postgres and Redis alongside the job. The suite mocks the session
+    # today, but the services are here from the start because the moment
+    # anything talks to a database for real — the Alembic baseline, P0b's
+    # company scoping — CI has to be the place that finds it, not the server.
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: filmbill
+          POSTGRES_PASSWORD: filmbill
+          POSTGRES_DB: filmbill_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U filmbill"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://filmbill:filmbill@localhost:5432/filmbill_test
+      REDIS_URL: redis://localhost:6379/0
+      S3_BUCKET: filmbill-test
+      S3_ENDPOINT: http://localhost:9000
+      S3_ACCESS_KEY: testkey
+      S3_SECRET_KEY: testsecret
+      S3_REGION: us-east-1
+      JWT_SECRET: ci-test-secret-key-not-for-production
+      FRONTEND_URL: http://localhost:3100
+      GOTENBERG_URL: http://localhost:3000
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          # Matches apps/api/Dockerfile. A test suite that passes on a
+          # different interpreter than production runs is a test suite that
+          # has not checked production.
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: apps/api/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r apps/api/requirements.txt
+
+      - name: pip check
+        run: pip check
+
+      - name: Run tests
+        run: python -m pytest apps/api/tests/ -q --tb=short | tee test-output.txt
+
+      # The suite is the guard against the API surface widening, media code
+      # coming back, and Celery tasks landing on a queue nobody consumes.
+      # A suite that quietly shrinks takes all of that with it, and a green
+      # run on three remaining tests looks identical to a green run on three
+      # hundred.
+      - name: Guard against a gutted suite
+        run: |
+          PASSED=$(grep -oE '[0-9]+ passed' test-output.txt | grep -oE '[0-9]+' | head -1)
+          echo "Tests passed: ${PASSED:-0}"
+          if [ -z "$PASSED" ] || [ "$PASSED" -lt 250 ]; then
+            echo "::error::Expected at least 250 passing tests, got ${PASSED:-0}."
+            exit 1
+          fi
+
+      - name: Alembic history is linear and applies to an empty database
+        run: |
+          cd apps/api
+          alembic upgrade head
+          alembic check
+          alembic downgrade base
+
+  # ─── Alembic vs models ─────────────────────────────────────────────────────
+  migrations-match-models:
+    name: Migrations match the models
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: filmbill
+          POSTGRES_PASSWORD: filmbill
+          POSTGRES_DB: filmbill_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U filmbill"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://filmbill:filmbill@localhost:5432/filmbill_test
+      REDIS_URL: redis://localhost:6379/0
+      JWT_SECRET: ci-test-secret-key-not-for-production
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: apps/api/requirements.txt
+      - run: pip install -r apps/api/requirements.txt
+
+      # CLAUDE.md rule 9: every schema change is a migration. This is what
+      # makes that checkable — a model edited without one shows up here as a
+      # pending autogenerate diff, in the PR that made it.
+      - name: No pending model changes
+        run: |
+          cd apps/api
+          alembic upgrade head
+          alembic check
+
+  # ─── Web ───────────────────────────────────────────────────────────────────
+  web:
+    name: Web lint, typecheck, test, build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.3
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # No continue-on-error on any of these. A check allowed to fail is a
+      # check that reports nothing, and FreeFrame's CI carried exactly that
+      # on its typecheck and lint steps.
+      - name: Lint
+        run: pnpm --filter web lint
+
+      - name: Typecheck
+        run: pnpm --filter web typecheck
+
+      - name: Test
+        run: pnpm --filter web test
+
+      - name: Build
+        run: pnpm --filter web build
+        env:
+          NEXT_PUBLIC_API_URL: /api
+
+  # ─── Images ────────────────────────────────────────────────────────────────
+  docker-build:
+    name: Docker build (no push)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Every buildable service, together. CLAUDE.md rule 14: Compose tags
+      # one image per service even when several share a Dockerfile, so
+      # building only one of them is how a stale worker ends up next to a
+      # fresh API.
+      - name: Build API image (dev)
+        run: docker build -t filmbill-api:ci -f apps/api/Dockerfile .
+
+      - name: Build API image (prod)
+        run: docker build -t filmbill-api:ci-prod -f apps/api/Dockerfile.prod .
+
+      - name: Build web image (prod)
+        run: docker build -t filmbill-web:ci-prod -f apps/web/Dockerfile.prod .
+
+      - name: Compose files are valid
+        run: |
+          cp .env.example .env
+          cp .env.example .env.prod
+          docker compose -f docker-compose.dev.yml config -q
+          docker compose --env-file .env.prod -f docker-compose.prod.yml config -q
+          rm -f .env .env.prod
+
+      - name: Confirm nothing was pushed
+        run: |
+          # Belt and braces for CLAUDE.md rule 18. If a push step is ever
+          # added above, this is the line that should make the reviewer ask
+          # why it is being removed.
+          echo "Images built locally only. No registry login, no push."

@@ -1,0 +1,11 @@
+{% extends "email/base.html" %}
+
+{% block content %}
+<h2>You're invited!</h2>
+<p><strong>{{ inviter_name }}</strong> has invited you to join <strong>{{ org_name }}</strong>{% if org_name != "FilmBill" %} on FilmBill{% endif %}.</p>
+<p>
+    <a href="{{ invite_link }}" class="button">Accept Invitation</a>
+</p>
+<p class="muted">This invitation expires in {{ expiry_days }} days.</p>
+<p class="muted">If you didn't expect this invitation, you can ignore this email.</p>
+{% endblock %}
