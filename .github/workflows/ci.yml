@@ -199,7 +199,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
 
       # Every buildable service, together. CLAUDE.md rule 14: Compose tags
       # one image per service even when several share a Dockerfile, so
