@@ -14,8 +14,8 @@
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
-const ACCESS = 'ff_access_token'
-const REFRESH = 'ff_refresh_token'
+const ACCESS = 'fb_access_token'
+const REFRESH = 'fb_refresh_token'
 
 let redirectedTo: string | null = null
 

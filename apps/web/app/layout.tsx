@@ -87,7 +87,7 @@ export default function RootLayout({
         {/* Inline script to apply theme BEFORE paint -- prevents flash */}
         <script
           dangerouslySetInnerHTML={{
-            __html: "(function(){try{var d=JSON.parse(localStorage.getItem('ff-theme')||'{}');var t=d.state&&d.state.theme||'dark';if(t==='system'){t=window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light'}document.documentElement.setAttribute('data-theme',t)}catch(e){document.documentElement.setAttribute('data-theme','dark')}})()",
+            __html: "(function(){try{var d=JSON.parse(localStorage.getItem('fb-theme')||'{}');var t=d.state&&d.state.theme||'dark';if(t==='system'){t=window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light'}document.documentElement.setAttribute('data-theme',t)}catch(e){document.documentElement.setAttribute('data-theme','dark')}})()",
           }}
         />
       </head>

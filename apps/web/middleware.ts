@@ -2,9 +2,21 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
 const PUBLIC_ROUTES = ['/login', '/setup']
-const PUBLIC_PREFIXES = ['/invite/', '/share/']
+// No '/share/': share links went with FreeFrame's media features. Leaving a
+// prefix here that matches no route is how an unauthenticated hole gets
+// re-opened by accident, the day someone adds a page under that name.
+const PUBLIC_PREFIXES = ['/invite/']
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+// Middleware runs on the SERVER, so it needs the container-to-container
+// address — NEXT_PUBLIC_API_URL is what the BROWSER uses and is
+// `http://localhost:8100` in dev, which from inside this container is
+// nothing. The fetch below then throws, the catch swallows it, and a fresh
+// install silently never gets redirected to /setup. Same rule as
+// lib/site-settings-server.ts, and CLAUDE.md rule 15.
+const API_URL =
+  process.env.API_INTERNAL_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  'http://localhost:8000'
 
 function isPublicRoute(pathname: string): boolean {
   if (PUBLIC_ROUTES.includes(pathname)) return true
@@ -20,9 +32,18 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  // Check if setup is needed — redirect to /setup if no superadmin exists
-  // Uses a cookie cache to avoid calling the API on every request
-  const setupDone = request.cookies.get('ff_setup_done')?.value
+  // Is this instance set up at all? Cached in a cookie so the API is not
+  // asked on every request.
+  //
+  // `markSetupDone` rather than an early `return NextResponse.next()`. That
+  // early return was an AUTH BYPASS: on any request without the cookie —
+  // every first request after a deploy, a cookie clear, or its 24h expiry —
+  // this branch answered `next()` and the token check below never ran. The
+  // API still refused the data, so nothing leaked, but a gate that lets
+  // people through on their first knock is not a gate. Found while checking
+  // the route list after the port.
+  let markSetupDone = false
+  const setupDone = request.cookies.get('fb_setup_done')?.value
   if (!setupDone) {
     try {
       const res = await fetch(`${API_URL}/setup/status`, {
@@ -33,19 +54,17 @@ export async function middleware(request: NextRequest) {
         if (data.needs_setup) {
           return NextResponse.redirect(new URL('/setup', request.url))
         }
-        // Setup is done — set cookie so we don't check again
-        const response = NextResponse.next()
-        response.cookies.set('ff_setup_done', '1', { path: '/', maxAge: 60 * 60 * 24 }) // 24 hours
-        return response
+        markSetupDone = true
       }
     } catch {
-      // API unreachable — let the request through, the page will show errors
+      // API unreachable — fall through. The auth check below still applies,
+      // and the page surfaces the error rather than this pretending to know.
     }
   }
 
   // Check for auth tokens
-  const accessToken = request.cookies.get('ff_access_token')?.value
-  const refreshToken = request.cookies.get('ff_refresh_token')?.value
+  const accessToken = request.cookies.get('fb_access_token')?.value
+  const refreshToken = request.cookies.get('fb_refresh_token')?.value
 
   if (!accessToken && !refreshToken) {
     const loginUrl = new URL('/login', request.url)
@@ -53,7 +72,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl)
   }
 
-  return NextResponse.next()
+  const response = NextResponse.next()
+  if (markSetupDone) {
+    response.cookies.set('fb_setup_done', '1', { path: '/', maxAge: 60 * 60 * 24 }) // 24 hours
+  }
+  return response
 }
 
 export const config = {

@@ -35,7 +35,7 @@ function applyToDOM(theme: Theme) {
 
 async function saveToServer(theme: Theme) {
   try {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('ff_access_token') : null
+    const token = typeof window !== 'undefined' ? localStorage.getItem('fb_access_token') : null
     if (!token) return
     const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
     await fetch(`${API_URL}/auth/me/preferences`, {
@@ -72,7 +72,7 @@ export const useThemeStore = create<ThemeState>()(
       },
     }),
     {
-      name: 'ff-theme',
+      name: 'fb-theme',
       // Only persist the raw preference. `resolvedTheme` is derived from
       // `theme` + the current OS preference and must never be persisted —
       // a stale persisted value would silently override the freshly

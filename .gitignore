@@ -67,6 +67,10 @@ node_modules/
 out/
 next-env.d.ts
 
+# TypeScript incremental build state. Tracked in FreeFrame, which meant every
+# typecheck produced a diff.
+*.tsbuildinfo
+
 # Turbo / bundler caches
 .turbo/
 

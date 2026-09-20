@@ -251,6 +251,12 @@ services:
       # Named volumes so a Linux install is never shadowed by the host's.
       - web_node_modules:/repo/node_modules
       - web_app_node_modules:/repo/apps/web/node_modules
+      # And so does .next: it is inside the bind-mounted source tree, so a
+      # host-side `pnpm build` or `rm -rf .next` otherwise pulls the running
+      # dev server's cache out from under it mid-request. It then throws
+      # ENOENT on a webpack pack file and stops serving — which looks like a
+      # broken app rather than like two processes sharing one directory.
+      - web_next_cache:/repo/apps/web/.next
     command: >
       sh -c "corepack enable &&
       corepack prepare pnpm@9.12.3 --activate &&
@@ -271,3 +277,4 @@ volumes:
   redisdata:
   web_node_modules:
   web_app_node_modules:
+  web_next_cache:

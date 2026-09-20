@@ -9,12 +9,12 @@ describe('Token management', () => {
 
   it('setTokens stores access and refresh tokens in localStorage', () => {
     setTokens('access-123', 'refresh-456')
-    expect(localStorage.getItem('ff_access_token')).toBe('access-123')
-    expect(localStorage.getItem('ff_refresh_token')).toBe('refresh-456')
+    expect(localStorage.getItem('fb_access_token')).toBe('access-123')
+    expect(localStorage.getItem('fb_refresh_token')).toBe('refresh-456')
   })
 
   it('getAccessToken retrieves access token from localStorage', () => {
-    localStorage.setItem('ff_access_token', 'my-access-token')
+    localStorage.setItem('fb_access_token', 'my-access-token')
     expect(getAccessToken()).toBe('my-access-token')
   })
 
@@ -23,7 +23,7 @@ describe('Token management', () => {
   })
 
   it('getRefreshToken retrieves refresh token from localStorage', () => {
-    localStorage.setItem('ff_refresh_token', 'my-refresh-token')
+    localStorage.setItem('fb_refresh_token', 'my-refresh-token')
     expect(getRefreshToken()).toBe('my-refresh-token')
   })
 
@@ -32,8 +32,8 @@ describe('Token management', () => {
   })
 
   it('clearTokens removes both tokens from localStorage', () => {
-    localStorage.setItem('ff_access_token', 'access-123')
-    localStorage.setItem('ff_refresh_token', 'refresh-456')
+    localStorage.setItem('fb_access_token', 'access-123')
+    localStorage.setItem('fb_refresh_token', 'refresh-456')
 
     // Mock window.location.href setter to avoid navigation errors
     const locationMock = { href: '' }
@@ -44,8 +44,8 @@ describe('Token management', () => {
 
     clearTokens()
 
-    expect(localStorage.getItem('ff_access_token')).toBeNull()
-    expect(localStorage.getItem('ff_refresh_token')).toBeNull()
+    expect(localStorage.getItem('fb_access_token')).toBeNull()
+    expect(localStorage.getItem('fb_refresh_token')).toBeNull()
   })
 
   it('clearTokens redirects to /login', () => {

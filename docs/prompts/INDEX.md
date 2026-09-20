@@ -67,6 +67,16 @@ Alembic baseline, five tables. No business features.
 - `PATCH /admin/users/{id}/disable-2fa` had no button on either side of the
   port, so the documented recovery for a user who lost every factor was a curl
   command. Added to the admin user table, confirmed before it fires.
+- The route middleware's setup check answered `next()` and returned, so the
+  token check below it never ran on any request without the `fb_setup_done`
+  cookie — every first request after a deploy. Nothing leaked (the API still
+  refused), but the gate did not gate.
+- `app/page.tsx` redirected `/` to `/projects`, a route that no longer exists,
+  and shadowed the real dashboard at `/`. Removed; `(dashboard)/page.tsx` owns
+  `/` now.
+- The `ff_*` → `fb_*` rename (cookies, localStorage) had been missed in the
+  first pass: `middleware.ts`, `lib/auth.ts`, the theme store and the
+  collapse-state keys still used FreeFrame's names.
 
 **Acceptance.** A–D ran green. E ran green against the live stack over HTTP;
 the two browser-rendered halves of E were not observed in a browser, because

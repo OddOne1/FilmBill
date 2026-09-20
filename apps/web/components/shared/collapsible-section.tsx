@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
 
 /** localStorage key prefix. Namespaced so a section's key can be read at a
  *  glance in devtools and cleared as a group. */
-const KEY_PREFIX = 'ff-collapse-'
+const KEY_PREFIX = 'fb-collapse-'
 
 /**
  * Collapse state that survives a reload.
@@ -73,7 +73,7 @@ interface CollapsibleSectionProps {
   /** Shown beside the title. Omit for a section where a count means nothing. */
   count?: number
   /**
-   * Suffix of the localStorage key (`ff-collapse-` is prepended). Omit for a
+   * Suffix of the localStorage key (`fb-collapse-` is prepended). Omit for a
    * section that should always start from `defaultCollapsed`.
    */
   storageKey?: string

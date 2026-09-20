@@ -63,12 +63,12 @@ describe('CollapsibleSection', () => {
 
     expect(screen.queryByText('first')).not.toBeInTheDocument()
     expect(screen.getByText('second')).toBeInTheDocument()
-    expect(window.localStorage.getItem('ff-collapse-t-one')).toBe('1')
-    expect(window.localStorage.getItem('ff-collapse-t-two')).toBeNull()
+    expect(window.localStorage.getItem('fb-collapse-t-one')).toBe('1')
+    expect(window.localStorage.getItem('fb-collapse-t-two')).toBeNull()
   })
 
   it('honours a stored expansion over defaultCollapsed', () => {
-    window.localStorage.setItem('ff-collapse-t-c', '0')
+    window.localStorage.setItem('fb-collapse-t-c', '0')
     render(
       <CollapsibleSection title="Deactivated" storageKey="t-c" defaultCollapsed>
         <p>contents</p>

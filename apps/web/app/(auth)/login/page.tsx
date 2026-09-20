@@ -26,7 +26,7 @@ export default function LoginPage() {
     // If already authenticated, set cookie and redirect to dashboard
     const token = getAccessToken()
     if (token) {
-      document.cookie = `ff_access_token=${token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`
+      document.cookie = `fb_access_token=${token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`
       // Check the 'from' param for redirect target
       const params = new URLSearchParams(window.location.search)
       const from = params.get('from')
