@@ -8,7 +8,7 @@ from them. `docs/SCOPE.md` is where the product is decided.
 |---|---|---|---|---|
 | — | Scope, durable contract and phase prompts | — | `df4b5f6` | done |
 | P0a | New repo from the FreeFrame platform core | [`02-filmbill-P0a-repo-from-freeframe.md`](02-filmbill-P0a-repo-from-freeframe.md) | `3349695` | done — see notes |
-| P0a-fix | Post-login 404 and leftover FreeFrame branding | [`05-filmbill-P0a-fix-login-redirect-and-branding.md`](05-filmbill-P0a-fix-login-redirect-and-branding.md) | — | done — see notes |
+| P0a-fix | Post-login 404 and leftover FreeFrame branding | [`05-filmbill-P0a-fix-login-redirect-and-branding.md`](05-filmbill-P0a-fix-login-redirect-and-branding.md) | `90173fe` | done — see notes |
 | P0b | Foundations: companies, roles, number series, audit, money, codegen | [`03-filmbill-P0b-foundations.md`](03-filmbill-P0b-foundations.md) | — | open |
 
 ---
