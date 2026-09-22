@@ -33,6 +33,8 @@ Platform modules (auth incl. TOTP 2FA, users, notifications, email, settings she
 15. **Runtime env vars for Next.js server code** must be declared in the Dockerfile *runner* stage or compose `environment:`, not only as build args.
 16. Browser-facing presigned S3 URLs only via the presign client that uses `S3_PUBLIC_ENDPOINT` (Safari blocks mixed content).
 17. `.gitignore` patterns for build dirs must be root-anchored (`/lib/`, not `lib/`).
+17b. **A green test suite does not prove a third-party import works in the browser.** Vitest/jsdom resolves packages' CJS builds and synthesises `default = module.exports`; webpack does not. A faithful jsdom reproduction of FreeFrame's §202 bug passed while production threw `TypeError` on `common.default.dictionary` — `@zxcvbn-ts/language-common` has no default export in its ESM build. For any dynamically imported third-party package, assert against the package's **ESM entry** or the **built chunk**, not only the test-runner's resolution.
+17c. **A disabled control must always say why.** No state where a button is dead and the screen is silent. A value that is merely unknown (a score still loading, a lookup that failed) never blocks submission — the server enforces the rule anyway. That one condition, copy-pasted into four forms, took out FreeFrame's invite acceptance, onboarding gate, password reset and profile password change at once.
 18. **Do not push images to any registry** until release gate R1. A running FilmBill v1 on the server is auto-updated by Watchtower from Docker Hub; an image with a v1 name would replace production.
 
 ## Working with Mathias

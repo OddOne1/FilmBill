@@ -1,6 +1,6 @@
 # FilmBill v2 — Scope & Architecture
 
-> Status: **DRAFT v0.10 — 2026-09-17** (decisions rounds 1–8 applied; inventory, associated items, alternatives, kits) · Owner: Mathias (YON Studio OG, formerly 257 Studio OG / yon.studio)
+> Status: **DRAFT v0.11 — 2026-09-20** (decisions rounds 1–8 applied; inventory, associated items, alternatives, kits) · Owner: Mathias (YON Studio OG, formerly 257 Studio OG / yon.studio)
 > Target audience: production companies in film, photo and media — Rentman-grade gear/crew handling is a differentiator, not an add-on.
 > Role split: **Cowork** = scoping, acceptance tests, troubleshooting between builds. **Claude Code** = all implementation, one phase prompt at a time.
 > Confidence tags: **[Certain]** verified source · **[Likely]** strong reference · **[Guessing]** needs confirmation (usually by your Steuerberater).
@@ -34,7 +34,8 @@ v1 grew feature-first: invoices, templates and PDF came before the data model wa
 - Auth (magic code + password, invites, first-user superadmin, setup flow)
 - Users, admin dashboard, activity log, SSE events
 - Notification system + notification prefs
-- Email system (SMTP/SES, encrypted secrets via `secrets_service`, Jinja templates, `email_worker`)
+- Email system (SMTP/SES, encrypted secrets via `secrets_service`, Jinja templates, Celery `email_worker`) — **transport and settings UI copied as they are; P2 extends it** (§5.5b)
+- 2FA (§191–§197: TOTP, backup codes, email second factor, magic-code gate, web screens)
 - Site settings, settings shell / sidebar layout, dashboard layout, theme
 - **Branding page 1:1** → plus new **Design** page directly underneath (§7)
 - S3 service incl. the `_get_presign_client()` / `S3_PUBLIC_ENDPOINT` rule
@@ -224,6 +225,15 @@ E-invoice export: EN 16931 has a single invoiced quantity (BT-129) [Likely], so 
 - **Adjustment** = `{label, type: discount|surcharge, mode: percent|amount, base}`; attachable to a **group** or the **document**. Document adjustments are an ordered list; each declares its base: `subtotal` (default) or `subtotal incl. previous adjustments` (compound), or a **kind filter** ("production fee 8 % on labor + equipment only").
 - **Tax on adjustments:** percent adjustments are allocated to the tax categories of their base proportionally; amount adjustments too, pro rata by net. Per EN 16931 these become document-level allowances/charges with their own VAT category (BG-20/BG-21) [Likely]. Mixed-rate documents therefore stay correct.
 - A surcharge like "production fee" can alternatively be a normal `fee` line — user's choice; the engine treats both correctly.
+
+### 5.5b Sending documents by email (P2 — what FreeFrame's mail system does not do yet)
+[Certain, repo read 2026-09-19] FreeFrame's `email_service` sends HTML+text only, from one site-wide sender, with no attachments and no delivery state. Document sending needs, on top of the copied transport:
+- **Attachments** (PDF, and the e-invoice XML in P5) — SMTP and SES paths both.
+- **Per-company sender identity**: from name/address, reply-to, BCC-to-self, signature; a company that sends as its own domain needs its own SMTP credentials (encrypted per company).
+- **Document email templates** per document type × language, with variables (number, amounts, due date, payment link), editable in Settings → Company, previewed before sending.
+- **Send state per dispatch**: queued → sent → bounced/failed, with the provider message id, bounce reason, retry, and a notification + task when a document email bounces (a silently failed invoice email is a real risk: FreeFrame swallowed mail errors for weeks once).
+- Size guard (large PDFs), and a "send me a copy" option.
+- P5 adds **inbound** mail (IMAP polling of a receipts mailbox) — new work, FreeFrame has nothing inbound.
 
 ### 5.5 Lifecycle, output actions & revisions
 
@@ -520,7 +530,7 @@ Final invoice:
 |---|---|---|
 | **P0 Foundation** | AGPL-3.0 licence (FreeFrame-derived files keep their MIT notice); multi-company from the start (company switcher in UI, `company_id` on all business tables, per-company roles, number series, layouts, branding); new repo from FreeFrame core; TOTP 2FA (optional per user, enforceable per role) (auth, users, notifications, email, settings, branding), media code removed; Gotenberg in compose; Alembic baseline; OpenAPI→TS codegen; Decimal money util; audit log; company settings; number series; roles; CI (lint, tests, multi-arch image); CLAUDE.md + prompt index | Fresh `docker compose up` → setup → login → email test → branding saved; zero media references |
 | **P1 Master data** | Parties (hierarchy, inheritance, VIES, self-billing flag), catalog (kinds, categories, units, price lists, rental factors), resource & reservation tables (no UI), tax codes/treatments/rules + AT/DE/EU packs | S5 inheritance part; tax proposal unit tests |
-| **P2 Documents** | Calc engine; output actions (finalize / download / email / print / mark sent) with dispatch log; Revise with revisions r2…; quotes, invoices, credit notes; groups & adjustments; service periods; finalize/numbering/immutability; journal posting (tables only); default fixed layout PDF via Gotenberg + EPC QR; email sending; manual payments; all §5.1 core types incl. Brief, Mahnung (basic), Rechnungskorrektur, Gutschrift (self-billing) | S1 (without partial), S4, S6, S8 green |
+| **P2 Documents** | Calc engine; document email (attachments, per-company sender, templates, bounce state — §5.5b); output actions (finalize / download / email / print / mark sent) with dispatch log; Revise with revisions r2…; quotes, invoices, credit notes; groups & adjustments; service periods; finalize/numbering/immutability; journal posting (tables only); default fixed layout PDF via Gotenberg + EPC QR; email sending; manual payments; all §5.1 core types incl. Brief, Mahnung (basic), Rechnungskorrektur, Gutschrift (self-billing) | S1 (without partial), S4, S6, S8 green |
 | **P3 Project billing** | Projects, **ProjectDays**, overtime calc engine (no UI), rebill & per-diem policies, order baseline, billing plans, advance/partial/final invoices with deduction table | S1 full, S2, S3 green |
 | **🚦 Release gate R1 (first official deploy, after P3)** | **FilmBill v1 import mandatory**: parties, items, issued v1 invoices as archived PDFs + metadata, number-series continuation, dry-run report + rollback. Not needed for test deploys. YON uses FilmBill for real quotes/invoices from here while P4–P7 continue; first weeks run in parallel with v1. | Dry-run on a copy of the v1 DB reconciles counts & totals |
 | **P4 Design** | Grid designer, envelope presets, flow region, per-type/language layouts, Design settings page | Yon layout rebuilt in designer; pixel-diff vs P2 default ≤ tolerance; multi-page items table |
@@ -600,6 +610,11 @@ Compliance sources: [Brandauer – E-Rechnung AT 2026](https://brandauer-rechtsa
 | D31 | Terms: **Associated items** = always/ask-with devices; **Alternative devices** = replacements offered when overbooked (easyjob's "reference items"; term not used) | 2026-09-17 |
 | D32 | Kits: calculated price or custom kit day price; swap popup with price difference; no nested kits; duplicate kit + save group as kit; booked kit = normal group shown with contents; revenue to devices, scaled by custom price | 2026-09-17 |
 | D33 | Availability shown in the device picker (owned / available / confirmed / option per booking period); overbooking popup with alternatives, book anyway, sub-rent | 2026-09-17 |
+| D35 | **Email stays the main second factor, made safe by splitting the channels** (decided 2026-09-20): every user sets a **backup email address used only for password resets**, verified, must differ from the login address (warning when both are on the same domain); 2FA codes go to the login address, reset links only to the backup address. Conditions: magic-code sign-in is **off for users whose factor is email**; changing either address, changing the password, disabling 2FA or regenerating backup codes requires the **current second factor** and notifies **both** addresses. Cannot be enforced, only warned about: forwarding between the two mailboxes. Roles with mandatory 2FA (tax advisor) must use an authenticator app, never email | 2026-09-20 |
+| D36 | **A password is mandatory for every account** (decided 2026-09-20). Password-less legacy users may still sign in with a magic code but land on a blocking set-password screen; after 30 days that route closes and an admin must help. | 2026-09-20 |
+| D37 | **Onboarding gate, both steps blocking, server-driven** (decided 2026-09-20): after login the app is unusable until (1) a password is set and (2) a **backup email address is verified by a 6-digit code** sent to it. Order: password → backup address → (2FA). State comes from `/auth/me` (`must_set_password`, `backup_email_state: missing\|pending\|verified`) — never from a "seen" flag in the browser, so a prompt disappears exactly when the stored data is real and reappears if it is cleared. The screen allows changing the address and resending (rate-limited, code TTL 15 min). Escape hatches, because a blocking gate on an undeliverable address is a lockout: an admin can clear another user's requirement, and a documented CLI/psql command clears it for the only superadmin. Admin list shows who still lacks a password or a verified backup address. | 2026-09-20 |
+| D38 | **Password policy** (decided 2026-09-20): minimum **12 characters** plus upper case, lower case, digit and special character (Mathias' rule) **and** a server-side strength check — blocklist of common passwords, no user name/email/company fragments, and a zxcvbn-style score that rejects obvious patterns even when the four classes are met (`Sommer2026!`). The signup/change form shows a live **weak / medium / strong** meter with the reason. The meter is advisory; the binding check runs on the server. No forced rotation. | 2026-09-20 |
+| D39 | **Two superadmins recommended** (decided 2026-09-20): the app warns while an installation has only one superadmin, the docs recommend a second one, and the documented CLI command to clear an onboarding requirement exists for the case where that advice was ignored. | 2026-09-20 |
 | D34 | Release gate R1 (v1 import + first real use by YON) moved from after P7 to **after P3** | 2026-09-17 |
 | D25 | TOTP 2FA built in FreeFrame first, then copied into FilmBill P0a (one implementation); P0 split into P0a (repo from FreeFrame core) and P0b (companies, roles, number series, audit, money, codegen) | 2026-09-16 |
 | D20 | Archive folder structure is a per-company template; default = YON advisor structure (Year / Allgemeine Ordner · Ausgaben · Bank · Einnahmen · Revisionen / Quartal) | 2026-09-16 |
