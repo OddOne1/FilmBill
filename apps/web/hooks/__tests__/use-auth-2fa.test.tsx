@@ -97,6 +97,6 @@ describe('login()', () => {
 
     expect(setTokens).toHaveBeenCalledWith('a-1', 'r-1')
     expect(setUser).toHaveBeenCalled()
-    expect(push).toHaveBeenCalledWith('/projects')
+    expect(push).toHaveBeenCalledWith('/')
   })
 })

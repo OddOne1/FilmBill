@@ -30,7 +30,7 @@ export default function LoginPage() {
       // Check the 'from' param for redirect target
       const params = new URLSearchParams(window.location.search)
       const from = params.get('from')
-      router.replace(from || '/projects')
+      router.replace(from || '/')
       return
     }
 

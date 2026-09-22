@@ -142,7 +142,7 @@ describe('a 2FA challenge is recognised instead of being read as tokens', () => 
     await signInWithPassword(user)
 
     await waitFor(() => expect(setTokens).toHaveBeenCalledWith('access-1', 'refresh-1'))
-    expect(replace).toHaveBeenCalledWith('/projects')
+    expect(replace).toHaveBeenCalledWith('/')
   })
 
   it('still routes a passwordless magic-code user to the create-password step', async () => {
@@ -356,7 +356,7 @@ describe('the 2fa-setup step', () => {
     await user.click(screen.getByRole('button', { name: /i've saved these codes/i }))
 
     await waitFor(() => expect(setTokens).toHaveBeenCalledWith('access-1', 'refresh-1'))
-    expect(replace).toHaveBeenCalledWith('/projects')
+    expect(replace).toHaveBeenCalledWith('/')
   })
 })
 

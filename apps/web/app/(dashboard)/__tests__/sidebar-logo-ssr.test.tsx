@@ -49,7 +49,7 @@ vi.mock('@/stores/notification-store', () => ({
   useNotificationStore: () => ({ unreadCount: 0, fetchNotifications: vi.fn() }),
 }))
 vi.mock('@/stores/theme-store', () => ({ useThemeStore: () => ({ resolvedTheme: 'dark' }) }))
-vi.mock('next/navigation', () => ({ usePathname: () => '/projects' }))
+vi.mock('next/navigation', () => ({ usePathname: () => '/' }))
 
 // The rest of the dashboard chrome is not what this is about, and each
 // piece drags in its own network calls.

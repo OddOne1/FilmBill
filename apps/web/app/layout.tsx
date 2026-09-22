@@ -18,7 +18,7 @@ const dmSans = DM_Sans({
 export async function generateMetadata(): Promise<Metadata> {
   const base: Metadata = {
     title: "FilmBill",
-    description: "Collaborative media review and approval platform",
+    description: "Self-hosted invoicing, accounting and production resources",
   };
 
   // Fetched server-side so the favicon is already correct in the very

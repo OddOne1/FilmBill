@@ -62,7 +62,7 @@ export default async function AuthLayout({
 
       {/* Footer */}
       <p className="relative mt-8 text-2xs text-text-tertiary">
-        Collaborative media review &amp; approval
+        Invoicing and production resources
       </p>
     </div>
     </SiteSettingsProvider>

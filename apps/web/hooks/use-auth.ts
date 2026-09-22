@@ -68,7 +68,7 @@ export function useAuth(): UseAuthReturn {
     const me = await api.get<User>('/auth/me')
     setUser(me)
 
-    router.push('/projects')
+    router.push('/')
   }
 
   function logout(): void {

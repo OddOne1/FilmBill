@@ -123,7 +123,7 @@ export function LoginForm() {
       return
     }
     await useAuthStore.getState().fetchUser()
-    router.replace('/projects')
+    router.replace('/')
   }
 
   // ─── Step 1: Send magic code ──────────────────────────────────────────────
@@ -221,7 +221,7 @@ export function LoginForm() {
       })
       setTokens(res.access_token, res.refresh_token)
       await useAuthStore.getState().fetchUser()
-      router.replace('/projects')
+      router.replace('/')
     } catch (err) {
       if (err instanceof ApiError) {
         setGeneralError(err.detail)
@@ -410,7 +410,7 @@ export function LoginForm() {
     }
     setTokens(enrolledTokens.access_token, enrolledTokens.refresh_token)
     await useAuthStore.getState().fetchUser()
-    router.replace('/projects')
+    router.replace('/')
   }
 
   // ─── Render ──────────────────────────────────────────────────────────────
