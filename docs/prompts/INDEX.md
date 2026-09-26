@@ -139,6 +139,17 @@ user-visible string, alt text, page title, email template or manifest entry.
 What is left is provenance, and deliberate: `NOTICE`, `LICENSES/`, `README`,
 `CLAUDE.md`, `docs/`, and code comments recording where a module came from.
 
+**CI's web `Test` step is intermittently red, and was before this change.**
+It failed on `cc6f2b7` and `1a333f3` as well, while `6d99abe` passed; every
+other job in those runs was green. The suite runs 5/5 green locally and the
+Actions log needs a token to read, so the cause is not confirmed — but the
+suite's slowest tests are all wall-clock waits, and a slow runner is the
+obvious suspect. `lib/__tests__/auth-refresh.test.ts` spends ~1.2s of real
+time in five separate tests waiting out the retry backoff. Those pre-date this
+change and are left alone; the one wall-clock wait added here (the setup
+wizard's 1.8s success panel) is jumped with fake timers instead of slept
+through, taking that test from 2079ms to 128ms.
+
 **Found while running acceptance, not fixed (out of scope):** the API suite
 passes only because the rate limiter fails open when Redis is unreachable.
 Run inside `filmbill_api`, where `redis:6379` *is* reachable, 36 tests 429.

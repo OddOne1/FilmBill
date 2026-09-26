@@ -283,19 +283,33 @@ describe('the login page', () => {
 
 describe('first-run setup', () => {
   it('sends the new admin to a real route once the account exists', async () => {
-    const user = userEvent.setup()
-    vi.mocked(api.post).mockResolvedValueOnce({ message: 'created' })
-    render(<SetupWizard />)
+    // The wizard holds its success panel for 1.8s before moving. That wait is
+    // JUMPED rather than slept through: a test whose pass depends on 1.8s of
+    // wall clock arriving in time is a test that goes red on a slow runner
+    // for a reason that has nothing to do with the redirect.
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    try {
+      vi.mocked(api.post).mockResolvedValueOnce({ message: 'created' })
+      render(<SetupWizard />)
 
-    await user.type(screen.getByLabelText(/last name/i), 'Sonnleitner')
-    await user.type(screen.getByLabelText(/email address/i), 'a@example.com')
-    await user.type(screen.getByLabelText(/^password$/i), 'hunter2hunter2')
-    await user.type(screen.getByLabelText(/confirm password/i), 'hunter2hunter2')
-    await user.click(screen.getByRole('button', { name: /create admin account/i }))
+      await user.type(screen.getByLabelText(/last name/i), 'Sonnleitner')
+      await user.type(screen.getByLabelText(/email address/i), 'a@example.com')
+      await user.type(screen.getByLabelText(/^password$/i), 'hunter2hunter2')
+      await user.type(screen.getByLabelText(/confirm password/i), 'hunter2hunter2')
+      await user.click(screen.getByRole('button', { name: /create admin account/i }))
 
-    // The wizard shows its success panel for 1.8s before moving.
-    await waitFor(() => expect(push).toHaveBeenCalled(), { timeout: 4000 })
-    expectRoute(push.mock.calls[0][0])
+      await screen.findByText(/admin account created/i)
+      expect(push).not.toHaveBeenCalled() // the panel is shown first
+
+      await act(async () => {
+        vi.advanceTimersByTime(2000)
+      })
+
+      expectRoute(push.mock.calls[0][0])
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
 
