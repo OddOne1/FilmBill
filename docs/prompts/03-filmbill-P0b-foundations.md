@@ -8,7 +8,10 @@
 ---
 
 ## Port, do not rebuild (2026-09-21)
-FreeFrame now carries §199 (`token_version`, four backported fixes), §200 (mandatory password, backup address, onboarding gate, password policy), §201 (gate UI) and **§202 (the fix for §200's zxcvbn loader bug plus the "a disabled control must say why" rule)**. Port that code as it stands at FreeFrame's current `main` — **never §200 without §202**, or FilmBill inherits a dead submit button on four forms.
+FreeFrame now carries §199 (`token_version`, four backported fixes), §200 (mandatory password, backup address, onboarding gate, password policy), §201 (gate UI), **§202 (the fix for §200's zxcvbn loader bug plus the "a disabled control must say why" rule)**, §203 (the emailed code's copy split into `login` / `two_factor_challenge` / `two_factor_setup`, HTML and text from one source) and §204 (the enrolment code's own Redis pool, so a setup code cannot satisfy a login challenge). Port that code as it stands at FreeFrame's current `main` — **never §200 without §202**, or FilmBill inherits a dead submit button on four forms, and **never §203 without §204**, or it inherits a security mail promising something the system does not keep. P0a already copied the email templates and tasks, so check what is in the FilmBill tree before porting and replace rather than duplicate.
+
+## Fix this before you trust any test result (2026-09-26)
+The API suite's green is environmental. Run where `redis:6379` is unreachable, the rate limiter fails open and 327 tests pass; run **inside** `filmbill_api`, where Redis is reachable, **36 return 429** — `test_setup_superadmin.py` alone makes 7 POSTs to `/setup/create-superadmin` against a cap of 3 per 600s. Those tests are not asserting what they look like they assert (CLAUDE.md 17b). **First task of P0b:** give the limiter a per-test reset fixture or a test-scoped key namespace, re-run inside the container, and report the real pass count before building anything else. Every test below is worthless until that number is honest.
 
 ## Goal
 The cross-cutting building blocks every later phase depends on: companies (multi-company UI), per-company roles & permissions, company settings, number series, audit events, money type, generated API types. **No invoices, parties or items yet.**

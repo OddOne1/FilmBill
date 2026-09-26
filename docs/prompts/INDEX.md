@@ -139,16 +139,32 @@ user-visible string, alt text, page title, email template or manifest entry.
 What is left is provenance, and deliberate: `NOTICE`, `LICENSES/`, `README`,
 `CLAUDE.md`, `docs/`, and code comments recording where a module came from.
 
-**CI's web `Test` step is intermittently red, and was before this change.**
-It failed on `cc6f2b7` and `1a333f3` as well, while `6d99abe` passed; every
-other job in those runs was green. The suite runs 5/5 green locally and the
-Actions log needs a token to read, so the cause is not confirmed — but the
-suite's slowest tests are all wall-clock waits, and a slow runner is the
-obvious suspect. `lib/__tests__/auth-refresh.test.ts` spends ~1.2s of real
-time in five separate tests waiting out the retry backoff. Those pre-date this
-change and are left alone; the one wall-clock wait added here (the setup
-wizard's 1.8s success panel) is jumped with fake timers instead of slept
-through, taking that test from 2079ms to 128ms.
+**CI's web `Test` step was intermittently red, and was before this change** —
+it failed on `cc6f2b7` and `1a333f3` too, with every other job green in those
+runs. The cause is `branding-draft.test.tsx`, not anything in this prompt, and
+it is fixed here because a red `main` cannot tell Mathias whether the next
+change broke something.
+
+Its `renderPage()` helper awaited the "Workspace name" HEADING. That heading is
+static chrome: it is on screen before the settings fetch resolves, and the page
+has no loading state — `useSiteSettings` simply returns `orgName: 'FilmBill'`
+until data arrives. So every test that set `org_name: 'Acme'` and then reached
+for a control that only exists once the fetched name differs from the default
+was racing the fetch with a SYNCHRONOUS `getByRole`, and lost whenever React's
+commit came late. It surfaced as `Unable to find ... /reset name and colors/i`,
+which points nowhere near the cause — the same shape of misdirection the
+helper's existing comment already warns about for the SWR cache.
+
+Reproduced by giving the mocked `get` a 20ms delay: 4 of 14 fail, with CI's
+exact message. The helper now waits for the settings themselves — the name
+field, plus the dark-logo slot for the tests that change only a logo. With the
+fix, the file is green at 20ms, 50ms and 120ms of injected delay.
+
+The one wall-clock wait this prompt added (the setup wizard's 1.8s success
+panel) is jumped with fake timers rather than slept through: 2079ms to 128ms.
+`lib/__tests__/auth-refresh.test.ts` still spends ~1.2s apiece in five tests
+waiting out the retry backoff; that is real but was not the failure, and is
+left alone.
 
 **Found while running acceptance, not fixed (out of scope):** the API suite
 passes only because the rate limiter fails open when Redis is unreachable.

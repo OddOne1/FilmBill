@@ -82,14 +82,32 @@ beforeEach(() => {
  *  test file: a value saved in one test becomes the committed baseline of
  *  the next, so "type the new name" is not a change any more and the Save
  *  bar never appears. That failed as "cannot find the Discard button",
- *  which points nowhere near the actual cause. */
+ *  which points nowhere near the actual cause.
+ *
+ *  And it waits for the SETTINGS, not for the heading. The heading is static
+ *  chrome: it is on screen before the fetch resolves, so a test that only
+ *  waited for it went on to look at a page still showing its defaults. Every
+ *  test that first assigns `settings.org_name = 'Acme'` then reaches for a
+ *  control that only exists once the fetched name differs from the default
+ *  was therefore racing the fetch, and lost on a slow machine — as
+ *  "Unable to find ... `/reset name and colors/i`", which points nowhere
+ *  near the actual cause either. Reproduced by giving `get` a 20ms delay. */
 function renderPage() {
   const r = render(
     <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
       <BrandingPage />
     </SWRConfig>,
   )
-  return screen.findByText('Workspace name').then(() => r)
+  return waitFor(() => {
+    expect(nameField().value).toBe(settings.org_name)
+    // The name alone is not a sufficient gate: a test that changes only a
+    // logo leaves org_name at the default, so the check above is already
+    // true while the fetch is still in flight.
+    if (settings.logo_dark_url) {
+      const sources = screen.queryAllByRole('img').map((i) => i.getAttribute('src') ?? '')
+      expect(sources.some((s) => s.includes(settings.logo_dark_url as string))).toBe(true)
+    }
+  }).then(() => r)
 }
 
 const nameField = () => screen.getByPlaceholderText('e.g. Acme Studio') as HTMLInputElement
