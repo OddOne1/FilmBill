@@ -25,6 +25,68 @@ os.environ.setdefault("JWT_SECRET", "test-jwt-secret-key-for-tests-only")
 os.environ.setdefault("FRONTEND_URL", "http://localhost:3100")
 os.environ.setdefault("GOTENBERG_URL", "http://localhost:3000")
 
+# ── The suite gets its own Redis database ────────────────────────────────────
+#
+# Whatever REDIS_URL points at, the tests use database index 15 of that server
+# and never the one the application is using. Run from a shell where Redis is
+# unreachable this changes nothing; run inside `filmbill_api`, where it IS
+# reachable, it is what stops the suite from reading and writing a live dev
+# instance's keys — and, with the fixture below, what stops one test's rate
+# limit from being another test's 429.
+_TEST_REDIS_DB = 15
+
+
+def _redis_url_for_tests(url: str) -> str:
+    """Point `url` at the test database, keeping host, auth and options."""
+    from urllib.parse import urlsplit, urlunsplit
+
+    parts = urlsplit(url)
+    return urlunsplit(parts._replace(path=f"/{_TEST_REDIS_DB}"))
+
+
+os.environ["REDIS_URL"] = _redis_url_for_tests(os.environ["REDIS_URL"])
+
+
+@pytest.fixture(autouse=True)
+def reset_rate_limiter():
+    """Every test starts with an empty rate-limit window.
+
+    This suite used to be green only because it ran where Redis was
+    unreachable and both limiters fail open. Run where Redis answers, 30 of
+    327 tests returned 429 instead of what they asserted —
+    `test_setup_superadmin.py` alone fires 7 POSTs at
+    `/setup/create-superadmin` against a cap of 3 per 600s, so the last four
+    were testing the limiter, not the endpoint, and said so in a way nobody
+    saw. That is CLAUDE.md 17b exactly: a harness kinder than production.
+
+    The counters are deleted rather than the limiter disabled, so what runs
+    in a test is the real `check_rate_limit` and the real
+    `GlobalRateLimitMiddleware` — a test that DOES want to prove the cap
+    (test_rate_limit.py) still can, and a 429 that appears from now on is a
+    real one.
+
+    Both key shapes are cleared: `rl:` from
+    `redis_service.check_rate_limit`, and the `grl:` the global middleware
+    spells out itself. Unreachable Redis is a no-op, which is what keeps this
+    working in CI, where there is no Redis on the other end.
+    """
+    def _clear():
+        try:
+            from apps.api.services.redis_service import get_redis
+
+            r = get_redis()
+            keys = [k for pattern in ("rl:*", "grl:*") for k in r.scan_iter(pattern)]
+            if keys:
+                r.delete(*keys)
+        except Exception:
+            # No Redis here — then there are no counters to clear, and the
+            # limiter is failing open anyway.
+            pass
+
+    _clear()
+    yield
+    _clear()
+
 
 _FAKE_HASH = "$2b$12$fakehashfortestsonlythisisnotrealatall000000000000000"
 
