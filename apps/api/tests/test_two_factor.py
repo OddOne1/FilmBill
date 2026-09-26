@@ -26,6 +26,10 @@ from apps.api.services.auth_service import (
 )
 
 _VERIFY_PATCH = "apps.api.routers.auth.verify_password"
+#: stubbed wherever a test only cares that a code WOULD be sent, not
+#: about the mail itself. The mail is the subject of
+#: tests/test_code_email_copy.py, which asserts on rendered output.
+_SEND_CODE = "apps.api.routers.auth._send_2fa_email_code"
 _REQUIRE_2FA_PATCH = "apps.api.routers.auth.require_2fa_enabled"
 
 
@@ -42,6 +46,10 @@ def _user(
     u.two_factor_enabled = two_factor_enabled
     u.totp_secret_encrypted = totp_service.encrypt_secret(secret) if secret else None
     u.backup_codes_hashed = backup
+    # explicit for the same reason as the 2FA fields: every
+    # MagicMock attribute is truthy, and a mock one here lands inside a
+    # JWT payload, which cannot serialise it.
+    u.token_version = 0
     # set explicitly, never left as a MagicMock attribute: it is
     # serialised against Literal["totp", "email"], so a stray mock object
     # here fails the response rather than the assertion under test. An
@@ -190,8 +198,8 @@ class TestThePendingTokenIsInert:
     def test_an_access_token_is_NOT_accepted_as_a_pending_one(self):
         """Without this check a live session would satisfy the second factor
         for a login it was never part of."""
-        assert decode_2fa_pending_token(create_access_token("abc")) is None
-        assert decode_2fa_pending_token(create_refresh_token("abc")) is None
+        assert decode_2fa_pending_token(create_access_token("abc", 0)) is None
+        assert decode_2fa_pending_token(create_refresh_token("abc", 0)) is None
 
     def test_garbage_is_rejected_rather_than_raising(self):
         assert decode_2fa_pending_token("not-a-token") is None
@@ -535,7 +543,7 @@ class TestVerifyLogin:
         user = _user(two_factor_enabled=True, secret=totp_service.generate_totp_secret())
 
         resp = self._post(
-            client, mock_db, user, "123456", token=create_access_token(str(user.id))
+            client, mock_db, user, "123456", token=create_access_token(str(user.id), 0)
         )
 
         assert resp.status_code == 401

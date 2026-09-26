@@ -38,6 +38,10 @@ def _mock_user(
     u.two_factor_enabled = False
     u.totp_secret_encrypted = None
     u.backup_codes_hashed = None
+    # explicit for the same reason as the 2FA fields: every
+    # MagicMock attribute is truthy, and a mock one here lands inside a
+    # JWT payload, which cannot serialise it.
+    u.token_version = 0
     # explicit for the same reason as the fields above: a MagicMock
     # attribute is a truthy object, and this one is now validated against
     # Literal["totp", "email"], so leaving it unset fails serialisation.
@@ -76,7 +80,12 @@ def test_register_success(client, mock_db):
     with patch(_HASH_PATCH, return_value=_FAKE_HASH):
         resp = client.post(
             "/auth/register",
-            json={"email": "newuser@example.com", "name": "New User", "password": "securepassword"},
+            # "securepassword" no longer is one: twelve characters,
+            # but no upper case, no digit, no special character, and squarely
+            # in the common-password blocklist. Updated rather than exempted,
+            # because a registration test that could not pass the policy
+            # would be testing a route nobody can actually use.
+            json={"email": "newuser@example.com", "name": "New User", "password": "Wq7#vLm2$kPz"},
         )
 
     assert resp.status_code == 201
@@ -151,7 +160,7 @@ def test_refresh_token(client, mock_db):
     from apps.api.services.auth_service import create_refresh_token
 
     user = _mock_user("ref@example.com")
-    refresh = create_refresh_token(str(user.id))
+    refresh = create_refresh_token(str(user.id), 0)
     mock_db.first.return_value = user
 
     resp = client.post("/auth/refresh", json={"refresh_token": refresh})

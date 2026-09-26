@@ -39,16 +39,20 @@ def _user(*, two_factor_enabled=False, password_hash="$2b$12$fake", email="u@exa
         else None
     )
     u.backup_codes_hashed = None
-    # Explicit for the same reason as the fields above: validated against
-    # Literal["totp", "email"] on the way out, so a MagicMock attribute
-    # would fail serialisation.
+    # explicit for the same reason as the 2FA fields: every
+    # MagicMock attribute is truthy, and a mock one here lands inside a
+    # JWT payload, which cannot serialise it.
+    u.token_version = 0
+    # explicit for the same reason as the fields above: validated
+    # against Literal["totp", "email"] on the way out, so a MagicMock
+    # attribute would fail serialisation.
     u.two_factor_method = "totp" if two_factor_enabled else None
     return u
 
 
 def _verify(client, mock_db, user, *, require_2fa=False):
     mock_db.first.return_value = user
-    with patch(_REDIS_OK, return_value=(True, "")), \
+    with patch(_REDIS_OK, return_value=(True, "")),\
          patch(_REQUIRE_2FA, return_value=require_2fa):
         return client.post(
             "/auth/verify-magic-code",
@@ -268,7 +272,7 @@ class TestTheBranchIsActuallyShared:
         user = _user(two_factor_enabled=True)
         mock_db.first.return_value = user
 
-        with patch("apps.api.routers.auth._login_outcome", side_effect=self._stub_outcome()), \
+        with patch("apps.api.routers.auth._login_outcome", side_effect=self._stub_outcome()),\
              patch("apps.api.routers.auth.verify_password", return_value=True):
             resp = client.post(
                 "/auth/login",
@@ -282,7 +286,7 @@ class TestTheBranchIsActuallyShared:
         user = _user(two_factor_enabled=True)
         mock_db.first.return_value = user
 
-        with patch("apps.api.routers.auth._login_outcome", side_effect=self._stub_outcome()), \
+        with patch("apps.api.routers.auth._login_outcome", side_effect=self._stub_outcome()),\
              patch(_REDIS_OK, return_value=(True, "")):
             resp = client.post(
                 "/auth/verify-magic-code",
@@ -327,7 +331,7 @@ class TestTheBranchIsActuallyShared:
         ):
             user = _user(two_factor_enabled=enrolled)
             mock_db.first.return_value = user
-            with patch(_REQUIRE_2FA, return_value=require_2fa), \
+            with patch(_REQUIRE_2FA, return_value=require_2fa),\
                  patch("apps.api.routers.auth.verify_password", return_value=True):
                 by_password = client.post(
                     "/auth/login",
@@ -336,7 +340,7 @@ class TestTheBranchIsActuallyShared:
 
             user = _user(two_factor_enabled=enrolled)
             mock_db.first.return_value = user
-            with patch(_REQUIRE_2FA, return_value=require_2fa), \
+            with patch(_REQUIRE_2FA, return_value=require_2fa),\
                  patch(_REDIS_OK, return_value=(True, "")):
                 by_code = client.post(
                     "/auth/verify-magic-code",

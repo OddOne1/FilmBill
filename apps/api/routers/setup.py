@@ -10,6 +10,8 @@ from pydantic import BaseModel, EmailStr
 from ..database import get_db
 from ..models.user import User, UserStatus, UserGlobalRole
 from ..services.auth_service import hash_password, create_access_token, create_refresh_token
+from ..services.password_policy import PasswordPolicyError, validate_password
+from ..services.site_settings_service import instance_org_name
 from ..schemas.auth import TokenResponse
 from ..middleware.rate_limit import rate_limit
 
@@ -102,6 +104,26 @@ def create_superadmin(body: CreateSuperAdminRequest, db: Session = Depends(get_d
             detail="Last name cannot be empty",
         )
 
+    # the same policy every other password path enforces. The very
+    # first account on an instance is a superadmin, so this is the one place
+    # where a weak password is worth the most; it was also the one place with
+    # no rule at all.
+    #
+    # There is no site_settings row yet on a fresh install, so the org name
+    # this checks against comes back as the "FreeFrame" default — which is
+    # correct, because that is what the instance is called at this moment.
+    try:
+        validate_password(
+            body.password,
+            email=body.email,
+            name=f"{(body.first_name or '').strip()} {last_name}".strip(),
+            org_name=instance_org_name(db),
+        )
+    except PasswordPolicyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=exc.reason
+        )
+
     # Create superadmin user.
     #
     # first_name/last_name, never name=. User.name is a read-only @property
@@ -123,9 +145,13 @@ def create_superadmin(body: CreateSuperAdminRequest, db: Session = Depends(get_d
     db.commit()
     db.refresh(user)
     
-    # Generate tokens
-    access_token = create_access_token(str(user.id))
-    refresh_token = create_refresh_token(str(user.id))
+    # Generate tokens. FreeFrame §199 — a brand-new row, so its token_version is
+    # whatever the column default gave it (0). Read from the refreshed row
+    # rather than hardcoded, so this keeps agreeing with the model if that
+    # default ever changes.
+    version = user.token_version or 0
+    access_token = create_access_token(str(user.id), version)
+    refresh_token = create_refresh_token(str(user.id), version)
     
     return SetupCompleteResponse(
         message="Superadmin created successfully. You can now create organizations.",

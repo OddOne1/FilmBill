@@ -143,6 +143,26 @@ def _make_user(
     # enrolment.
     u.require_2fa = False
     u.invite_token = None
+    # explicit for the same reason as the 2FA fields above: every
+    # MagicMock attribute is a truthy object, and get_current_user now
+    # compares a token's `tv` claim against this. Left unset, no mock user
+    # could ever authenticate.
+    u.token_version = 0
+    # explicit for the same reason as every field above it: on a real
+    # User these three are a column and two derived properties, and on a
+    # MagicMock they are truthy objects. Left unset, `backup_email_state`
+    # fails UserResponse's Literal and every /auth/me in the suite 500s.
+    #
+    # The default is a user who has FINISHED setup, so the gate never blocks
+    # a test of something unrelated. The gate's own tests set these
+    # deliberately — see test_account_setup_gate.py.
+    u.backup_email = "backup@example.org"
+    u.backup_email_verified_at = datetime.now(timezone.utc)
+    u.account_gate_waived_at = None
+    u.must_set_password = False
+    u.backup_email_state = "verified"
+    u.account_setup_required = False
+    u.deleted_at = None
     return u
 
 
@@ -207,9 +227,16 @@ def staged_2fa_setup():
     def _clear(user_id):
         store.pop(str(user_id), None)
 
+    # `clear_2fa_setup_code` is stubbed alongside the three staging
+    # functions, for the same reason they are: confirm-setup now also drops
+    # any outstanding ENROLMENT code, and an unstubbed call reaches a Redis
+    # that is not there and 500s a confirm that had already committed.
+    # Belongs here rather than in each test, exactly like
+    # `clear_pending_2fa_setup` one line above it.
     with patch("apps.api.routers.auth.store_pending_2fa_setup", side_effect=_store), \
          patch("apps.api.routers.auth.read_pending_2fa_setup", side_effect=_read), \
-         patch("apps.api.routers.auth.clear_pending_2fa_setup", side_effect=_clear):
+         patch("apps.api.routers.auth.clear_pending_2fa_setup", side_effect=_clear), \
+         patch("apps.api.routers.auth.clear_2fa_setup_code"):
         yield store
 
 
@@ -230,7 +257,7 @@ def auth_headers(client, mock_db, test_user):
     """
     from apps.api.services.auth_service import create_access_token, create_refresh_token
     # Directly generate a valid token for the test user
-    token = create_access_token(str(test_user.id))
+    token = create_access_token(str(test_user.id), test_user.token_version)
 
     # Make get_current_user resolve to test_user
     from apps.api.middleware.auth import get_current_user

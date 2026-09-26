@@ -6,7 +6,11 @@ from typing import Optional
 import boto3
 from botocore.exceptions import ClientError
 from ..config import settings
-from .email_config import load_mail_config
+from .email_config import (
+    load_mail_config,
+    SMTP_SECURITY_IMPLICIT_TLS,
+    SMTP_SECURITY_STARTTLS,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -149,28 +153,30 @@ class EmailService:
             msg.attach(MIMEText(text_body, "plain"))
         msg.attach(MIMEText(html_body, "html"))
         
-        # Three transports, not two.
+        # three transports, not two.
         #
-        # FreeFrame's version read `smtp_use_tls=False` as "use implicit TLS"
-        # and opened an SMTP_SSL connection, so there was NO way to reach a
-        # plaintext SMTP server at all. Against Mailpit that fails with
-        # "[SSL: WRONG_VERSION_NUMBER] wrong version number" — which reads
-        # like a certificate problem and is in fact the client speaking TLS
-        # to a server that never offered it. It would fail the same way
-        # against any unencrypted relay on a trusted network, which is a
-        # normal self-hosting arrangement.
+        # This used to read `if smtp_use_tls: SMTP + starttls, else:
+        # SMTP_SSL`, so the "else" was implicit TLS rather than "no TLS" and
+        # there was NO way to reach a plaintext SMTP server at all. Against
+        # Mailpit that fails with "[SSL: WRONG_VERSION_NUMBER] wrong version
+        # number", which reads like a certificate problem and is in fact the
+        # client speaking TLS to a server that never offered it. It would
+        # fail the same way against any unencrypted relay on a trusted
+        # network, which is a normal self-hosting arrangement.
         #
-        #   smtp_use_tls=True  -> STARTTLS on the given port (587, usually)
-        #   port 465           -> implicit TLS, which is what 465 means
-        #   otherwise          -> plain SMTP
-        implicit_tls = self.config.smtp_port == 465
+        # Production is unaffected either way: Microsoft 365 is STARTTLS on
+        # 587, which is what the default maps to. See
+        # services/email_config.smtp_security_from for how the old boolean
+        # maps onto these three, and why it maps to what it DID rather than
+        # to what its name suggested.
+        mode = self.config.smtp_security
 
         try:
-            if implicit_tls:
+            if mode == SMTP_SECURITY_IMPLICIT_TLS:
                 server = smtplib.SMTP_SSL(self.config.smtp_host, self.config.smtp_port)
             else:
                 server = smtplib.SMTP(self.config.smtp_host, self.config.smtp_port)
-                if self.config.smtp_use_tls:
+                if mode == SMTP_SECURITY_STARTTLS:
                     server.starttls()
 
             if self.config.smtp_user and self.config.smtp_password:

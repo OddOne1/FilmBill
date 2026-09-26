@@ -164,6 +164,10 @@ beforeEach(() => {
   vi.clearAllMocks()
   storedAccessToken = null
   window.history.replaceState({}, '', '/login')
+  // The password forms now fetch GET /auth/password-policy. An unmocked
+  // api.get resolves to undefined, which breaks the hook before the screen
+  // these tests are about ever renders. Individual tests still override it.
+  vi.mocked(api.get).mockResolvedValue({})
 })
 
 async function typeCode(user: ReturnType<typeof userEvent.setup>, code: string) {

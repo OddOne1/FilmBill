@@ -133,6 +133,88 @@ def verify_password_reset_code(email: str, code: str) -> tuple[bool, str]:
     return True, ""
 
 
+# ── Backup-email verification codes ───────────────────────────────
+#
+# A FOURTH pool, and for the same reason as the third: these codes prove a
+# different thing from the other three, and sharing a slot with any of them
+# would let one overwrite or be redeemed for another.
+#
+# What this one proves is narrow and worth stating: that the address the user
+# just typed is a mailbox they can read. It is not a login credential and it
+# is not a second factor — redeeming it grants nothing except "this address
+# is confirmed". That is why it can afford a longer window than the other
+# three: fifteen minutes rather than ten, because a backup address is often a
+# personal account on a phone the person has to go and find, and an expired
+# code here costs a resend rather than a locked-out session.
+#
+# Keyed by the CANDIDATE ADDRESS, not by user id: two users may not share a
+# backup address today, but the thing being proved is a property of the
+# mailbox, and a key that survives the user changing their mind about which
+# address to use would let a code minted for one address confirm another.
+BACKUP_EMAIL_CODE_PREFIX = "backup_email_code:"
+BACKUP_EMAIL_ATTEMPTS_PREFIX = "backup_email_attempts:"
+BACKUP_EMAIL_CODE_EXPIRY_SECONDS = 900  # 15 minutes
+MAX_BACKUP_EMAIL_ATTEMPTS = 5
+
+
+def generate_backup_email_code() -> str:
+    """A 6-digit backup-address verification code."""
+    return str(secrets.randbelow(900000) + 100000)
+
+
+def store_backup_email_code(email: str, code: str) -> None:
+    r = get_redis()
+    r.setex(
+        f"{BACKUP_EMAIL_CODE_PREFIX}{email.lower()}",
+        BACKUP_EMAIL_CODE_EXPIRY_SECONDS,
+        code,
+    )
+    r.delete(f"{BACKUP_EMAIL_ATTEMPTS_PREFIX}{email.lower()}")
+
+
+def verify_backup_email_code(email: str, code: str) -> tuple[bool, str]:
+    """Verify a backup-address code. Returns (success, error_message).
+
+    Single use: consumed on success, exactly like its three twins. A code
+    that could be replayed would let one intercepted email confirm the same
+    address again after the user had changed it away.
+    """
+    r = get_redis()
+    key = f"{BACKUP_EMAIL_CODE_PREFIX}{email.lower()}"
+    attempts_key = f"{BACKUP_EMAIL_ATTEMPTS_PREFIX}{email.lower()}"
+
+    attempts = r.get(attempts_key)
+    if attempts and int(attempts) >= MAX_BACKUP_EMAIL_ATTEMPTS:
+        return False, "Too many attempts. Request a new code."
+
+    stored_code = r.get(key)
+    if not stored_code:
+        return False, "Code expired or not found"
+
+    if stored_code != code:
+        r.incr(attempts_key)
+        r.expire(attempts_key, BACKUP_EMAIL_CODE_EXPIRY_SECONDS)
+        return False, "Invalid code"
+
+    r.delete(key)
+    r.delete(attempts_key)
+    return True, ""
+
+
+def clear_backup_email_code(email: str) -> None:
+    """Drop an outstanding code for an address the user has moved away from.
+
+    Called when a pending backup address is replaced: leaving the old code
+    live would mean an email already sent to the abandoned address could
+    still be presented, and the verify endpoint checks the address currently
+    on the row — so the two would have to agree by luck rather than by
+    construction.
+    """
+    r = get_redis()
+    r.delete(f"{BACKUP_EMAIL_CODE_PREFIX}{email.lower()}")
+    r.delete(f"{BACKUP_EMAIL_ATTEMPTS_PREFIX}{email.lower()}")
+
+
 # ── 2FA email fallback ────────────────────────────────────────────
 #
 # Deliberately its OWN key prefix, not the magic-code one above. A person
@@ -179,6 +261,123 @@ def has_live_2fa_email_code(email: str) -> bool:
     however many times the gate is hit.
     """
     return bool(get_redis().get(f"{TWOFA_EMAIL_CODE_PREFIX}{email.lower()}"))
+
+
+# ── 2FA ENROLMENT codes ───────────────────────────────────────────
+#
+# A FIFTH pool, and the reason is a sentence FreeFrame §203 put in an email:
+#
+#     "Enter this code in Settings → Profile to turn on two-factor
+#      authentication. This code cannot be used to sign in."
+#
+# That was false. FreeFrame §203 gave the enrolment mail its own wording but left every
+# emailed 2FA code in the one bucket above, so `_second_factor_matches` —
+# which redeems from that bucket for any password login — happily accepted an
+# enrolment code as a second factor for its whole ten-minute life.
+#
+# The severity is low and worth stating as low: the code is mailed to the
+# LOGIN address, so anyone who can redeem it already reads the mailbox a
+# challenge code would arrive in. It is not a new way in. What it is, is a
+# security mail making an absolute claim the system does not keep — which is
+# its own kind of defect, and the reason to separate the pools rather than
+# soften the sentence.
+#
+# Two user-visible symptoms fall out of the same root cause, and FreeFrame §203's copy
+# split is what made them visible: a live login-challenge code suppressed the
+# enrolment send (the idempotency window is per key), so the enrolment screen
+# said "a code was already sent" and the user opened a mail reading "Enter
+# this code to finish signing in" — right code, wrong instructions, wrong
+# screen. And the reverse, for the rest of the window.
+#
+# Same shape as its four siblings, copied rather than parameterised for the
+# reason stated above them: one pool's TTL or attempt ceiling must never move
+# because somebody tuned another's.
+#
+# THE IDENTIFIERS SAY "ENROL"; THE KEY STRINGS SAY "setup". That is
+# deliberate and is the one thing worth knowing here. The constants were
+# renamed so they cannot be misread as FreeFrame §194b's `TWOFA_SETUP_PREFIX` (the
+# staged secret, keyed by user id), but the strings are what Redis actually
+# holds — renaming those would orphan every code in flight at the moment of
+# a deploy, for no gain beyond tidiness. So grep Redis for `2fa_setup_code:`,
+# not for `enrol`.
+TWOFA_ENROL_CODE_PREFIX = "2fa_setup_code:"
+TWOFA_ENROL_ATTEMPTS_PREFIX = "2fa_setup_attempts:"
+TWOFA_ENROL_CODE_EXPIRY_SECONDS = 600  # 10 minutes, unchanged from FreeFrame §191
+MAX_TWOFA_ENROL_ATTEMPTS = 5
+
+
+def store_2fa_setup_code(email: str, code: str) -> None:
+    """Store an ENROLMENT code. Deliberately a different key from the
+    challenge pool, which is the whole of FreeFrame §204.
+
+    No `generate_2fa_setup_code` twin: the four generators above already
+    return the same six random digits, and what FreeFrame §204 separates is where a
+    code LIVES, not how it is produced. `generate_2fa_email_code` serves
+    both — a fifth identical `secrets.randbelow` would be noise, and
+    nothing about it could be tuned per pool the way the TTL and attempt
+    ceiling above genuinely can.
+    """
+    r = get_redis()
+    r.setex(
+        f"{TWOFA_ENROL_CODE_PREFIX}{email.lower()}",
+        TWOFA_ENROL_CODE_EXPIRY_SECONDS,
+        code,
+    )
+    r.delete(f"{TWOFA_ENROL_ATTEMPTS_PREFIX}{email.lower()}")
+
+
+def has_live_2fa_setup_code(email: str) -> bool:
+    """Whether an unexpired ENROLMENT code is outstanding.
+
+    Its own window, so starting an enrolment is never suppressed by a login
+    challenge code that happens to be in flight — the second of the two
+    symptoms FreeFrame §204 exists to fix.
+    """
+    return bool(get_redis().get(f"{TWOFA_ENROL_CODE_PREFIX}{email.lower()}"))
+
+
+def verify_2fa_setup_code(email: str, code: str) -> tuple[bool, str]:
+    """Verify an ENROLMENT code. Returns (success, error_message).
+
+    Consumed on success, like all four of its siblings. Its own attempts
+    bucket too: burning the enrolment allowance must not lock somebody out
+    of signing in, and burning the sign-in allowance must not stop them
+    finishing an enrolment.
+    """
+    r = get_redis()
+    key = f"{TWOFA_ENROL_CODE_PREFIX}{email.lower()}"
+    attempts_key = f"{TWOFA_ENROL_ATTEMPTS_PREFIX}{email.lower()}"
+
+    attempts = r.get(attempts_key)
+    if attempts and int(attempts) >= MAX_TWOFA_ENROL_ATTEMPTS:
+        return False, "Too many attempts. Request a new code."
+
+    stored_code = r.get(key)
+    if not stored_code:
+        return False, "Code expired or not found"
+
+    if stored_code != code:
+        r.incr(attempts_key)
+        r.expire(attempts_key, TWOFA_ENROL_CODE_EXPIRY_SECONDS)
+        return False, "Invalid code"
+
+    r.delete(key)
+    r.delete(attempts_key)
+    return True, ""
+
+
+def clear_2fa_setup_code(email: str) -> None:
+    """Drop any outstanding enrolment code.
+
+    Called once enrolment is confirmed, by EITHER method. The email branch
+    has already consumed its own code by then, but a TOTP confirm can land
+    while a code from an earlier, abandoned email attempt is still live —
+    and a code whose enrolment is finished should not sit there waiting to
+    be entered into a screen that has moved on.
+    """
+    r = get_redis()
+    r.delete(f"{TWOFA_ENROL_CODE_PREFIX}{email.lower()}")
+    r.delete(f"{TWOFA_ENROL_ATTEMPTS_PREFIX}{email.lower()}")
 
 
 # ── 2FA enrolment staging ────────────────────────────────────────

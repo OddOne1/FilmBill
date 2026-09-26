@@ -29,6 +29,27 @@ export interface User {
    *  older cached /auth/me response still validates. */
   two_factor_enabled?: boolean;
   two_factor_method?: TwoFactorMethod | null;
+  /** FreeFrame §206 — whether the instance's policy forbids THIS user turning their own
+   *  two-factor off. Filled by /auth/me only; `false` everywhere else, which
+   *  is the safe default since the server's 403 is the actual rule. */
+  two_factor_required?: boolean;
+  /** FreeFrame §200 — the onboarding gate, as /auth/me reports it.
+   *
+   *  Both are DERIVED server-side from the stored data, never from anything
+   *  this app remembers, which is why the gate can be trusted: it disappears
+   *  the moment the data is real and comes back if the data is cleared.
+   *  Rendering the gate from these is presentation only — every protected
+   *  route returns 403 `account_setup_required` on its own, so a client that
+   *  ignored them would simply be a client that cannot load anything.
+   *
+   *  Optional so an older cached /auth/me response still validates. Absent is
+   *  read as "not gated" at the call sites, matching the server's own
+   *  behaviour for a row that predates the columns. */
+  must_set_password?: boolean;
+  backup_email_state?: BackupEmailState;
+  /** The address itself, so the gate and settings can show what is on file.
+   *  Only ever returned to the account's own session. */
+  backup_email?: string | null;
 }
 
 /** What GET /admin/users returns. Identical to User today; it stays its own
@@ -157,16 +178,43 @@ export interface TwoFactorReauthRequest {
   code: string;
 }
 
+/**
+ * What POST /auth/set-password returns.
+ *
+ * Everything /auth/me's User carries, plus a replacement token pair: setting
+ * or changing a password bumps `token_version`, which ends every session the
+ * user holds including the one that made the call.
+ *
+ * It also closes a mismatch that predates FreeFrame §199. `login-form.tsx` has always
+ * typed this response as `AuthTokens` and called `setTokens(res.access_token,
+ * res.refresh_token)` on it, while the endpoint returned only a user — so it
+ * wrote the literal string "undefined" over the tokens the magic-code step
+ * had set moments earlier. Those fields now genuinely exist.
+ */
+export interface SetPasswordResponse extends User {
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
+}
+
 export interface TwoFactorDisableResponse {
   /** Always false after the call. Returned rather than implied so a client
    *  updates from the response instead of assuming the write landed. */
   two_factor_enabled: boolean;
+  /** FreeFrame §199 — a replacement pair for the session that made this call.
+   *
+   *  Disabling 2FA bumps the user's `token_version`, which ends every
+   *  session they hold, including this one. Adopt these or the next request
+   *  this tab makes is a 401. */
+  tokens: AuthTokens | null;
 }
 
 export interface TwoFactorBackupCodesResponse {
   /** A fresh set, shown once. Replaces the previous set entirely — the old
    *  codes stop working the moment this returns. */
   backup_codes: string[];
+  /** FreeFrame §199 — see TwoFactorDisableResponse.tokens; identical reasoning. */
+  tokens: AuthTokens | null;
 }
 
 export interface TwoFactorConfirmResponse {
@@ -174,11 +222,73 @@ export interface TwoFactorConfirmResponse {
    *  so a screen that skips past them has destroyed them. */
   backup_codes: string[];
   method: TwoFactorMethod;
-  /** Non-null only when this completed a forced first login; an
-   *  already-signed-in user enrolling from settings keeps the tokens they
-   *  already hold. */
+  /** FreeFrame §199 — now populated on BOTH branches, not only a forced first login.
+   *  Confirming enrolment bumps `token_version`, so an already-signed-in
+   *  user's existing tokens are stale as of this response and these are the
+   *  replacements. Still typed nullable: a client that adopts them only when
+   *  present keeps working against an older API. */
   tokens: AuthTokens | null;
 }
+
+// ─── Account security gate ─────────────────────────────────────────────
+
+/** Where this account stands on having a usable password-reset channel.
+ *
+ *  "missing"  — no backup address at all.
+ *  "pending"  — an address is stored but unproved. Still gated: a reset sent
+ *               to an address that may not exist is worse than none, because
+ *               it looks like a recovery path.
+ *  "verified" — a code sent to it came back. The only state in which anything
+ *               is ever mailed there. */
+export type BackupEmailState = 'missing' | 'pending' | 'verified';
+
+/** The detail string every protected route returns while the gate is up.
+ *
+ *  A stable token, not a sentence — `lib/api.ts` surfaces `detail` verbatim,
+ *  and comparing against prose is a translation bug waiting to happen. */
+export const ACCOUNT_SETUP_REQUIRED = 'account_setup_required';
+
+export interface BackupEmailResponse {
+  backup_email: string;
+  state: BackupEmailState;
+  /** True when this call actually sent a code. */
+  code_sent: boolean;
+  /** The backup address is on the same mail domain as the login address.
+   *  Accepted, but worth saying out loud — one admin with domain-wide access
+   *  can read both mailboxes, which is the thing the split exists to prevent.
+   *  The wording lives in the UI; the server only reports the fact. */
+  same_domain: boolean;
+}
+
+/** What GET /auth/password-policy serves. The NUMBERS live on the server;
+ *  `lib/password-policy.ts` holds a fallback copy only for the moment before
+ *  this arrives. */
+export interface PasswordPolicy {
+  min_length: number;
+  min_strength_score: number;
+  requires_upper: boolean;
+  requires_lower: boolean;
+  requires_digit: boolean;
+  requires_special: boolean;
+}
+
+/** The live meter's verdict. Advisory — see lib/password-policy.ts. */
+export interface PasswordStrength {
+  /** zxcvbn 0-4. */
+  score: number;
+  label: 'weak' | 'medium' | 'strong';
+  /** zxcvbn's own concrete finding, e.g. "This is similar to a commonly used
+   *  password". Empty when it has nothing specific to say. */
+  reason: string;
+  /** Everything the BROWSER can check passes. Not "valid": the common-password
+   *  blocklist and the personal-token rule exist only server-side, so a true
+   *  here still leaves a submission that can be refused. */
+  meetsPolicy: boolean;
+  /** Which character classes are still missing, in the server's own wording. */
+  missing: string[];
+}
+
+// ─── Site Settings ────────────────────────────────────────────────────────────
 
 export interface SiteSettingsResponse {
   org_name: string;
@@ -197,6 +307,12 @@ export interface SiteSettingsResponse {
   require_2fa?: boolean;
 }
 
+/** How the SMTP connection is encrypted. Three modes, because there are
+ *  three real arrangements — the boolean this supplements could only express
+ *  two, and read `false` as implicit TLS rather than as "no TLS", which made
+ *  a plaintext relay unreachable. */
+export type SmtpSecurity = 'starttls' | 'implicit_tls' | 'none'
+
 /** Mirrors EmailSettingsResponse in apps/api/schemas/email_settings.py.
  *  Note there are no password fields — secrets are reported only as
  *  `*_set` booleans and never sent to the client. */
@@ -212,6 +328,12 @@ export interface EmailSettingsResponse {
   smtp_user: string | null
   smtp_password_set: boolean
   smtp_use_tls: boolean | null
+  /** FreeFrame §199 — the STORED mode, or null when it has never been set explicitly. */
+  smtp_security: SmtpSecurity | null
+  /** And what would actually be used right now, after the env fallback and
+   *  the smtp_use_tls derivation. An empty stored value must not be read as
+   *  "no encryption" when the real answer is "STARTTLS, by default". */
+  effective_smtp_security: SmtpSecurity | null
   /** What's actually in effect once DB-over-env precedence is applied. */
   effective_provider: string | null
   effective_from_address: string | null
@@ -231,6 +353,7 @@ export interface EmailSettingsUpdate {
   smtp_user?: string | null
   smtp_password?: string
   smtp_use_tls?: boolean | null
+  smtp_security?: SmtpSecurity | null
   smtp_password_clear?: boolean
   aws_mail_secret_access_key_clear?: boolean
 }

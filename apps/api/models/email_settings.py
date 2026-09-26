@@ -50,6 +50,14 @@ class EmailSettings(Base):
     smtp_user: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     smtp_password_encrypted: Mapped[Optional[str]] = mapped_column(String(2000), nullable=True)
     smtp_use_tls: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    #: "starttls" | "implicit_tls" | "none". Null means "not
+    #: overridden": fall back to the env var, and failing that derive the
+    #: mode from `smtp_use_tls`, which is what every install has today.
+    #:
+    #: `smtp_use_tls` is kept rather than migrated away: it is still the
+    #: field .env.prod holds, and dropping it would break a self-hoster who
+    #: never touches this table.
+    smtp_security: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

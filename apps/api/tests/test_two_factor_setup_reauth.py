@@ -53,6 +53,10 @@ def _enrolled(*, method="totp", secret=None, codes=None):
         totp_service.encrypt_secret(u._secret) if u._secret else None
     )
     u.backup_codes_hashed = totp_service.hash_backup_codes(codes) if codes else None
+    # explicit for the same reason as the 2FA fields: every
+    # MagicMock attribute is truthy, and a mock one here lands inside a
+    # JWT payload, which cannot serialise it.
+    u.token_version = 0
     return u
 
 
@@ -67,6 +71,8 @@ def _unenrolled():
     u.two_factor_method = None
     u.totp_secret_encrypted = None
     u.backup_codes_hashed = None
+    # same reason as _enrolled() above.
+    u.token_version = 0
     return u
 
 
@@ -98,9 +104,9 @@ def _setup(client, mock_db, user, body, *, session=None):
     mock_db.first.return_value = user
     if session is not None:
         _as(session, user)
-    with patch(_NO_EMAIL_CODE, return_value=(False, "")), \
-         patch(_HAS_LIVE_CODE, return_value=False), \
-         patch(_STORE_CODE) as store_code, \
+    with patch(_NO_EMAIL_CODE, return_value=(False, "")),\
+         patch(_HAS_LIVE_CODE, return_value=False),\
+         patch(_STORE_CODE) as store_code,\
          patch(_SEND_TASK) as send:
         resp = client.post("/auth/2fa/setup", json=body)
     return resp, store_code, send

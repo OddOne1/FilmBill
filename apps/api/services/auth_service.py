@@ -23,15 +23,57 @@ def verify_password(plain: str, hashed: str) -> bool:
     except ValueError:
         return False
 
-def create_access_token(user_id: str) -> str:
+#: The `tv` claim's value for a token that does not carry one.
+#:
+#: Load-bearing, and the whole reason token_version can ship without logging
+#: anyone out: every session alive at deploy time holds a token minted before
+#: this claim existed, and every row the migration touches starts at 0. Read
+#: the absent claim as anything else and the deploy becomes a forced
+#: sign-out of every user at once.
+LEGACY_TOKEN_VERSION = 0
+
+
+def token_version_of(payload: dict) -> int:
+    """The `tv` this token was minted under. See LEGACY_TOKEN_VERSION."""
+    return payload.get("tv", LEGACY_TOKEN_VERSION)
+
+
+def create_access_token(user_id: str, token_version: int) -> str:
+    """FreeFrame §199 — `token_version` is REQUIRED, not defaulted.
+
+    Every caller has the User row in hand and can pass `user.token_version`;
+    a default here would let a forgotten argument quietly mint a token that
+    is stale the moment it is issued, and the symptom of that — a user
+    logged straight back out — would be nowhere near the call site that
+    caused it. A missing argument failing loudly is the cheaper outcome.
+    """
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_expire_minutes)
-    payload = {"sub": str(user_id), "type": "access", "exp": expire}
+    payload = {"sub": str(user_id), "type": "access", "tv": token_version, "exp": expire}
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
-def create_refresh_token(user_id: str) -> str:
+def create_refresh_token(user_id: str, token_version: int) -> str:
+    """Same contract as create_access_token; see its docstring for `tv`."""
     expire = datetime.now(timezone.utc) + timedelta(days=settings.refresh_token_expire_days)
-    payload = {"sub": str(user_id), "type": "refresh", "exp": expire}
+    payload = {"sub": str(user_id), "type": "refresh", "tv": token_version, "exp": expire}
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+
+
+def bump_token_version(user: User) -> None:
+    """End every session this user currently holds.
+
+    Called for changes that alter what an already-signed-in session is
+    entitled to — 2FA enabled, disabled, admin-reset, backup codes
+    regenerated, a password set or changed — none of which used to end a
+    session at all.
+
+    Does NOT commit: the bump belongs in the same transaction as whatever
+    change justified it, or a crash between the two would end every session
+    for a change that never landed.
+
+    `or 0` covers a row that predates the column's default in some test
+    fixture or a partially-migrated database; the column itself is NOT NULL.
+    """
+    user.token_version = (user.token_version or 0) + 1
 
 #: How long a half-finished login stays valid. Long enough to open an
 #: authenticator app or wait for an email, short enough that a token lifted

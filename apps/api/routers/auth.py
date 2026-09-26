@@ -10,7 +10,7 @@ from ..schemas.auth import (
     RegisterRequest, LoginRequest, TokenResponse,
     RefreshRequest, UserResponse, InviteRequest,
     SendMagicCodeRequest, SendMagicCodeResponse,
-    VerifyMagicCodeRequest, SetPasswordRequest,
+    VerifyMagicCodeRequest, SetPasswordRequest, SetPasswordResponse,
     AcceptInviteRequest, InviteInfoResponse,
     LoginResponse, TwoFactorRequiredResponse, TwoFactorVerifyRequest,
     TwoFactorSetupRequest, TwoFactorSetupResponse,
@@ -18,12 +18,15 @@ from ..schemas.auth import (
     TwoFactorEmailFallbackResponse,
     TwoFactorReauthRequest, TwoFactorDisableResponse, TwoFactorBackupCodesResponse,
     TwoFactorMethod,
+    BackupEmailRequest, BackupEmailResponse, BackupEmailVerifyRequest,
+    PasswordPolicyResponse,
 )
 from ..services.auth_service import (
     hash_password, verify_password,
     create_access_token, create_refresh_token, decode_token,
     create_2fa_pending_token, decode_2fa_pending_token, pending_token_via,
     VIA_PASSWORD, VIA_MAGIC_CODE,
+    bump_token_version, token_version_of,
     get_user_by_email, get_user_by_id, split_full_name,
 )
 from ..services.redis_service import (
@@ -31,13 +34,28 @@ from ..services.redis_service import (
     MAGIC_CODE_EXPIRY_SECONDS,
     generate_2fa_email_code, store_2fa_email_code, verify_2fa_email_code,
     has_live_2fa_email_code, TWOFA_EMAIL_CODE_EXPIRY_SECONDS,
+    store_2fa_setup_code, verify_2fa_setup_code, has_live_2fa_setup_code,
+    clear_2fa_setup_code, TWOFA_ENROL_CODE_EXPIRY_SECONDS,
     store_pending_2fa_setup, read_pending_2fa_setup, clear_pending_2fa_setup,
     generate_password_reset_code, store_password_reset_code,
     verify_password_reset_code,
+    generate_backup_email_code, store_backup_email_code,
+    verify_backup_email_code, clear_backup_email_code,
+    BACKUP_EMAIL_CODE_EXPIRY_SECONDS,
 )
 from ..services import totp_service
-from ..services.site_settings_service import require_2fa_enabled, instance_org_name
-from ..tasks.email_tasks import send_magic_code_email, send_invite_email
+from ..services.password_policy import (
+    PasswordPolicyError, describe_policy, validate_password,
+    validate_password_for_user,
+)
+from ..services.site_settings_service import (
+    require_2fa_enabled, instance_org_name, passwordless_window_closed,
+    two_factor_required_for,
+)
+from ..tasks.email_tasks import (
+    send_magic_code_email, send_invite_email, send_backup_email_code_email,
+    send_security_notice_email,
+)
 from ..tasks.celery_app import send_task_safe
 from ..models.user import User, UserStatus, UserGlobalRole
 from ..middleware.auth import get_current_user, get_optional_user
@@ -51,6 +69,141 @@ MAGIC_CODE_EXPIRY_MINUTES = MAGIC_CODE_EXPIRY_SECONDS // 60
 def _generate_invite_token() -> str:
     """Generate a secure invite token."""
     return secrets.token_urlsafe(48)
+
+
+# ── Account security helpers ─────────────────────────────────────────
+
+
+def _enforce_password_policy(
+    db: Session,
+    password: str,
+    user: Optional[User],
+    *,
+    email: Optional[str] = None,
+    name: Optional[str] = None,
+) -> None:
+    """Run services/password_policy over a password, or 400 with the reason.
+
+    ONE wrapper, called by every path that sets a password — set-password,
+    accept-invite, register, and routers/setup.py's first superadmin — so the
+    rules cannot be enforced in three places and a fourth. The policy module
+    itself stays HTTP-free; this is the only place that turns its refusal
+    into a status code.
+
+    `user` is None for the two paths where no row exists yet, which is why
+    `email`/`name` are separately passable: rule 4 (the password must not
+    contain the person's own address or name) can only fire if it is told
+    who is registering, and on those paths nobody can look it up.
+
+    The instance name comes from site settings on every call rather than
+    being passed in, so a self-hosted install branded "Acme" rejects
+    "Acme2026!Secure" without anyone having to remember to wire it through.
+    """
+    org_name = instance_org_name(db)
+    try:
+        if user is not None:
+            validate_password_for_user(password, user, org_name=org_name)
+        else:
+            validate_password(password, email=email, name=name, org_name=org_name)
+    except PasswordPolicyError as exc:
+        # 400, not 422: the body's SHAPE is fine, its content is refused.
+        # The reason is shown to the person verbatim — see PasswordPolicyError
+        # for why the message lives in Python rather than as a code the
+        # browser translates.
+        raise HTTPException(status_code=400, detail=exc.reason)
+
+
+def _require_step_up(db: Session, user: User, code: Optional[str]) -> None:
+    """Demand the CURRENT second factor before an account-taking change.
+
+    Applied to the changes that decide who can get into this account from
+    here on: changing the password, and pointing password resets at a
+    different mailbox. FreeFrame §192 already made the same argument for disabling 2FA
+    and regenerating backup codes — a stolen session must not be able to
+    strip or redirect the protection that exists because sessions get
+    stolen — and these two were simply the paths it had not reached yet.
+
+    Reuses `_second_factor_matches`, the same three-way check the login path
+    uses, rather than a second implementation.
+
+    **A user who is not enrolled is not asked.** Not a loophole, a
+    consequence: `_second_factor_matches` can only ever accept an
+    authenticator code, an emailed 2FA code or a backup code, and an
+    unenrolled account has none of the three — so requiring one would not
+    add a check, it would remove the ability to change your own password.
+    The protection is real for exactly the users who have a second factor,
+    which is the set this whole feature is aimed at, and an instance that
+    wants it for everybody turns on `require_2fa`.
+    """
+    if not user.two_factor_enabled:
+        return
+    if not code or not _second_factor_matches(db, user, code):
+        # The same undifferentiated message every other 2FA failure uses —
+        # which factor was wrong is not the caller's business.
+        raise HTTPException(status_code=401, detail="Invalid code")
+
+
+def _notify_both_addresses(user: User, action: str, subject: str) -> None:
+    """Tell the login address AND the backup address that something changed.
+
+    Both, always, and that is the point rather than thoroughness for its own
+    sake: an attacker who has taken one of the two mailboxes would otherwise
+    receive the warning about their own action and the owner would never see
+    it. Sending to both means taking one mailbox is no longer enough to also
+    suppress the alarm.
+
+    Best-effort, like every other mail in this router: the change has already
+    been committed, and a broker that is briefly down must not turn a
+    successful password change into a 500 that tells the user it failed.
+    """
+    recipients = [user.email]
+    if user.backup_email and user.backup_email.lower() != (user.email or "").lower():
+        recipients.append(user.backup_email)
+    for address in recipients:
+        try:
+            send_task_safe(
+                send_security_notice_email,
+                address,
+                action,
+                subject,
+                user.email,
+                settings.frontend_url + "/settings/contact",
+            )
+        except Exception:
+            pass
+
+
+def _same_domain(a: Optional[str], b: Optional[str]) -> bool:
+    """Whether two addresses live on the same mail domain.
+
+    Used for a warning, never for a refusal — see BackupEmailResponse's
+    `same_domain` for why that line is drawn there.
+    """
+    if not a or not b or "@" not in a or "@" not in b:
+        return False
+    return a.rsplit("@", 1)[-1].lower() == b.rsplit("@", 1)[-1].lower()
+
+
+def _send_backup_email_code(user: User, address: str, org_name: str) -> bool:
+    """Mail a verification code to a candidate backup address.
+
+    Always sends. Unlike `_send_2fa_email_code`'s idempotency window, there
+    is no automatic caller here — every send is a deliberate user action
+    (proposing an address, or pressing resend because nothing arrived), and
+    the rate limit on those endpoints is what bounds the volume. Skipping a
+    send the user explicitly asked for would leave them staring at an inbox.
+    """
+    code = generate_backup_email_code()
+    store_backup_email_code(address, code)
+    send_task_safe(
+        send_backup_email_code_email,
+        address,
+        code,
+        BACKUP_EMAIL_CODE_EXPIRY_SECONDS // 60,
+        user.email,
+        org_name,
+    )
+    return True
 
 
 @router.post("/send-magic-code", response_model=SendMagicCodeResponse, dependencies=[Depends(rate_limit("send_magic_code", 5, 600))])
@@ -138,13 +291,48 @@ def send_magic_code(body: SendMagicCodeRequest, db: Session = Depends(get_db)):
         code = generate_magic_code()
         store_magic_code(body.email, code)
 
+    # THE CHANNEL SPLIT. A reset code goes to the BACKUP address and
+    # nowhere else; everything else goes to the login address.
+    #
+    # This one line is the whole point of FreeFrame §200. Until it, one mailbox was the
+    # entire account: request a reset, set a new password, then read the 2FA
+    # code out of that same inbox. Two factors, one channel, and the second
+    # one bought nothing.
+    #
+    # **No fallback to `email` when there is no verified backup address.**
+    # That is not an oversight and it is the rule that makes the split real —
+    # a fallback would restore the exact behaviour above for every account
+    # that has not finished the gate, which on day one is all of them. What
+    # happens instead is that no mail is sent and the caller gets the same
+    # neutral message it already gets for an address with no account, so this
+    # still says nothing about who exists.
+    #
+    # The Redis pool stays keyed on the LOGIN address regardless of where the
+    # mail went, because /auth/verify-magic-code is given the login address
+    # and has no way to know the backup one. Keying it on the destination
+    # would mean the verify step could not find the code it just issued.
+    #
+    # The cost is real and worth stating: a user who has a password, has not
+    # finished the gate, and forgets that password cannot reset it themselves
+    # until a superadmin helps. That is why the escape hatches in
+    # routers/admin.py and scripts/clear_account_gate.py exist, and why the
+    # gate is placed in front of the app rather than left as a reminder.
+    destination = body.email
+    if body.purpose == "password_reset":
+        if not (user.backup_email and user.backup_email_verified_at):
+            return SendMagicCodeResponse(
+                message="If that email has an account, a code has been sent",
+                email=body.email,
+            )
+        destination = user.backup_email
+
     # Queue email via Celery (async)
     try:
         # The Contact page went with FreeFrame's media features; the
         # password-reset email links back to the login screen instead, which
         # is where someone who did not request a reset should end up.
         contact_url = settings.frontend_url + "/login"
-        send_task_safe(send_magic_code_email, body.email, code, MAGIC_CODE_EXPIRY_MINUTES, body.purpose, contact_url)
+        send_task_safe(send_magic_code_email, destination, code, MAGIC_CODE_EXPIRY_MINUTES, body.purpose, contact_url)
     except Exception:
         pass  # Email delivery is best-effort; code is already in Redis
 
@@ -176,6 +364,37 @@ def verify_magic_code(body: VerifyMagicCodeRequest, db: Session = Depends(get_db
         success, error = redis_verify_magic_code(body.email, body.code)
     if not success:
         raise HTTPException(status_code=401, detail=error)
+
+    # the end of the migration window, for passwordless accounts only.
+    #
+    # Every account is supposed to have a password now. Accounts that never
+    # had one keep signing in with a magic code for a grace period (the
+    # onboarding gate then makes them set one), and after
+    # `site_settings.password_required_after` that route closes for them.
+    #
+    # Checked AFTER the code is verified, deliberately. Before it, the
+    # refusal would be a free oracle: any address could be probed for
+    # "exists and has no password" without presenting anything. After it, the
+    # caller has already proved they read that mailbox, so the message tells
+    # them nothing they did not already have.
+    #
+    # Scoped to `password_hash is None` and to the login purpose only. A
+    # password_reset code is how a passwordless user would be given one by an
+    # admin-assisted route, and closing that here would remove the last way
+    # back in rather than the shortcut it is meant to remove.
+    if (
+        body.purpose != "password_reset"
+        and user.password_hash is None
+        and passwordless_window_closed(db)
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "This account has no password, and code-only sign-in has "
+                "closed on this instance. Ask an administrator to set one up "
+                "for you."
+            ),
+        )
     
     # Mark email as verified
     user.email_verified = True
@@ -208,17 +427,63 @@ def verify_magic_code(body: VerifyMagicCodeRequest, db: Session = Depends(get_db
     return _login_outcome(db, user, via=VIA_MAGIC_CODE)
 
 
-@router.post("/set-password", response_model=UserResponse)
+@router.post("/set-password", response_model=SetPasswordResponse)
 def set_password(
     body: SetPasswordRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Set password for authenticated user (after magic code verification)."""
+    """Set password for authenticated user (after magic code verification).
+
+    FreeFrame §199 — a password change ends every other session this user holds. That
+    is the single most expected thing about changing a password and it did
+    not happen before: a stolen laptop with a live session survived it, and
+    kept renewing itself for the whole refresh window.
+
+    The caller's OWN session is the one exception, and it is handled by
+    returning a fresh pair rather than by carving out an exception in the
+    bump — the device you are typing on should not be signed out by the act
+    of securing the account. See SetPasswordResponse for why the fields go
+    here rather than into a wrapper.
+    """
+    # a CHANGE needs the second factor; a first set does not.
+    #
+    # `password_hash is None` is the whole distinction and it is the honest
+    # one: an account with no password has nothing a stolen session could
+    # take by changing it, and this is the path the onboarding gate itself
+    # runs on — demanding a factor there would make the gate unsatisfiable
+    # for everyone it exists to onboard.
+    #
+    # Read BEFORE the write, obviously, but worth saying: after the
+    # assignment below every call would look like a first set.
+    is_change = current_user.password_hash is not None
+    if is_change:
+        _require_step_up(db, current_user, body.reauth_code)
+
+    _enforce_password_policy(db, body.password, current_user)
+
     current_user.password_hash = hash_password(body.password)
+    bump_token_version(current_user)
     db.commit()
     db.refresh(current_user)
-    return current_user
+    # told to BOTH addresses, after the commit. A password change the
+    # owner did not make is the thing they most need to hear about, and
+    # sending it only to the login address would mean an attacker who already
+    # controls that mailbox gets to read the warning instead of the owner.
+    if is_change:
+        _notify_both_addresses(
+            current_user,
+            "password_changed",
+            "Your FilmBill password was changed",
+        )
+    # Minted AFTER the commit and refresh, so they carry the version that is
+    # actually on the row — not the one this request read on the way in.
+    tokens = _issue_tokens(current_user)
+    return SetPasswordResponse(
+        **UserResponse.model_validate(current_user).model_dump(),
+        access_token=tokens.access_token,
+        refresh_token=tokens.refresh_token,
+    )
 
 
 @router.get("/invite/{token}", response_model=InviteInfoResponse)
@@ -261,19 +526,27 @@ def accept_invite(body: AcceptInviteRequest, db: Session = Depends(get_db)):
     if user.invite_token_expires_at and user.invite_token_expires_at < datetime.now(timezone.utc):
         raise HTTPException(status_code=400, detail="Invite link expired")
     
+    # the same policy every other password path enforces. An invite
+    # was the easiest way in with a two-character password before this: the
+    # browser's `length < 8` check was the only rule, and nothing stopped a
+    # caller from skipping the browser.
+    _enforce_password_policy(db, body.password, user)
+
     # Set password and activate user
     user.password_hash = hash_password(body.password)
     user.email_verified = True  # Invited users are pre-verified
     user.status = UserStatus.active
     user.invite_token = None
     user.invite_token_expires_at = None
+    # this sets a password for the first time, and "a password was set
+    # or changed" is the simpler rule to state and to verify than one with a
+    # carve-out. There is no prior session to invalidate here (the account
+    # was pending_invite until this line), so in practice this is
+    # consistency rather than necessity.
+    bump_token_version(user)
     db.commit()
-    
-    return TokenResponse(
-        access_token=create_access_token(str(user.id)),
-        refresh_token=create_refresh_token(str(user.id)),
-        needs_password=False,
-    )
+
+    return _issue_tokens(user)
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
@@ -282,6 +555,11 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
     if get_user_by_email(db, body.email):
         raise HTTPException(status_code=400, detail="Email already registered")
     first_name, last_name = split_full_name(body.name)
+    # validated against the address and name being registered, since
+    # there is no row yet to read them off.
+    _enforce_password_policy(
+        db, body.password, None, email=body.email, name=body.name
+    )
     user = User(
         email=body.email,
         first_name=first_name,
@@ -353,9 +631,16 @@ def _user_from_pending(db: Session, pending_token: str) -> User:
 
 
 def _issue_tokens(user: User) -> TokenResponse:
+    """A fresh pair stamped with this user's CURRENT token_version.
+
+    Read at mint time rather than passed in, so a caller that has just
+    bumped the version cannot forget to hand over the new one — which would
+    issue a pair that is already stale.
+    """
+    version = user.token_version or 0
     return TokenResponse(
-        access_token=create_access_token(str(user.id)),
-        refresh_token=create_refresh_token(str(user.id)),
+        access_token=create_access_token(str(user.id), version),
+        refresh_token=create_refresh_token(str(user.id), version),
         needs_password=user.password_hash is None,
     )
 
@@ -385,9 +670,10 @@ def _login_outcome(db: Session, user: User, *, via: str = VIA_PASSWORD) -> Login
     turning the requirement off must not silently downgrade someone who
     chose 2FA for themselves.
 
-    `via` says which primary credential got here, and it is not decoration:
-    an emailed second factor after a magic-code first factor is the same
-    mailbox twice, which is one factor wearing two hats.
+    FreeFrame §199 — `via` says WHICH primary credential got here, and it is not
+    decoration: it rides into the pending token so every later step of this
+    login can tell a password from a magic code. See VIA_PASSWORD in
+    services/auth_service.py for why that difference matters.
     """
     if user.two_factor_enabled:
         method: TwoFactorMethod = user.two_factor_method or "totp"
@@ -437,8 +723,29 @@ def _login_outcome(db: Session, user: User, *, via: str = VIA_PASSWORD) -> Login
     return _issue_tokens(user)
 
 
-def _send_2fa_email_code(user: User, *, force: bool = False) -> bool:
+def _send_2fa_email_code(
+    user: User, *, purpose: str = "two_factor_challenge", force: bool = False
+) -> bool:
     """Mail this user a one-time code. Returns whether one was sent.
+
+    FreeFrame §203 — `purpose` names the SITUATION, not the mechanism. This one function
+    serves three of them, and they need different words:
+
+      _login_outcome            an email-primary user is finishing a sign-in
+      send_two_factor_email_fallback  they have lost their authenticator
+      setup_two_factor          they are switching two-factor ON, from
+                                Settings, already signed in
+
+    The first two are the same message to the reader ("finish signing in"), so
+    they share `two_factor_challenge`. The third is its opposite: nobody is
+    signing in, and the mail that told them to was not merely clumsy — its
+    warning ("if you did not try to sign in, someone has your password") is
+    false for enrolment, where the real danger is that somebody is ALREADY
+    signed in as them.
+
+    Same Redis pool, same TTL, same rate-limit buckets, same idempotency and
+    `force` semantics. Only the wording changes; see MAIL_CODE_COPY in
+    tasks/email_tasks.py.
 
     Extracted from the HTTP endpoint so login can call it directly — the
     endpoint carries a rate-limit dependency and a request object that a
@@ -453,22 +760,52 @@ def _send_2fa_email_code(user: User, *, force: bool = False) -> bool:
     endpoint passes force=True, because there the user is telling us the
     code did not arrive.
     """
-    if not force and has_live_2fa_email_code(user.email):
+    # the enrolment code lives in its OWN pool, and this is the only
+    # place that decides which. One branch rather than two functions: the
+    # idempotency rule, the `force` rule and the send are identical, and a
+    # second copy of them is how one would quietly stop honouring `force`.
+    #
+    # The separation is what makes FreeFrame §203's sentence — "this code cannot be
+    # used to sign in" — actually true. `_second_factor_matches` reads the
+    # challenge pool and only that pool, so it can no longer see a setup
+    # code at all. It is deliberately NOT changed; see its docstring.
+    #
+    # Per-pool windows also fix the two symptoms that made this visible: a
+    # live challenge code no longer suppresses an enrolment send, and an
+    # enrolment code no longer suppresses a challenge.
+    # `two_factor_reauth` is NOT a setup purpose, and that is
+    # load-bearing rather than incidental. A re-auth code is redeemed by
+    # `_second_factor_matches`, which since FreeFrame §204 reads the CHALLENGE pool and
+    # cannot see the enrolment pool at all. Route it to the enrolment pool —
+    # which reads like the tidy thing to do, since it is about enrolment
+    # settings — and every re-auth silently stops working. Only
+    # `two_factor_setup` belongs in the enrolment pool, because only
+    # confirm-setup reads from there.
+    is_setup = purpose == "two_factor_setup"
+    has_live = has_live_2fa_setup_code if is_setup else has_live_2fa_email_code
+    store = store_2fa_setup_code if is_setup else store_2fa_email_code
+    expiry_seconds = (
+        TWOFA_ENROL_CODE_EXPIRY_SECONDS if is_setup else TWOFA_EMAIL_CODE_EXPIRY_SECONDS
+    )
+
+    if not force and has_live(user.email):
         return False
 
     code = generate_2fa_email_code()
-    store_2fa_email_code(user.email, code)
+    store(user.email, code)
     send_task_safe(
         send_magic_code_email,
         user.email,
         code,
-        TWOFA_EMAIL_CODE_EXPIRY_SECONDS // 60,
-        "two_factor",
+        expiry_seconds // 60,
+        purpose,
     )
     return True
 
 
-def _second_factor_matches(db: Session, user: User, code: str) -> bool:
+def _second_factor_matches(
+    db: Session, user: User, code: str, *, allow_email_factor: bool = True
+) -> bool:
     """Whether `code` satisfies the second factor, by ANY of its three forms.
 
     Tried in order — authenticator, emailed fallback, backup code — because
@@ -478,14 +815,25 @@ def _second_factor_matches(db: Session, user: User, code: str) -> bool:
     A spent backup code is persisted here rather than by the caller: it is
     single-use, and a path that verified without consuming would turn a
     recovery code into a permanent password.
+
+    FreeFrame §199 — `allow_email_factor=False` drops the emailed form for a login
+    whose PRIMARY credential was itself a magic code. Refusing to send a
+    code on that path is most of the fix, but not all of it: an emailed 2FA
+    code from a recent password login stays live for its whole TTL window,
+    and without this an attacker holding only the mailbox could sign in with
+    a magic code and redeem that still-valid code as the second factor.
+    Default True, so the authenticated re-auth callers (FreeFrame §192's disable and
+    regenerate, FreeFrame §194b's replacement gate) are untouched — they have a
+    session, not a pending token, and no primary credential in question.
     """
     secret = totp_service.decrypt_secret(user.totp_secret_encrypted)
     if totp_service.verify_totp_code(secret, code):
         return True
 
-    ok, _ = verify_2fa_email_code(user.email, code.strip())
-    if ok:
-        return True
+    if allow_email_factor:
+        ok, _ = verify_2fa_email_code(user.email, code.strip())
+        if ok:
+            return True
 
     matched, remaining = totp_service.consume_backup_code(user.backup_codes_hashed, code)
     if matched:
@@ -512,7 +860,14 @@ def verify_two_factor_login(body: TwoFactorVerifyRequest, db: Session = Depends(
         # anyone who never enrolled.
         raise HTTPException(status_code=401, detail="Invalid code")
 
-    if not _second_factor_matches(db, user, body.code):
+    # an emailed code cannot complete a login that started with a
+    # magic code; see _second_factor_matches. TOTP and backup codes are
+    # unaffected on that path, and a password login is unaffected entirely.
+    email_factor_allowed = pending_token_via(body.pending_token) != VIA_MAGIC_CODE
+
+    if not _second_factor_matches(
+        db, user, body.code, allow_email_factor=email_factor_allowed
+    ):
         # One message for every failure: which factor was wrong is not the
         # caller's business, and saying so would confirm whether a fallback
         # code had been requested.
@@ -572,12 +927,14 @@ def setup_two_factor(
 
     method: TwoFactorMethod = body.method if body else "totp"
 
-    # Same rule as /2fa/send-email-fallback, applied one step earlier: a
-    # user being forced into enrolment mid-login, who got here WITH A MAGIC
-    # CODE, must not enrol email as their second factor. They would finish
-    # the very next step by reading a second code out of the mailbox that
-    # was already their first factor, and the account would be protected by
-    # one channel from then on.
+    # the same rule as /2fa/send-email-fallback, applied one step
+    # earlier. A user being forced into enrolment mid-login who got here WITH
+    # A MAGIC CODE must not enrol email as their second factor: they would
+    # finish the very next step by reading a confirmation code out of the
+    # mailbox that was already their first factor, and the account would be
+    # protected by one channel from then on. `current_user is None` is what
+    # identifies the mid-login case — a signed-in user choosing email in
+    # settings is a different situation and is left alone.
     if (
         method == "email"
         and current_user is None
@@ -628,7 +985,11 @@ def setup_two_factor(
         # can send. A code already in the inbox still works, so re-sending
         # would only invalidate the one the user is reading.
         return TwoFactorSetupResponse(
-            method="email", email_code_sent=_send_2fa_email_code(user)
+            method="email",
+            # the ENROLMENT wording. This is the call site Mathias hit:
+            # signed in, in Settings, turning the feature on, and told by the
+            # mail to sign in with the code.
+            email_code_sent=_send_2fa_email_code(user, purpose="two_factor_setup"),
         )
 
     secret = totp_service.generate_totp_secret()
@@ -691,7 +1052,13 @@ def confirm_two_factor_setup(
         # nothing about whether mail actually reaches this address, which is
         # the single thing this step exists to check — the same rule the
         # TOTP branch applies to its own factor.
-        ok, _ = verify_2fa_email_code(user.email, body.code.strip())
+        #
+        # the ENROLMENT pool, and only that one. The mirror of the
+        # rule FreeFrame §204 exists for: a setup code cannot complete a login, and a
+        # login-challenge code cannot complete an enrolment. Reading both
+        # here would leave half the separation in place, which is the same
+        # as none.
+        ok, _ = verify_2fa_setup_code(user.email, body.code.strip())
         if not ok:
             raise HTTPException(status_code=401, detail="Invalid code")
         # An authenticator paired during some earlier, abandoned setup must
@@ -719,19 +1086,37 @@ def confirm_two_factor_setup(
     user.backup_codes_hashed = totp_service.hash_backup_codes(codes)
     user.two_factor_enabled = True
     user.two_factor_method = method
+    # one bump covers both things this function does: a first
+    # enrolment and a method change through re-enrolment. Either one changes
+    # what a second factor means for this account from here on, so sessions
+    # opened under the old arrangement should not survive it.
+    bump_token_version(user)
     db.commit()
     # After the commit, not before: a staged setup dropped ahead of a write
     # that then failed would leave the user with nothing to confirm and no
     # way to finish. A stale one costs nothing — it expires on its own, and
     # a later setup replaces it.
     clear_pending_2fa_setup(str(user.id))
+    # and any outstanding ENROLMENT code, for either method. The
+    # email branch consumed its own on the way in; a TOTP confirm can land
+    # while a code from an earlier, abandoned email attempt is still live,
+    # and a code whose enrolment is already finished should not sit in the
+    # pool waiting for a screen that has moved on.
+    #
+    # The CHALLENGE pool is deliberately untouched here: a code the user is
+    # mid-login with is not this endpoint's to spend.
+    clear_2fa_setup_code(user.email)
 
     return TwoFactorConfirmResponse(
         backup_codes=codes,
         method=method,
-        # Only when this completed a forced login. An already-signed-in user
-        # holds working tokens already; re-issuing would be churn.
-        tokens=_issue_tokens(user) if forced_first_login else None,
+        # now populated for BOTH branches, not only the forced login.
+        # The old comment ("an already-signed-in user holds working tokens
+        # already") stopped being true the moment the bump above landed:
+        # that user's tokens were minted under the previous version and are
+        # stale as of this commit. They get a matching pair here for the same
+        # reason the forced-login branch always did.
+        tokens=_issue_tokens(user),
     )
 
 
@@ -804,6 +1189,55 @@ def send_two_factor_email_fallback(
     return TwoFactorEmailFallbackResponse()
 
 
+@router.post(
+    "/2fa/send-reauth-code",
+    response_model=TwoFactorEmailFallbackResponse,
+    # Its own bucket. This is reachable only with a session, and it is the
+    # one send whose recipient is fixed by the row rather than named by the
+    # caller — a different abuse profile from either of the two above, and a
+    # shared allowance would let one drain the other's.
+    dependencies=[Depends(rate_limit("send_2fa_reauth_code", 5, 600))],
+)
+def send_two_factor_reauth_code(
+    force: bool = False,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Mail a code for confirming a CHANGE to two-factor settings.
+
+    The gap this closes: `/auth/2fa/disable`, `/auth/2fa/regenerate-backup-codes`
+    and a replacement enrolment all verify through `_second_factor_matches`,
+    and NOTHING on any of those paths sent a code. A TOTP user opens their
+    authenticator; an email-factor user — the default arrangement after FreeFrame §200
+    — had no source for a code at all. Disable, regenerate and change-method
+    were dead for all of them.
+
+    Email-factor users only. A TOTP user has their authenticator and does not
+    need mail, and sending it anyway would train people to expect a code that
+    their own configuration says should not arrive.
+
+    **The CHALLENGE pool, not the enrolment pool** — see the comment in
+    `_send_2fa_email_code`. `_second_factor_matches` is what redeems this
+    code, and since FreeFrame §204 it cannot see the enrolment pool.
+
+    `force=False` by default, so merely opening a dialog does not invalidate
+    a code already sitting in the person's inbox (FreeFrame §194's rule). The "Send it
+    again" button passes force=true, because there the user is telling us the
+    first one did not arrive.
+
+    Answers the same deliberately uninformative shape as
+    /auth/2fa/send-email-fallback whether or not anything was sent: a caller
+    holding a session already knows this account exists, but keeping the two
+    responses identical means neither can drift into being an oracle for the
+    other.
+    """
+    if current_user.two_factor_enabled and current_user.two_factor_method == "email":
+        _send_2fa_email_code(
+            current_user, purpose="two_factor_reauth", force=force
+        )
+    return TwoFactorEmailFallbackResponse()
+
+
 @router.post("/2fa/disable", response_model=TwoFactorDisableResponse)
 def disable_two_factor(
     body: TwoFactorReauthRequest,
@@ -822,6 +1256,33 @@ def disable_two_factor(
     copies of "what counts as a second factor" is how one of them quietly
     stops accepting backup codes.
     """
+    # the instance-wide requirement removes the off switch, and it is
+    # checked BEFORE the code, before the idempotent early return, and before
+    # anything is written. A correct code must not buy an exemption from a
+    # policy, and ordering it after the check would mean the answer to "may
+    # I" depended on whether the caller happened to hold a valid code.
+    #
+    # Without this the switch was decorative in the worst way: a user could
+    # turn 2FA off and would merely be force-enrolled at their NEXT login —
+    # leaving their current, live session running with no second factor for
+    # as long as they stayed signed in.
+    #
+    # Regenerating backup codes and changing method are deliberately NOT
+    # gated: neither removes the protection, and blocking them would strand
+    # people on a factor they have lost.
+    #
+    # The superadmin escape hatch (PATCH /admin/users/{id}/disable-2fa) is
+    # also not gated. It exists for the user who has lost every factor, which
+    # is precisely the situation a policy must not make unrecoverable.
+    if two_factor_required_for(db, current_user):
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Two-factor authentication is required on this instance, so "
+                "it cannot be turned off."
+            ),
+        )
+
     if not current_user.two_factor_enabled:
         # Idempotent rather than an error: the end state the caller asked
         # for is already true, and a 400 here would make a double-click
@@ -842,8 +1303,21 @@ def disable_two_factor(
     # disabled account would make a later re-enrolment look like it had
     # already picked one.
     current_user.two_factor_method = None
+    # removing the protection is exactly the moment other sessions
+    # should stop being trusted, not a moment to leave them running.
+    bump_token_version(current_user)
     db.commit()
-    return TwoFactorDisableResponse(two_factor_enabled=False)
+    # both addresses. Turning 2FA off is the change an attacker who
+    # has taken the login mailbox most wants to make quietly, and a notice
+    # sent only there is one they would read instead of the owner.
+    _notify_both_addresses(
+        current_user,
+        "two_factor_disabled",
+        "Two-factor authentication was turned off on your FilmBill account",
+    )
+    return TwoFactorDisableResponse(
+        two_factor_enabled=False, tokens=_issue_tokens(current_user)
+    )
 
 
 @router.post("/2fa/regenerate-backup-codes", response_model=TwoFactorBackupCodesResponse)
@@ -870,8 +1344,202 @@ def regenerate_backup_codes(
     codes = totp_service.generate_backup_codes()
     # Overwritten, never appended: the previous set stops working here.
     current_user.backup_codes_hashed = totp_service.hash_backup_codes(codes)
+    # the reason to regenerate is that the old set may have been seen
+    # by someone else, which is equally a reason not to trust whatever
+    # sessions exist under it.
+    bump_token_version(current_user)
     db.commit()
-    return TwoFactorBackupCodesResponse(backup_codes=codes)
+    # both addresses; see disable_two_factor just above. A fresh set
+    # of recovery codes issued to somebody else is silent otherwise.
+    _notify_both_addresses(
+        current_user,
+        "backup_codes_regenerated",
+        "New FilmBill backup codes were generated for your account",
+    )
+    return TwoFactorBackupCodesResponse(
+        backup_codes=codes, tokens=_issue_tokens(current_user)
+    )
+
+
+# ── Backup address, and the onboarding gate's own endpoints ──────────
+#
+# All of these live under /auth/ deliberately: middleware/account_gate.py lets
+# that prefix through unconditionally, and an endpoint whose whole job is to
+# SATISFY the gate cannot itself be behind it.
+
+
+@router.get("/password-policy", response_model=PasswordPolicyResponse)
+def get_password_policy():
+    """The rules, so a screen can state them before the first attempt.
+
+    Unauthenticated: it is reachable from the invite and set-password screens,
+    where there is no session yet, and it discloses nothing an attacker could
+    not learn by submitting one bad password. Serving it from
+    `describe_policy()` rather than repeating the numbers in TypeScript is
+    what stops the screen promising rules the server does not enforce.
+    """
+    return PasswordPolicyResponse(**describe_policy())
+
+
+@router.post(
+    "/backup-email",
+    response_model=BackupEmailResponse,
+    # Its own bucket. Proposing an address sends mail to an address the
+    # sender chose, which is the one endpoint here that could be used to
+    # push mail at a third party, so it gets a tighter allowance than the
+    # login-code endpoints and does not share theirs.
+    dependencies=[Depends(rate_limit("set_backup_email", 5, 900))],
+)
+def set_backup_email(
+    body: BackupEmailRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Propose a backup address and mail a verification code to it.
+
+    Nothing about the account changes until that code comes back: the
+    address is stored with `backup_email_verified_at = NULL`, which reads as
+    "pending" everywhere and is used for nothing. In particular a reset is
+    never sent to a pending address — an unproved address is not a recovery
+    channel, it is a guess.
+
+    Replacing an ALREADY-VERIFIED address needs the current second factor
+    (see `_require_step_up`). Pointing password resets at a mailbox of your
+    choosing is the most valuable single thing a stolen session could do
+    here, so it is gated exactly like disabling 2FA is.
+    """
+    candidate = body.backup_email.strip()
+
+    # Case-insensitively different from the login address — the whole point
+    # is that the login mailbox cannot read the reset mail, and
+    # `Mathias@yon.studio` is the same mailbox as `mathias@yon.studio`. This
+    # mirrors get_user_by_email's own normalisation rule, which exists
+    # because this codebase has already been bitten once by treating two
+    # capitalisations as two addresses.
+    if candidate.lower() == (current_user.email or "").strip().lower():
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Your backup address must be a different mailbox from the one "
+                "you sign in with. If the same inbox can receive both your "
+                "sign-in codes and your password resets, it is one factor, "
+                "not two."
+            ),
+        )
+
+    if current_user.backup_email_verified_at:
+        _require_step_up(db, current_user, body.reauth_code)
+
+    # A pending address being replaced leaves a live code behind for an
+    # address the row no longer names. The verify endpoint checks the code
+    # against whatever address is CURRENTLY stored, so an orphaned code can
+    # never be redeemed — but leaving it alive means an email already in
+    # flight looks valid to the person reading it. Dropped explicitly.
+    previous = current_user.backup_email
+    if previous and not current_user.backup_email_verified_at and previous.lower() != candidate.lower():
+        clear_backup_email_code(previous)
+
+    current_user.backup_email = candidate
+    # Any previous verification is void: this is a different mailbox until it
+    # proves otherwise. Writing the address without clearing this would hand
+    # a verified state to an address nobody has checked — the single worst
+    # bug this endpoint could have.
+    current_user.backup_email_verified_at = None
+    db.commit()
+    db.refresh(current_user)
+
+    org_name = instance_org_name(db)
+    sent = _send_backup_email_code(current_user, candidate, org_name)
+
+    return BackupEmailResponse(
+        backup_email=candidate,
+        state=current_user.backup_email_state,
+        code_sent=sent,
+        same_domain=_same_domain(candidate, current_user.email),
+    )
+
+
+@router.post(
+    "/backup-email/resend",
+    response_model=BackupEmailResponse,
+    # Tighter than proposing one: a resend targets an address already on the
+    # row, so the abuse it could enable is repetition rather than reach.
+    dependencies=[Depends(rate_limit("resend_backup_email_code", 3, 600))],
+)
+def resend_backup_email_code(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Send the verification code again, to the address already on file."""
+    if not current_user.backup_email:
+        raise HTTPException(status_code=400, detail="No backup address to confirm")
+    if current_user.backup_email_verified_at:
+        # Idempotent-ish rather than an error on a double click: the end
+        # state the caller wants is already true, and re-sending would mail
+        # a code that confirms something already confirmed.
+        return BackupEmailResponse(
+            backup_email=current_user.backup_email,
+            state="verified",
+            code_sent=False,
+            same_domain=_same_domain(current_user.backup_email, current_user.email),
+        )
+
+    sent = _send_backup_email_code(
+        current_user, current_user.backup_email, instance_org_name(db)
+    )
+    return BackupEmailResponse(
+        backup_email=current_user.backup_email,
+        state=current_user.backup_email_state,
+        code_sent=sent,
+        same_domain=_same_domain(current_user.backup_email, current_user.email),
+    )
+
+
+@router.post(
+    "/backup-email/verify",
+    response_model=UserResponse,
+    dependencies=[Depends(rate_limit("verify_backup_email", 10, 600))],
+)
+def verify_backup_email(
+    body: BackupEmailVerifyRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Confirm the backup address with the code that was mailed to it.
+
+    Returns the whole user, not a bare acknowledgement, so the client updates
+    its gate state from the SERVER's answer rather than assuming the write
+    landed — the same discipline FreeFrame §191 wrote into TwoFactorDisableResponse.
+    That matters more here than usual: the gate is computed from this data,
+    and a client that assumed success would unblock itself while every
+    protected route kept returning 403.
+    """
+    if not current_user.backup_email:
+        raise HTTPException(status_code=400, detail="No backup address to confirm")
+
+    # Checked against the address on the ROW, never one supplied by the
+    # caller. A code is minted for a specific mailbox; letting the request
+    # name which mailbox it is confirming would let a code mailed to an
+    # address the user has since abandoned confirm the current one.
+    ok, error = verify_backup_email_code(current_user.backup_email, body.code.strip())
+    if not ok:
+        raise HTTPException(status_code=401, detail=error)
+
+    current_user.backup_email_verified_at = datetime.now(timezone.utc)
+    # An admin waiver was a way past a gate that is now genuinely satisfied.
+    # Cleared so it cannot silently exempt this user from a requirement that
+    # comes back later — the waiver is meant to unblock one person once, not
+    # to be a permanent property of the account.
+    current_user.account_gate_waived_at = None
+    db.commit()
+    db.refresh(current_user)
+
+    _notify_both_addresses(
+        current_user,
+        "backup_email_verified",
+        "Your FilmBill password-reset address was confirmed",
+    )
+    return current_user
 
 
 @router.post("/refresh", response_model=TokenResponse)
@@ -882,16 +1550,39 @@ def refresh_token(body: RefreshRequest, db: Session = Depends(get_db)):
     user = get_user_by_id(db, uuid.UUID(payload["sub"]))
     if not user or user.status == UserStatus.deactivated:
         raise HTTPException(status_code=401, detail="User not found")
-    return TokenResponse(
-        access_token=create_access_token(str(user.id)),
-        refresh_token=create_refresh_token(str(user.id)),
-        needs_password=user.password_hash is None,
-    )
+    # a flat rejection, and deliberately NOTHING else. The temptation
+    # here is to re-run _login_outcome so the caller gets whatever gate is
+    # current; that would be a second copy of the 2FA branch living inside
+    # refresh, which is precisely the duplication FreeFrame §193 was written to remove
+    # and FreeFrame §196/FreeFrame §198 then had to remove again on the client. The bump is what
+    # ends the session; re-establishing one is /auth/login's job, and it
+    # stays the only place that decides what a login requires.
+    if token_version_of(payload) != (user.token_version or 0):
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+    return _issue_tokens(user)
 
 
 @router.get("/me", response_model=UserResponse)
-def get_me(current_user: User = Depends(get_current_user)):
-    return current_user
+def get_me(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """The caller's own user, plus what the instance's policy means for them.
+
+    FreeFrame §206 — `two_factor_required` is set here rather than left to
+    `from_attributes`, because the User row cannot answer it: it is a
+    question about site settings as they apply to this person. Both clients
+    read it to decide whether the "Turn off two-factor" control is usable,
+    so they cannot disagree about the answer — which they did between FreeFrame §205
+    and FreeFrame §206, when the web read `/site-settings`' `require_2fa` and the
+    desktop read nothing at all.
+
+    The server's 403 in `disable_two_factor` remains the rule; this is the
+    courtesy that stops a user typing a code before being told no.
+    """
+    resp = UserResponse.model_validate(current_user)
+    resp.two_factor_required = two_factor_required_for(db, current_user)
+    return resp
 
 
 @router.patch("/me/preferences", response_model=UserResponse)

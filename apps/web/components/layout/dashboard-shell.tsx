@@ -5,6 +5,10 @@ import { useAuthStore } from "@/stores/auth-store";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 import { CommandPalette } from "@/components/layout/command-palette";
+import {
+  AccountSetupGate,
+  accountSetupOutstanding,
+} from "@/components/auth/account-setup-gate";
 import { cn } from "@/lib/utils";
 
 /**
@@ -21,7 +25,14 @@ export function DashboardShell({
 }) {
   const [sidebarCollapsed, setSidebarCollapsed] = React.useState(true);
   const [commandOpen, setCommandOpen] = React.useState(false);
-  const { fetchUser } = useAuthStore();
+  const { fetchUser, user } = useAuthStore();
+
+  // Read from /auth/me, which computes it server-side from the stored
+  // data. This is presentation: middleware/account_gate.py already answers
+  // 403 to every protected route while it is true, so the purpose here is to
+  // show the person WHY nothing loads and give them the two forms, rather
+  // than to enforce anything.
+  const gated = accountSetupOutstanding(user);
 
   React.useEffect(() => {
     fetchUser();
@@ -38,6 +49,18 @@ export function DashboardShell({
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, []);
+
+  if (gated && user) {
+    // Rendered INSTEAD of the whole shell, not inside it. The sidebar and
+    // header are navigation into an app that answers 403 to everything —
+    // showing them would be an interface that does not work rather than an
+    // explanation of why.
+    return (
+      <div className="h-screen overflow-hidden bg-bg-primary">
+        <AccountSetupGate user={user} />
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen overflow-hidden bg-bg-primary">

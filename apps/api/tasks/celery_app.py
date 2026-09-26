@@ -69,6 +69,11 @@ celery_app.conf.update(
     task_routes={
         "apps.api.tasks.email_tasks.send_magic_code_email": {"queue": "email_high"},
         "apps.api.tasks.email_tasks.send_invite_email": {"queue": "email_high"},
+        # Both immediate and both security-relevant: a backup-address
+        # code somebody is waiting on, and a notice that an account was
+        # changed. email_low is for things that can arrive in a minute.
+        "apps.api.tasks.email_tasks.send_backup_email_code_email": {"queue": "email_high"},
+        "apps.api.tasks.email_tasks.send_security_notice_email": {"queue": "email_high"},
         "apps.api.tasks.email_tasks.*": {"queue": "email_low"},
     },
     # Rate limiting for email queues (SES limits)

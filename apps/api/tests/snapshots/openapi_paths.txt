@@ -5,6 +5,7 @@ DELETE /users/{user_id}
 GET /admin/users
 GET /auth/invite/{token}
 GET /auth/me
+GET /auth/password-policy
 GET /email-settings
 GET /events/me
 GET /files/object/{path}
@@ -16,6 +17,7 @@ GET /site-settings
 GET /site-settings/logo-image
 GET /users
 GET /users/search
+PATCH /admin/users/{user_id}/clear-account-gate
 PATCH /admin/users/{user_id}/deactivate
 PATCH /admin/users/{user_id}/disable-2fa
 PATCH /admin/users/{user_id}/reactivate
@@ -30,9 +32,13 @@ POST /auth/2fa/confirm-setup
 POST /auth/2fa/disable
 POST /auth/2fa/regenerate-backup-codes
 POST /auth/2fa/send-email-fallback
+POST /auth/2fa/send-reauth-code
 POST /auth/2fa/setup
 POST /auth/2fa/verify-login
 POST /auth/accept-invite
+POST /auth/backup-email
+POST /auth/backup-email/resend
+POST /auth/backup-email/verify
 POST /auth/login
 POST /auth/refresh
 POST /auth/register

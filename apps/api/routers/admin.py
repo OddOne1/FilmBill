@@ -3,6 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 import uuid
+from datetime import datetime, timezone
 
 from ..database import get_db
 from ..middleware.auth import get_current_user
@@ -11,6 +12,7 @@ from ..models.activity import ActivityLog
 from ..schemas.auth import (
     UserResponse, UpdateUserRoleRequest, AdminUserResponse,
 )
+from ..services.auth_service import bump_token_version
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -136,7 +138,13 @@ def admin_disable_two_factor(
     user.two_factor_enabled = False
     user.totp_secret_encrypted = None
     user.backup_codes_hashed = None
-    user.two_factor_method = None  # cleared with the rest.
+    user.two_factor_method = None  # FreeFrame §194 — cleared with the rest.
+    # the TARGET's sessions, not the acting admin's. An admin reset
+    # happens because the user has lost every factor, which is exactly the
+    # situation where somebody else may be holding a live session on that
+    # account. Leaving those running would make the reset a formality. The
+    # admin's own token_version is untouched, so their session is unaffected.
+    bump_token_version(user)
 
     db.add(
         ActivityLog(
@@ -148,6 +156,68 @@ def admin_disable_two_factor(
                 # Distinguishes "an admin removed a live second factor" from
                 # "an admin clicked it on an account that had none".
                 "was_enabled": had_2fa,
+            },
+        )
+    )
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@router.patch("/users/{user_id}/clear-account-gate", response_model=UserResponse)
+def clear_account_gate(
+    user_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Let one user past the FreeFrame §200 onboarding gate.
+
+    The gate is computed from stored data and cannot be dismissed from the
+    browser, which is the property that makes it worth having — and is also
+    exactly how somebody ends up locked out of the entire app because the
+    backup address they typed has a typo in it and the confirmation code can
+    never arrive. This is the way back in.
+
+    A waiver of the BLOCK, not of the requirement: `account_setup_required`
+    still reads True for this user, the settings screen still asks them to
+    finish, and verifying a backup address clears the waiver again. So this
+    cannot quietly become a permanent exemption that nobody remembers
+    granting.
+
+    **Usable on yourself**, unlike `admin_disable_two_factor` above — and the
+    difference is deliberate. That endpoint refuses self-use because a stolen
+    superadmin session could otherwise strip its own second factor with no
+    code. This one removes no protection: a gated superadmin can already
+    reach /auth/* and finish setup normally, so the worst a stolen session
+    achieves here is skipping a screen it could have completed anyway. The
+    last superadmin on an instance with nobody else to ask is the whole
+    reason it has to work on yourself.
+
+    Logged to ActivityLog. An unlogged way to bypass an account requirement
+    is indistinguishable after the fact from an attacker having used it.
+    """
+    _require_superadmin(current_user)
+
+    user = db.query(User).filter(User.id == user_id, User.deleted_at.is_(None)).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    was_outstanding = bool(user.account_setup_required)
+    user.account_gate_waived_at = datetime.now(timezone.utc)
+
+    db.add(
+        ActivityLog(
+            user_id=current_user.id,  # the ACTOR, per the column's own comment
+            action="admin_cleared_account_gate",
+            payload={
+                "target_user_id": str(user.id),
+                "target_email": user.email,
+                # Distinguishes a real rescue from a click on an account that
+                # was never gated — and records WHAT was outstanding, which is
+                # the part worth having months later.
+                "was_outstanding": was_outstanding,
+                "must_set_password": bool(user.must_set_password),
+                "backup_email_state": user.backup_email_state,
             },
         )
     )

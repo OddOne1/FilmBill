@@ -7,12 +7,29 @@ import { setTokens } from '@/lib/auth'
 import { useAuthStore } from '@/stores/auth-store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import type { AuthTokens } from '@/types'
+import { PasswordField } from '@/components/auth/password-field'
+import { PasswordSubmitNote } from '@/components/auth/password-submit-note'
+import { passwordSubmitBlock, usePasswordPolicy } from '@/lib/password-policy'
+import type { AuthTokens, PasswordStrength } from '@/types'
 
+/**
+ * What GET /auth/invite/{token} actually returns.
+ *
+ * `org_name` is newly populated; it was declared on the backend's
+ * response model and never filled, so this card rendered an empty line
+ * where the instance name belongs.
+ *
+ * `inviter_name` and `role` were never on that endpoint AT ALL — not
+ * declared, not returned — and they cannot be: `users` has no `invited_by`
+ * column and the invite carries no role (roles are per-project in this app,
+ * and /users/invite does not take one). They are typed optional here so the
+ * card can omit the line rather than render "Invited by  as ". Adding them
+ * for real needs a schema change and is deliberately out of FreeFrame §199's scope.
+ */
 interface InviteDetails {
   email: string
-  org_name: string
-  inviter_name: string
+  org_name: string | null
+  inviter_name?: string | null
 }
 
 interface InviteAcceptProps {
@@ -29,11 +46,14 @@ interface FormErrors {
 function validate(name: string, password: string, confirmPassword: string): FormErrors {
   const errors: FormErrors = {}
   if (!name.trim()) errors.name = 'Name is required'
-  if (!password) {
-    errors.password = 'Password is required'
-  } else if (password.length < 8) {
-    errors.password = 'Password must be at least 8 characters'
-  }
+  // the `length < 8` rule is gone. It was a browser-only check that
+  // the server never shared, and /auth/accept-invite now runs the real
+  // policy: twelve characters, all four character classes, not in the
+  // common-password blocklist, not containing the invitee's own name or
+  // address, and a strength score. PasswordField shows all of that live and
+  // gates the submit button; whatever gets past it comes back as a server
+  // error, which is rendered in `errors.general`.
+  if (!password) errors.password = 'Password is required'
   if (password !== confirmPassword) errors.confirmPassword = 'Passwords do not match'
   return errors
 }
@@ -48,7 +68,20 @@ export function InviteAccept({ token }: InviteAcceptProps) {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [errors, setErrors] = useState<FormErrors>({})
+  const [strength, setStrength] = useState<PasswordStrength | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const policy = usePasswordPolicy()
+
+  // one shared rule, and it always produces a sentence when it blocks.
+  // The old condition was `!strength?.meetsPolicy || !confirmPassword`, which
+  // was silently permanently true on this page: `strength` stayed null because
+  // the dictionary loader threw, and nothing on screen said so.
+  const submitBlock = passwordSubmitBlock({
+    password,
+    confirmPassword,
+    strength,
+    policy,
+  })
 
   useEffect(() => {
     async function fetchInvite() {
@@ -126,10 +159,14 @@ export function InviteAccept({ token }: InviteAcceptProps) {
       {invite && (
         <div className="mb-8 rounded-lg border border-border bg-bg-secondary p-4">
           <p className="text-xs text-text-tertiary uppercase tracking-wider mb-2">You&apos;ve been invited to</p>
-          <p className="text-base font-semibold text-text-primary mb-1">{invite.org_name}</p>
-          <p className="text-sm text-text-secondary">
-            Invited by <span className="text-text-primary">{invite.inviter_name}</span>
+          <p className="text-base font-semibold text-text-primary mb-1">
+            {invite.org_name || 'FilmBill'}
           </p>
+          {invite.inviter_name && (
+            <p className="text-sm text-text-secondary">
+              Invited by <span className="text-text-primary">{invite.inviter_name}</span>
+            </p>
+          )}
           <p className="text-sm text-text-tertiary mt-1">{invite.email}</p>
         </div>
       )}
@@ -156,13 +193,14 @@ export function InviteAccept({ token }: InviteAcceptProps) {
           error={errors.name}
         />
 
-        <Input
+        <PasswordField
           label="Password"
-          type="password"
-          placeholder="Min. 8 characters"
-          autoComplete="new-password"
           value={password}
-          onChange={(e) => { setPassword(e.target.value); setErrors((p) => ({ ...p, password: undefined })) }}
+          onChange={(v) => { setPassword(v); setErrors((p) => ({ ...p, password: undefined })) }}
+          // Both are things the server will reject the password for
+          // containing, and both are known here before any session exists.
+          userInputs={[name, invite?.email ?? '', invite?.org_name ?? '']}
+          onStrengthChange={setStrength}
           error={errors.password}
         />
 
@@ -173,10 +211,25 @@ export function InviteAccept({ token }: InviteAcceptProps) {
           autoComplete="new-password"
           value={confirmPassword}
           onChange={(e) => { setConfirmPassword(e.target.value); setErrors((p) => ({ ...p, confirmPassword: undefined })) }}
-          error={errors.confirmPassword}
+          // live, as soon as both fields have something and differ,
+          // rather than only after a submit that used to be unreachable.
+          error={
+            errors.confirmPassword ??
+            (confirmPassword && password !== confirmPassword
+              ? 'Passwords do not match'
+              : undefined)
+          }
         />
 
-        <Button type="submit" size="lg" loading={submitting} className="mt-2 w-full">
+        <PasswordSubmitNote reason={submitBlock} />
+
+        <Button
+          type="submit"
+          size="lg"
+          loading={submitting}
+          className="mt-2 w-full"
+          disabled={!!submitBlock}
+        >
           Create account &amp; join
         </Button>
       </form>

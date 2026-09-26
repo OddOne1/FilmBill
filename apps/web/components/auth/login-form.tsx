@@ -9,14 +9,23 @@ import { useSiteSettings } from '@/hooks/use-site-settings'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { CodeInput, EMPTY_CODE } from '@/components/auth/code-input'
+import {
+  CodeOrBackupInput,
+  type CodeEntryMode,
+} from '@/components/auth/code-or-backup-input'
 import { BackupCodes } from '@/components/auth/backup-codes'
+import { PasswordField } from '@/components/auth/password-field'
+import { PasswordSubmitNote } from '@/components/auth/password-submit-note'
+import { passwordSubmitBlock, usePasswordPolicy } from '@/lib/password-policy'
 import type {
   VerifyCodeResponse,
   AuthTokens,
   LoginResponse,
+  SetPasswordResponse,
   TwoFactorMethod,
   TwoFactorSetupResponse,
   TwoFactorConfirmResponse,
+  PasswordStrength,
 } from '@/types'
 
 /**
@@ -54,7 +63,7 @@ export function LoginForm() {
   const [classicPassword, setClassicPassword] = useState('')
   const [classicError, setClassicError] = useState('')
 
-  // ─── Two-factor state (FreeFrame-FreeFrame) ────────────────────────────────────────
+  // ─── Two-factor state ───────────────────────────────────────────────────
   // The pending token is the whole of what the 2FA steps carry forward: it
   // is inert everywhere except /auth/2fa/*, so holding it in component state
   // grants nothing that surviving a reload would be worth.
@@ -62,10 +71,21 @@ export function LoginForm() {
   const [twoFactorMethod, setTwoFactorMethod] = useState<TwoFactorMethod | null>(null)
   const [twoFactorEmail, setTwoFactorEmail] = useState('')
   const [twoFactorNotice, setTwoFactorNotice] = useState('')
+  /** FreeFrame §205 — the login challenge is one of only two places a backup code is
+   *  legitimate (the three re-auth dialogs are the other). It is also the
+   *  place it matters most: this is what somebody reaches for when their
+   *  authenticator is gone and the emailed code is not arriving. */
+  const [twoFactorMode, setTwoFactorMode] = useState<CodeEntryMode>('digits')
+  const [backupCode, setBackupCode] = useState('')
   const [setupStage, setSetupStage] = useState<SetupStage>('choose')
   const [setupSecret, setSetupSecret] = useState('')
   const [setupQr, setSetupQr] = useState('')
   const [backupCodes, setBackupCodes] = useState<string[] | null>(null)
+  // the live meter's verdict, so the submit button reflects the real
+  // rules rather than a length check that no longer matches any of them.
+  const [passwordStrength, setPasswordStrength] =
+    useState<PasswordStrength | null>(null)
+  const passwordPolicy = usePasswordPolicy()
   const [enrolledTokens, setEnrolledTokens] = useState<AuthTokens | null>(null)
 
   /**
@@ -203,10 +223,12 @@ export function LoginForm() {
       setPasswordError('Password is required')
       return
     }
-    if (password.length < 8) {
-      setPasswordError('Password must be at least 8 characters')
-      return
-    }
+    // the `length < 8` rule is gone, not relaxed. It was the only
+    // password rule this app had, it lived in the browser only, and it is
+    // now four rules plus a strength score enforced by the server.
+    // PasswordField shows them live; the submit button below is disabled
+    // until they pass, and `generalError` renders the server's refusal for
+    // the two rules the browser cannot check.
     if (password !== confirmPassword) {
       setPasswordError('Passwords do not match')
       return
@@ -214,7 +236,13 @@ export function LoginForm() {
 
     setLoading(true)
     try {
-      const res = await api.post<AuthTokens>('/auth/set-password', {
+      // typed against what this endpoint actually returns. It was
+      // typed `AuthTokens` while the backend returned only a user, so
+      // `setTokens` stored the literal string "undefined" over the tokens
+      // the magic-code step had just set. The endpoint now returns a real
+      // pair (it has to: setting a password bumps token_version and ends
+      // the session that did it), so the fields this already read exist.
+      const res = await api.post<SetPasswordResponse>('/auth/set-password', {
         email,
         code: code.join(''),
         password,
@@ -285,6 +313,17 @@ export function LoginForm() {
 
   async function handleTwoFactorSubmit(e: React.FormEvent) {
     e.preventDefault()
+    // whichever field is showing. A backup code is nine characters
+    // with the dash and eight without, so the six-digit minimum would have
+    // rejected every one of them before it ever reached the server.
+    if (twoFactorMode === 'backup') {
+      if (backupCode.trim().length < 8) {
+        setCodeError('Enter your full backup code')
+        return
+      }
+      await submitTwoFactorCode(backupCode)
+      return
+    }
     const codeStr = code.join('')
     if (codeStr.length < 6) {
       setCodeError('Enter the 6-digit code')
@@ -573,12 +612,24 @@ export function LoginForm() {
         </div>
 
         <form onSubmit={handleTwoFactorSubmit} className="flex flex-col gap-6">
-          <CodeInput
-            value={code}
-            onChange={(next) => { setCode(next); setCodeError('') }}
+          <CodeOrBackupInput
+            value={twoFactorMode === 'backup' ? backupCode : code.join('')}
+            onChange={(next) => {
+              if (twoFactorMode === 'backup') setBackupCode(next)
+              else setCode(Array.from({ length: 6 }, (_, i) => next[i] ?? ''))
+              setCodeError('')
+            }}
             onComplete={submitTwoFactorCode}
+            mode={twoFactorMode}
+            onModeChange={(next) => {
+              setTwoFactorMode(next)
+              setCode(EMPTY_CODE)
+              setBackupCode('')
+              setCodeError('')
+            }}
             invalid={!!codeError}
             autoFocus
+            allowBackupCode
           />
 
           {codeError && <p className="text-sm text-status-error -mt-3">{codeError}</p>}
@@ -660,6 +711,13 @@ export function LoginForm() {
     )
   }
 
+  const setPasswordBlock = passwordSubmitBlock({
+    password,
+    confirmPassword,
+    strength: passwordStrength,
+    policy: passwordPolicy,
+  })
+
   if (activeStep === 'password') {
     return (
       <div className="animate-slide-up">
@@ -677,13 +735,15 @@ export function LoginForm() {
             </div>
           )}
 
-          <Input
+          <PasswordField
             label="Password"
-            type="password"
-            placeholder="Min. 8 characters"
-            autoComplete="new-password"
             value={password}
-            onChange={(e) => { setPassword(e.target.value); setPasswordError('') }}
+            onChange={(v) => { setPassword(v); setPasswordError('') }}
+            // The address is all this screen knows about the person — there
+            // is no session yet — and it is the token most likely to end up
+            // inside the password.
+            userInputs={[email]}
+            onStrengthChange={setPasswordStrength}
             error={passwordError}
           />
 
@@ -693,10 +753,27 @@ export function LoginForm() {
             placeholder="Repeat password"
             autoComplete="new-password"
             value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
+            onChange={(e) => { setConfirmPassword(e.target.value); setPasswordError('') }}
+            // live, as soon as both fields differ.
+            error={
+              confirmPassword && password !== confirmPassword
+                ? 'Passwords do not match'
+                : undefined
+            }
           />
 
-          <Button type="submit" size="lg" loading={loading} className="mt-2 w-full">
+          {/* FreeFrame §202 — shared with the other three password forms. Always says
+              why it is blocked, and a pending or unavailable score does not
+              block at all. */}
+          <PasswordSubmitNote reason={setPasswordBlock} />
+
+          <Button
+            type="submit"
+            size="lg"
+            loading={loading}
+            className="mt-2 w-full"
+            disabled={!!setPasswordBlock}
+          >
             Set password &amp; continue
           </Button>
         </form>

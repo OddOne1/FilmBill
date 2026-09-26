@@ -32,6 +32,12 @@ from apps.api.models.user import User, UserGlobalRole, UserStatus
 from apps.api.services import totp_service
 from apps.api.services.auth_service import create_2fa_pending_token
 
+#: "a-real-password-1" has no upper-case letter, so the policy now
+#: refuses it. The recovery walk this file proves is unaffected; only the
+#: password it sets along the way had to become one the policy accepts.
+_POLICY_OK_PASSWORD = "Rv9%nDj4^wLe"
+
+
 _REQUIRE_2FA = "apps.api.routers.auth.require_2fa_enabled"
 _STORE_CODE = "apps.api.routers.auth.store_magic_code"
 #: password-reset codes live in their own Redis pool, so the reset
@@ -70,6 +76,10 @@ def _user(*, email="u@example.com", password_hash="$2b$12$fake", enrolled=False)
     u.two_factor_method = "totp" if enrolled else None
     u.totp_secret_encrypted = None
     u.backup_codes_hashed = None
+    # explicit for the same reason as the 2FA fields: every
+    # MagicMock attribute is truthy, and a mock one here lands inside a
+    # JWT payload, which cannot serialise it.
+    u.token_version = 0
     return u
 
 
@@ -79,9 +89,9 @@ def _send(client, mock_db, *, user, require_2fa, purpose=None, email="u@example.
     if purpose is not None:
         body["purpose"] = purpose
     reset = purpose == "password_reset"
-    with patch(_REQUIRE_2FA, return_value=require_2fa), \
-         patch(_STORE_RESET if reset else _STORE_CODE) as store, \
-         patch(_STORE_CODE if reset else _STORE_RESET) as other_pool, \
+    with patch(_REQUIRE_2FA, return_value=require_2fa),\
+         patch(_STORE_RESET if reset else _STORE_CODE) as store,\
+         patch(_STORE_CODE if reset else _STORE_RESET) as other_pool,\
          patch(_SEND_TASK) as send:
         resp = client.post("/auth/send-magic-code", json=body)
     # The pool this purpose does NOT belong to is never written.
@@ -233,7 +243,7 @@ class TestVerifyMagicCodeNeedsNoGateOfItsOwn:
         )
         mock_db.first.return_value = user
 
-        with patch(_VERIFY_CODE, return_value=(True, "")), \
+        with patch(_VERIFY_CODE, return_value=(True, "")),\
              patch(_REQUIRE_2FA, return_value=True):
             resp = client.post(
                 "/auth/verify-magic-code",
@@ -260,8 +270,8 @@ class TestAPasswordlessUserCanStillGetBackIn:
         mock_db.first.return_value = user
 
         # 1. The reset code is still issued.
-        with patch(_REQUIRE_2FA, return_value=True), \
-             patch(_STORE_RESET) as store, \
+        with patch(_REQUIRE_2FA, return_value=True),\
+             patch(_STORE_RESET) as store,\
              patch(_SEND_TASK):
             sent = client.post(
                 "/auth/send-magic-code",
@@ -273,7 +283,7 @@ class TestAPasswordlessUserCanStillGetBackIn:
         # 2. Redeeming it does NOT sign them in — it lands in the 2FA gate,
         #    which for an unenrolled user on a require_2fa instance means
         #    forced enrolment.
-        with patch(_VERIFY_RESET, return_value=(True, "")), \
+        with patch(_VERIFY_RESET, return_value=(True, "")),\
              patch(_REQUIRE_2FA, return_value=True):
             verified = client.post(
                 "/auth/verify-magic-code",
@@ -296,7 +306,7 @@ class TestAPasswordlessUserCanStillGetBackIn:
         # 4. Now they can set the password they never had.
         resp = client.post(
             "/auth/set-password",
-            json={"password": "a-real-password-1"},
+            json={"password": _POLICY_OK_PASSWORD},
             headers={"Authorization": f"Bearer {tokens['access_token']}"},
         )
         assert resp.status_code == 200
@@ -306,7 +316,7 @@ class TestAPasswordlessUserCanStillGetBackIn:
         with patch(_REQUIRE_2FA, return_value=True):
             login = client.post(
                 "/auth/login",
-                json={"email": user.email, "password": "a-real-password-1"},
+                json={"email": user.email, "password": _POLICY_OK_PASSWORD},
             ).json()
         assert login["requires_2fa"] is True
         assert login["setup_required"] is False

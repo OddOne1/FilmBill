@@ -206,6 +206,10 @@ def _user(*, enrolled=False, secret=None):
     u.two_factor_method = "totp" if enrolled else None
     u.totp_secret_encrypted = totp_service.encrypt_secret(secret) if secret else None
     u.backup_codes_hashed = None
+    # explicit for the same reason as the 2FA fields: every
+    # MagicMock attribute is truthy, and a mock one here lands inside a
+    # JWT payload, which cannot serialise it.
+    u.token_version = 0
     return u
 
 
@@ -213,7 +217,7 @@ class TestTheEndpointsUseTheRightPool:
     def test_a_reset_request_writes_only_the_reset_key(self, client, mock_db, fake_redis):
         mock_db.first.return_value = _user()
 
-        with patch("apps.api.routers.auth.require_2fa_enabled", return_value=False), \
+        with patch("apps.api.routers.auth.require_2fa_enabled", return_value=False),\
              patch("apps.api.routers.auth.send_task_safe"):
             resp = client.post(
                 "/auth/send-magic-code",
@@ -227,7 +231,7 @@ class TestTheEndpointsUseTheRightPool:
     def test_a_login_request_writes_only_the_login_key(self, client, mock_db, fake_redis):
         mock_db.first.return_value = _user()
 
-        with patch("apps.api.routers.auth.require_2fa_enabled", return_value=False), \
+        with patch("apps.api.routers.auth.require_2fa_enabled", return_value=False),\
              patch("apps.api.routers.auth.send_task_safe"):
             resp = client.post("/auth/send-magic-code", json={"email": EMAIL})
 

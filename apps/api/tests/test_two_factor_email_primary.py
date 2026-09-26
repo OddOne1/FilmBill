@@ -34,6 +34,13 @@ _HAS_LIVE_CODE = "apps.api.routers.auth.has_live_2fa_email_code"
 _STORE_CODE = "apps.api.routers.auth.store_2fa_email_code"
 _SEND_TASK = "apps.api.routers.auth.send_task_safe"
 _VERIFY_EMAIL_CODE = "apps.api.routers.auth.verify_2fa_email_code"
+#: ENROLMENT codes live in their own pool, so `/auth/2fa/setup` and
+#: `/auth/2fa/confirm-setup` touch these three, not the challenge pool above.
+#: Patching the wrong pair leaves the real functions reaching a Redis that is
+#: not there; patching only one leaves half the separation unexercised.
+_HAS_LIVE_SETUP_CODE = "apps.api.routers.auth.has_live_2fa_setup_code"
+_STORE_SETUP_CODE = "apps.api.routers.auth.store_2fa_setup_code"
+_VERIFY_SETUP_CODE = "apps.api.routers.auth.verify_2fa_setup_code"
 
 
 def _user(*, enabled=False, method=None, secret=None, backup=None):
@@ -47,15 +54,19 @@ def _user(*, enabled=False, method=None, secret=None, backup=None):
     u.two_factor_method = method
     u.totp_secret_encrypted = totp_service.encrypt_secret(secret) if secret else None
     u.backup_codes_hashed = backup
+    # explicit for the same reason as the 2FA fields: every
+    # MagicMock attribute is truthy, and a mock one here lands inside a
+    # JWT payload, which cannot serialise it.
+    u.token_version = 0
     return u
 
 
 def _login(client, mock_db, user, *, live_code=False):
     mock_db.first.return_value = user
-    with patch(_VERIFY_PASSWORD, return_value=True), \
-         patch(_REQUIRE_2FA, return_value=False), \
-         patch(_HAS_LIVE_CODE, return_value=live_code), \
-         patch(_STORE_CODE) as store, \
+    with patch(_VERIFY_PASSWORD, return_value=True),\
+         patch(_REQUIRE_2FA, return_value=False),\
+         patch(_HAS_LIVE_CODE, return_value=live_code),\
+         patch(_STORE_CODE) as store,\
          patch(_SEND_TASK) as send:
         resp = client.post(
             "/auth/login", json={"email": user.email, "password": "pw123456"}
@@ -64,9 +75,11 @@ def _login(client, mock_db, user, *, live_code=False):
 
 
 def _setup(client, mock_db, user, body):
+    """FreeFrame §204 — an email enrolment writes to the SETUP pool, so that is the one
+    stubbed and the one `store` reports on."""
     mock_db.first.return_value = user
-    with patch(_HAS_LIVE_CODE, return_value=False), \
-         patch(_STORE_CODE) as store, \
+    with patch(_HAS_LIVE_SETUP_CODE, return_value=False),\
+         patch(_STORE_SETUP_CODE) as store,\
          patch(_SEND_TASK) as send:
         resp = client.post("/auth/2fa/setup", json=body)
     return resp, store, send
@@ -87,7 +100,9 @@ def _stage(store, user, method, secret=None):
 
 def _confirm(client, mock_db, user, code, *, email_code_ok=False):
     mock_db.first.return_value = user
-    with patch(_VERIFY_EMAIL_CODE, return_value=(email_code_ok, "")):
+    # confirm-setup verifies against the SETUP pool only, which is
+    # exactly what stops a login-challenge code from completing an enrolment.
+    with patch(_VERIFY_SETUP_CODE, return_value=(email_code_ok, "")):
         return client.post(
             "/auth/2fa/confirm-setup",
             json={"code": code, "pending_token": create_2fa_pending_token(str(user.id))},
@@ -164,8 +179,8 @@ class TestLoginMailsTheCodeForAnEmailPrimaryUser:
         choosing one is what the enrolment screen is for."""
         user = _user(enabled=False)
         mock_db.first.return_value = user
-        with patch(_VERIFY_PASSWORD, return_value=True), \
-             patch(_REQUIRE_2FA, return_value=True), \
+        with patch(_VERIFY_PASSWORD, return_value=True),\
+             patch(_REQUIRE_2FA, return_value=True),\
              patch(_STORE_CODE) as store:
             resp = client.post(
                 "/auth/login", json={"email": user.email, "password": "pw123456"}
@@ -322,8 +337,8 @@ class TestTheFallbackEndpointStillForces:
         user = _user(enabled=True, method="email")
         mock_db.first.return_value = user
 
-        with patch(_HAS_LIVE_CODE, return_value=True) as live, \
-             patch(_STORE_CODE) as store, \
+        with patch(_HAS_LIVE_CODE, return_value=True) as live,\
+             patch(_STORE_CODE) as store,\
              patch(_SEND_TASK) as send:
             resp = client.post(
                 "/auth/2fa/send-email-fallback",
