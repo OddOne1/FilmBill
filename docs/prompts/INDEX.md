@@ -126,9 +126,13 @@ files had.
   auth screen it sits on is `#ffffff` in light theme and `#0d0d10` in dark.
   The accent clears 3:1 against both at that size, and it needs no change to
   `app/(auth)/layout.tsx`'s `<Image>`, keeping "the file names so nothing else
-  needs touching" true. The light/dark pairing of the icon files is unchanged:
-  `logo-icon.png` is light ink for `[data-theme="dark"]`, `logo-icon-dark.png`
-  dark ink for `[data-theme="light"]`.
+  needs touching" true. `logo-icon.png` is the accent for the same reason and
+  one more: `app/layout.tsx` uses it as the DEFAULT FAVICON when no custom one
+  is set, so it has to read on a light browser tab strip as well as in the
+  dark-theme sidebar. Rendered in the light ink its role in the sidebar would
+  suggest, it was invisible in a light tab bar. `logo-icon-dark.png` keeps the
+  dark ink `[data-theme="light"]` wants; the components' light/dark switching
+  is untouched.
 
 **A FreeFrame sweep outside comments and test docstrings** found no remaining
 user-visible string, alt text, page title, email template or manifest entry.
