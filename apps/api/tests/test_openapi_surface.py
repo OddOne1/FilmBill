@@ -26,7 +26,7 @@ from fastapi.openapi.utils import get_openapi
 
 SNAPSHOT = Path(__file__).resolve().parent / "snapshots" / "openapi_paths.txt"
 
-#: Every tag this API is allowed to expose in P0a.
+#: Every tag this API is allowed to expose.
 #:
 #: Derived from what survived the port, not from a wish list. Two notes for
 #: whoever compares this against the P0a prompt, which anticipated a slightly
@@ -45,6 +45,13 @@ SNAPSHOT = Path(__file__).resolve().parent / "snapshots" / "openapi_paths.txt"
 EXPECTED_TAGS = {
     "admin",
     "auth",           # includes every /auth/2fa/* endpoint
+    #: P0b-1. Two path shapes under one tag: `/companies` (plural) for the
+    #: two operations with no company context — listing yours, creating one —
+    #: and `/company/...` (singular) for everything that acts inside the
+    #: company named by `X-Company-Id`. tests/test_company_isolation.py
+    #: derives its case list from exactly this tag, so an endpoint added here
+    #: without an isolation case fails that file.
+    "companies",
     "email-settings",
     "events",
     "files",

@@ -1,11 +1,15 @@
 # The complete FilmBill API surface, one line per operation.
 # Regenerate with: python -m apps.api.tests.test_openapi_surface
 # See that file for why this is a snapshot rather than a grep.
+DELETE /company/members/{membership_id}
 DELETE /users/{user_id}
 GET /admin/users
 GET /auth/invite/{token}
 GET /auth/me
 GET /auth/password-policy
+GET /companies
+GET /company
+GET /company/members
 GET /email-settings
 GET /events/me
 GET /files/object/{path}
@@ -23,6 +27,8 @@ PATCH /admin/users/{user_id}/disable-2fa
 PATCH /admin/users/{user_id}/reactivate
 PATCH /admin/users/{user_id}/role
 PATCH /auth/me/preferences
+PATCH /company
+PATCH /company/members/{membership_id}
 PATCH /email-settings
 PATCH /site-settings
 PATCH /users/{user_id}
@@ -45,6 +51,8 @@ POST /auth/register
 POST /auth/send-magic-code
 POST /auth/set-password
 POST /auth/verify-magic-code
+POST /companies
+POST /company/members
 POST /email-settings/test
 POST /me/notifications/read-all
 POST /me/notifications/{notification_id}/read

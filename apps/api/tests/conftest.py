@@ -10,6 +10,7 @@ import sys
 import uuid
 import pytest
 from datetime import datetime, timezone
+from contextlib import contextmanager
 from unittest.mock import patch, MagicMock
 
 # Set required environment variables BEFORE importing the app modules.
@@ -267,3 +268,159 @@ def auth_headers(client, mock_db, test_user):
     yield {"Authorization": f"Bearer {token}"}
     # Cleanup: remove get_current_user override but keep get_db override
     app.dependency_overrides.pop(get_current_user, None)
+
+
+# ─── A real database, for the tests that cannot use a double ────────────────
+#
+# CLAUDE.md 17b, stated for this suite: **a MagicMock session cannot prove
+# that a query filters by `company_id`.** It returns whatever `.first()` was
+# told to return, for every filter and for none. Every cross-company test
+# written against the `mock_db` fixture above would pass against a router with
+# the scoping deleted, which makes it a test of the harness and not of the
+# system — the exact shape that bit FreeFrame three times in one day.
+#
+# So the company-scoping, permission-matrix, 2FA-policy, session-invalidation
+# and expiry tests run against Postgres. Real tables, real foreign keys, real
+# `WHERE company_id = ...`. Where there is no Postgres they SKIP rather than
+# pass, because a green line for a check that did not run is worse than a
+# missing one.
+#
+# The scratch database is created and dropped by these fixtures and is NOT the
+# one `DATABASE_URL` names — that database is left alone so that CI's
+# `alembic upgrade head` step, which runs after pytest against the very same
+# URL, still meets an empty schema.
+
+#: The scratch database's name. Distinct from anything a person would run a
+#: dev stack on, and dropped at both ends of the session so a crashed run
+#: cannot poison the next one.
+_SCRATCH_DB = "filmbill_pytest_scratch"
+
+
+def _with_database(url: str, name: str) -> str:
+    from urllib.parse import urlsplit, urlunsplit
+
+    return urlunsplit(urlsplit(url)._replace(path=f"/{name}"))
+
+
+@pytest.fixture(scope="session")
+def pg_engine():
+    """An engine on a scratch database with every table created, or skip."""
+    from sqlalchemy import create_engine, text
+
+    base_url = os.environ["DATABASE_URL"]
+    # Connect to `postgres`, the maintenance database every server has, to
+    # issue CREATE DATABASE — which cannot run inside a transaction, hence
+    # AUTOCOMMIT.
+    admin = create_engine(
+        _with_database(base_url, "postgres"), isolation_level="AUTOCOMMIT"
+    )
+    try:
+        with admin.connect() as conn:
+            conn.execute(text(f'DROP DATABASE IF EXISTS "{_SCRATCH_DB}"'))
+            conn.execute(text(f'CREATE DATABASE "{_SCRATCH_DB}"'))
+    except Exception as exc:  # pragma: no cover - environment-dependent
+        admin.dispose()
+        pytest.skip(f"no Postgres available for the real-database suite: {exc}")
+
+    from apps.api.database import Base
+    import apps.api.models  # noqa: F401  — registers every table on Base
+
+    engine = create_engine(_with_database(base_url, _SCRATCH_DB))
+    Base.metadata.create_all(engine)
+
+    yield engine
+
+    engine.dispose()
+    with admin.connect() as conn:
+        conn.execute(text(f'DROP DATABASE IF EXISTS "{_SCRATCH_DB}"'))
+    admin.dispose()
+
+
+@pytest.fixture
+def pg_db(pg_engine):
+    """A real Session, with the APP's own `SessionLocal` pointed at it too.
+
+    Overriding `get_db` is not enough on its own. `AccountGateMiddleware` and
+    `SetupGuardMiddleware` open their own sessions through
+    `apps.api.database.SessionLocal` — they run before any route, so there is
+    no dependency for them to take — and a test whose middleware talks to a
+    different database than its handler is not testing the app it ships.
+
+    `setup_guard._setup_complete` is reset around each test because it is a
+    process-global cache: one test creating a superadmin would otherwise
+    switch the guard off for every test that follows, including the ones that
+    are meant to meet it.
+    """
+    from sqlalchemy.orm import sessionmaker
+
+    import apps.api.database as database
+    from apps.api.database import Base
+    from apps.api.middleware import setup_guard
+
+    Session = sessionmaker(autocommit=False, autoflush=False, bind=pg_engine)
+
+    previous = (database.engine, database.SessionLocal, setup_guard._setup_complete)
+    database.engine = pg_engine
+    database.SessionLocal = Session
+    setup_guard._setup_complete = False
+
+    session = Session()
+    try:
+        yield session
+    finally:
+        session.close()
+        # Truncate in reverse dependency order so foreign keys never block it.
+        with pg_engine.begin() as conn:
+            for table in reversed(Base.metadata.sorted_tables):
+                conn.execute(table.delete())
+        database.engine, database.SessionLocal, setup_guard._setup_complete = previous
+
+
+@pytest.fixture
+def pg_client(pg_db):
+    """A TestClient wired to the real session above.
+
+    S3 is still patched: nothing in the company layer touches a bucket, and
+    an unreachable MinIO would fail the app's lifespan rather than the test.
+    """
+    with patch("apps.api.services.s3_service.ensure_bucket_exists"), \
+         patch("apps.api.services.s3_service.get_s3_client", return_value=MagicMock()):
+        from fastapi.testclient import TestClient
+
+        from apps.api.database import get_db
+        from apps.api.main import app
+
+        app.dependency_overrides[get_db] = lambda: pg_db
+        client = TestClient(app, raise_server_exceptions=False)
+        yield client
+        app.dependency_overrides.clear()
+
+
+# ─── Driving the instance-wide 2FA switch from a test ────────────────────────
+
+
+@contextmanager
+def require_2fa(value: bool):
+    """Set `site_settings.require_2fa` for the duration, at BOTH readers.
+
+    There are genuinely two, and P0b-1 is what made the difference matter:
+
+      * `_login_outcome` asks `two_factor_required_for`, which lives in
+        `services/site_settings_service.py` and consults the company roles as
+        well as the switch;
+      * `send_magic_code` keeps its own direct `require_2fa_enabled` import,
+        because that gate is instance-wide policy about which credentials this
+        install offers at all and deliberately did NOT become per-person.
+
+    Patching only the router's name — which is what these tests did before —
+    left the login branch reading the mock session, where every attribute is a
+    truthy MagicMock, so every plain login came back as forced 2FA enrolment.
+    The tests caught it, which is the point; this helper is the fix, and it
+    keeps the REAL `two_factor_required_for` in the path so its role branch is
+    still the thing being exercised.
+    """
+    with patch(
+        "apps.api.services.site_settings_service.require_2fa_enabled",
+        return_value=value,
+    ), patch("apps.api.routers.auth.require_2fa_enabled", return_value=value):
+        yield

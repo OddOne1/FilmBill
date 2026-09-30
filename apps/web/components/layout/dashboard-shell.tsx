@@ -2,6 +2,10 @@
 
 import * as React from "react";
 import { useAuthStore } from "@/stores/auth-store";
+import {
+  ACTIVE_COMPANY_PREFERENCE_KEY,
+  useCompanyStore,
+} from "@/stores/company-store";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 import { CommandPalette } from "@/components/layout/command-palette";
@@ -26,6 +30,7 @@ export function DashboardShell({
   const [sidebarCollapsed, setSidebarCollapsed] = React.useState(true);
   const [commandOpen, setCommandOpen] = React.useState(false);
   const { fetchUser, user } = useAuthStore();
+  const loadCompanies = useCompanyStore((state) => state.load);
 
   // Read from /auth/me, which computes it server-side from the stored
   // data. This is presentation: middleware/account_gate.py already answers
@@ -37,6 +42,24 @@ export function DashboardShell({
   React.useEffect(() => {
     fetchUser();
   }, [fetchUser]);
+
+  // AFTER the user, and only once they are past the gate.
+  //
+  // The order matters in both directions. /companies is a protected route,
+  // so calling it while the account gate is up returns 403 and the switcher
+  // would spend the whole gate showing an error about companies — which is
+  // not the problem the person has. And the remembered company id lives in
+  // `user.preferences`, so there is nothing to remember until /auth/me has
+  // answered.
+  const remembered = user?.preferences?.[ACTIVE_COMPANY_PREFERENCE_KEY];
+  React.useEffect(() => {
+    if (!user || gated) return;
+    void loadCompanies(typeof remembered === "string" ? remembered : null);
+    // Keyed on the user's id, not on the whole object: /auth/me is re-fetched
+    // on several occasions and a new object identity each time would reload
+    // the company list on every one of them.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, gated, loadCompanies]);
 
   // Global keyboard shortcut for command palette
   React.useEffect(() => {

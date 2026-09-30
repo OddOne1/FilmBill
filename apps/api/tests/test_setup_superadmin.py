@@ -38,8 +38,60 @@ def empty_system(mock_db):
 
 
 def _captured_user(mock_db):
+    """The User among everything setup adds.
+
+    Picked by type rather than taken as the last `add` call: since P0b-1
+    `create_superadmin` also creates the first Company and the Owner
+    CompanyMembership in the same transaction, so `call_args` is the
+    membership and `call_args_list[0]` would be an ordering assumption that
+    silently breaks the day the order changes.
+    """
+    from apps.api.models.user import User
+
     assert mock_db.add.called, "no User was ever added"
-    return mock_db.add.call_args[0][0]
+    users = [
+        call.args[0]
+        for call in mock_db.add.call_args_list
+        if call.args and isinstance(call.args[0], User)
+    ]
+    assert len(users) == 1, f"expected exactly one User to be added, got {len(users)}"
+    return users[0]
+
+
+def _captured_company(mock_db):
+    """The Company setup creates alongside the superadmin, or None."""
+    from apps.api.models.company import Company
+
+    companies = [
+        call.args[0]
+        for call in mock_db.add.call_args_list
+        if call.args and isinstance(call.args[0], Company)
+    ]
+    return companies[0] if companies else None
+
+
+def test_setup_also_creates_the_first_company(client, empty_system):
+    """P0b-1 §1 — an install is usable from its first login.
+
+    Every business route resolves its company from `X-Company-Id`; with no
+    company there is no id to send, and the app would be a dashboard with
+    nothing behind it. Named after the instance, because this form asks for a
+    person and not for a company.
+
+    The Owner membership that goes with it is asserted against a real
+    database in test_company_members.py — a MagicMock session cannot show
+    that two rows landed in one transaction.
+    """
+    client.post("/setup/create-superadmin", json={
+        "email": "first@example.com",
+        "first_name": "Ada",
+        "last_name": "Lovelace",
+        "password": _POLICY_OK_PASSWORD,
+    })
+
+    company = _captured_company(empty_system)
+    assert company is not None, "setup created no company"
+    assert company.legal_name == "FilmBill"
 
 
 def test_creates_a_superadmin_from_first_and_last_name(client, empty_system):

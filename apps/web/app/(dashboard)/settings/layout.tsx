@@ -3,15 +3,25 @@
 import * as React from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { User, Bell, Shield, Palette, Brush, LayoutTemplate } from 'lucide-react'
+import { User, Bell, Shield, Palette, Brush, LayoutTemplate, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
+import { usePermissions } from '@/hooks/use-permissions'
 
 interface SettingsNavItem {
   href: string
   label: string
   icon: React.ElementType
+  /** Gated on the INSTALLATION role (User.role === superadmin): branding,
+   *  design, user administration. Nothing to do with companies. */
   adminOnly?: boolean
+  /** Gated on a COMPANY permission in the company currently active.
+   *
+   *  The two are separate on purpose and must stay so — an installation
+   *  administrator is not automatically anything inside a company, and a
+   *  company owner is not automatically anything on the installation. See
+   *  apps/api/services/permissions.py. */
+  permission?: string
 }
 
 /**
@@ -36,6 +46,14 @@ const settingsNavGroups: SettingsNavItem[][] = [
     { href: '/settings/design', label: 'Design', icon: LayoutTemplate, adminOnly: true },
   ],
   [
+    {
+      href: '/settings/company/members',
+      label: 'Members',
+      icon: Users,
+      permission: 'company.members.manage',
+    },
+  ],
+  [
     { href: '/settings/admin', label: 'Admin', icon: Shield, adminOnly: true },
   ],
 ]
@@ -47,12 +65,22 @@ export default function SettingsLayout({
 }) {
   const pathname = usePathname()
   const { user, isSuperAdmin } = useAuthStore()
+  const { can, loaded: companiesLoaded } = usePermissions()
 
   // Filter first, then drop empty groups, so the dividers below can be a
   // simple "every group after the first" rule.
   const visibleGroups = settingsNavGroups
     .map((group) =>
-      group.filter((item) => !(item.adminOnly && !isSuperAdmin)),
+      group.filter((item) => {
+        if (item.adminOnly && !isSuperAdmin) return false
+        // Hidden until the company list has answered rather than shown and
+        // then withdrawn — same reasoning as the main sidebar's Archive
+        // entry.
+        if (item.permission && !(companiesLoaded && can(item.permission))) {
+          return false
+        }
+        return true
+      }),
     )
     .filter((group) => group.length > 0)
 

@@ -13,6 +13,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from ..models.site_settings import SiteSettings
+from .company_service import two_factor_required_by_membership
 
 
 def _settings(db: Session) -> Optional[SiteSettings]:
@@ -31,20 +32,39 @@ def require_2fa_enabled(db: Session) -> bool:
 
 
 def two_factor_required_for(db: Session, user) -> bool:
-    """Whether THIS user may not turn their own two-factor off.
+    """Whether THIS user must have two-factor authentication.
 
-    One call site for the whole policy, and `user` is taken even though
-    nothing reads it yet. That is deliberate: FreeFrame's port extends this to
-    per-role requirements, and a signature that already carries the subject
-    makes that a one-line change here instead of a hunt through every caller.
+    One call site for the whole policy, and the signature has carried `user`
+    since before anything read it — which is what made P0b-1 a change to this
+    function's body rather than a hunt through every caller.
 
-    Reading `require_2fa` inline at the endpoint would have been shorter and
-    is exactly what this avoids — the flag is consulted in three places
-    already (login, magic-code, the admin toggle) and each one means something
-    slightly different by it. This one means "may this person remove their own
-    second factor", which is a question about a user, not about a flag.
+    Two independent reasons, either one sufficient:
+
+      1. the instance requires it of everyone (`site_settings.require_2fa`);
+      2. this user holds a company role that requires it — `tax_advisor`
+         anywhere, always, plus any role a company lists in its own
+         `require_2fa_roles`.
+
+    Reason 2 is DERIVED from `company_memberships` on every call, never from a
+    flag on `users`. A stored flag would survive the revocation that should
+    clear it (CLAUDE.md rule 6's spirit, and §4 of the P0b-1 prompt says so
+    outright).
+
+    Reading `require_2fa` inline at an endpoint would have been shorter and is
+    exactly what this avoids — the flag is consulted in three places already
+    (login, magic-code, the admin toggle) and each one means something
+    slightly different by it. This one means "does the policy apply to this
+    person", which is a question about a user, not about a flag, and the two
+    answers stopped coinciding the moment company roles arrived.
+
+    NOT consulted by `/auth/send-magic-code`. That endpoint's gate is an
+    instance-wide policy switch about which credentials this install offers at
+    all; making it per-person would refuse a role-required user the very code
+    they need in order to sign in and enrol. See its own docstring.
     """
-    return require_2fa_enabled(db)
+    if require_2fa_enabled(db):
+        return True
+    return two_factor_required_by_membership(db, user)
 
 
 def instance_org_name(db: Session) -> str:

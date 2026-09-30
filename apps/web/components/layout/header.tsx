@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import { Search, ChevronRight } from 'lucide-react'
 import Link from 'next/link'
 import { useBreadcrumbStore } from '@/stores/breadcrumb-store'
+import { CompanySwitcher } from './company-switcher'
 
 interface HeaderProps {
   onSearchOpen: () => void
@@ -89,6 +90,10 @@ export function Header({ onSearchOpen }: HeaderProps) {
 
       {/* Right side actions */}
       <div className="flex items-center gap-1.5">
+        {/* Which company this app is acting in. Renders nothing at all when
+            there is only one, which is most installations. */}
+        <CompanySwitcher />
+
         {/* Search trigger */}
         <button
           onClick={onSearchOpen}

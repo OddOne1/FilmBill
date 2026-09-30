@@ -30,7 +30,13 @@ _VERIFY_PATCH = "apps.api.routers.auth.verify_password"
 #: about the mail itself. The mail is the subject of
 #: tests/test_code_email_copy.py, which asserts on rendered output.
 _SEND_CODE = "apps.api.routers.auth._send_2fa_email_code"
-_REQUIRE_2FA_PATCH = "apps.api.routers.auth.require_2fa_enabled"
+#: Driving the instance-wide switch now goes through `conftest.require_2fa`,
+#: which sets it at BOTH readers. Since P0b-1 `_login_outcome` asks
+#: `two_factor_required_for` (services/site_settings_service) rather than the
+#: router's own `require_2fa_enabled` import, and patching only the latter left
+#: the login branch reading the mock session — where every attribute is truthy,
+#: so every plain login came back as forced enrolment. See that helper.
+from .conftest import require_2fa as _require_2fa_switch
 
 
 def _user(
@@ -75,7 +81,7 @@ def _stage(store, user, secret, method="totp"):
 def _login(client, mock_db, user, *, require_2fa=False):
     mock_db.first.return_value = user
     with patch(_VERIFY_PATCH, return_value=True), \
-         patch(_REQUIRE_2FA_PATCH, return_value=require_2fa):
+         _require_2fa_switch(require_2fa):
         return client.post(
             "/auth/login", json={"email": user.email, "password": "pw123456"}
         )
@@ -97,7 +103,7 @@ class TestNothingChangesUntilItIsTurnedOn:
     def test_a_wrong_password_is_still_just_a_401(self, client, mock_db):
         mock_db.first.return_value = _user()
         with patch(_VERIFY_PATCH, return_value=False), \
-             patch(_REQUIRE_2FA_PATCH, return_value=False):
+             _require_2fa_switch(False):
             resp = client.post(
                 "/auth/login", json={"email": "u@example.com", "password": "wrong"}
             )

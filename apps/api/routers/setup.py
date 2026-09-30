@@ -12,6 +12,7 @@ from ..models.user import User, UserStatus, UserGlobalRole
 from ..services.auth_service import hash_password, create_access_token, create_refresh_token
 from ..services.password_policy import PasswordPolicyError, validate_password
 from ..services.site_settings_service import instance_org_name
+from ..services.company_service import create_company
 from ..schemas.auth import TokenResponse
 from ..middleware.rate_limit import rate_limit
 
@@ -142,6 +143,24 @@ def create_superadmin(body: CreateSuperAdminRequest, db: Session = Depends(get_d
         email_verified=True,  # Skip verification for initial setup
     )
     db.add(user)
+    db.flush()
+
+    # P0b-1 — the first company, with this superadmin as its Owner.
+    #
+    # An installation with no company can do nothing: every business route
+    # resolves its company from `X-Company-Id`, and there would be no id to
+    # send. Creating one here means a fresh install is usable from its first
+    # login rather than from a step somebody has to know about.
+    #
+    # Named after the instance ("FilmBill" until Branding is set), because
+    # this form asks for a person, not a company. Renaming it is the first
+    # thing Settings -> Company offers, and `POST /companies` makes more.
+    #
+    # In the SAME transaction as the user. A superadmin committed without a
+    # company, on an install where this endpoint then refuses to run again,
+    # is the one failure here that would need SQL to repair.
+    create_company(db, owner=user, legal_name=instance_org_name(db))
+
     db.commit()
     db.refresh(user)
     

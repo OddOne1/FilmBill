@@ -7,11 +7,13 @@ import {
   LayoutDashboard,
   Bell,
   ChevronsLeft,
+  Archive,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 import { useNotificationStore } from '@/stores/notification-store'
 import { useSiteSettings } from '@/hooks/use-site-settings'
+import { usePermissions } from '@/hooks/use-permissions'
 import { useThemeStore } from '@/stores/theme-store'
 import { Avatar } from '@/components/shared/avatar'
 import { NotificationDrawer } from './notification-drawer'
@@ -20,12 +22,26 @@ interface NavItem {
   href: string
   label: string
   icon: React.ElementType
+  /** The company permission this entry needs, if any.
+   *
+   *  Undefined means "everyone in the company sees it" — not "no check".
+   *  The distinction matters because every gated entry leads to endpoints
+   *  that enforce the same key server-side; this only decides what to draw,
+   *  so a wrong answer here shows a menu item that 404s rather than opening
+   *  anything. */
+  permission?: string
 }
 
-// One entry in P0a. Parties, Catalog, Projects, Documents and Archive land
-// with the phases that build them (SCOPE §13); each one is a line here.
+// Parties, Catalog, Projects and Documents land with the phases that build
+// them (SCOPE §13); each one is a line here.
+//
+// Archive is present from P0b-1 even though P5 fills it in, because
+// `archive.view` is a tax advisor's ONLY permission — without this entry
+// their sidebar is empty and a correctly restricted account is
+// indistinguishable from a broken one.
 const navItems: NavItem[] = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/archive', label: 'Archive', icon: Archive, permission: 'archive.view' },
 ]
 
 interface SidebarProps {
@@ -39,6 +55,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const { unreadCount, fetchNotifications } = useNotificationStore()
   const { orgName, logoDarkUrl, logoLightUrl } = useSiteSettings()
   const { resolvedTheme } = useThemeStore()
+  const { can, loaded: companiesLoaded } = usePermissions()
     // Pick logo based on resolved theme; fall back to the other if only one is set.
     // Uses resolvedTheme (not theme) because theme can be 'system', which never
     // strictly equals 'light' — that bug pinned the logo to the dark variant
@@ -107,7 +124,13 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto overflow-x-hidden py-2 px-2 space-y-0.5">
-        {navItems.map((item) => {
+        {navItems
+          // Hidden until the company list has answered, rather than shown
+          // and then removed: an entry that appears for a moment and
+          // vanishes reads as a bug, and for a tax advisor the flicker would
+          // be the whole sidebar.
+          .filter((item) => !item.permission || (companiesLoaded && can(item.permission)))
+          .map((item) => {
           const isActive =
             item.href === '/' ? pathname === '/' : pathname.startsWith(item.href)
           const Icon = item.icon

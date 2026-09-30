@@ -2,6 +2,30 @@ import { getAccessToken, refreshAccessToken } from './auth'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
+/**
+ * The company every request acts in, attached here and nowhere else.
+ *
+ * A module-level value with a setter rather than a read of the company store,
+ * deliberately: the store imports this module, so reading it back would be a
+ * cycle, and this file has no business knowing about zustand. The store calls
+ * `setActiveCompanyId` whenever the active company changes — see
+ * stores/company-store.ts, which is the single writer.
+ *
+ * ONE call site for the header is the whole point (P0b-1 §2). A per-call-site
+ * header is a header somebody forgets, and the request that forgets it is not
+ * a visible bug — it is a 400, or worse, an endpoint that later grows a
+ * fallback and starts answering for the wrong company.
+ */
+let activeCompanyId: string | null = null
+
+export function setActiveCompanyId(id: string | null): void {
+  activeCompanyId = id
+}
+
+export function getActiveCompanyId(): string | null {
+  return activeCompanyId
+}
+
 export class ApiError extends Error {
   status: number
   detail: string
@@ -31,6 +55,14 @@ async function request<T>(
     }
     if (token) {
       headers['Authorization'] = `Bearer ${token}`
+    }
+    // Omitted rather than sent empty when no company is active yet: the
+    // server reads a blank header as a broken client and answers 400, while
+    // an absent one is simply a request with no company context — which is
+    // exactly right for /auth/me and /companies, the two things the app
+    // fetches before it knows which company it is in.
+    if (activeCompanyId) {
+      headers['X-Company-Id'] = activeCompanyId
     }
     return headers
   }
@@ -99,6 +131,10 @@ async function uploadRequest<T>(path: string, formData: FormData): Promise<T> {
   const buildHeaders = (token: string | null): Record<string, string> => {
     const headers: Record<string, string> = {}
     if (token) headers['Authorization'] = `Bearer ${token}`
+    // The same header as `request` above. An upload is a request like any
+    // other and lands in a company like any other; leaving it out here is
+    // how one code path ends up unscoped while its neighbour is fine.
+    if (activeCompanyId) headers['X-Company-Id'] = activeCompanyId
     return headers
   }
 

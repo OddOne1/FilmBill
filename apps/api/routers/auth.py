@@ -710,7 +710,14 @@ def _login_outcome(db: Session, user: User, *, via: str = VIA_PASSWORD) -> Login
             email_code_sent=sent,
         )
 
-    if require_2fa_enabled(db):
+    if two_factor_required_for(db, user):
+        # `two_factor_required_for`, not `require_2fa_enabled`: since P0b-1
+        # the requirement can come from this user's company roles as well as
+        # from the instance-wide switch, and forced enrolment has to fire for
+        # both. Nothing else about this branch changed — an emailed magic code
+        # and a password land here identically, which is what `_login_outcome`
+        # being shared is for.
+        #
         # Enrolment is forced, not refused: locking out everyone the moment
         # an admin flips the switch would make the switch unusable.
         # No `method`: the user has not chosen one, and choosing is what the

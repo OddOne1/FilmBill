@@ -379,3 +379,87 @@ export interface Notification {
   read: boolean;
   created_at: string;
 }
+
+// ─── Companies (P0b-1) ──────────────────────────────────────────────────────
+//
+// Still hand-written, like everything above, and for the same reason: the
+// OpenAPI generator lands in P0b-2 (CLAUDE.md rule 10), which is the change
+// that deletes this whole file. These shapes are here so the company layer
+// is typed in the meantime rather than reaching for `any` and leaving that
+// behind after the generator arrives.
+
+/** Authority inside ONE company. Entirely separate from `UserGlobalRole`,
+ *  which is authority over the INSTALLATION — a superadmin is not a member of
+ *  any company until someone adds them. */
+export type CompanyRole =
+  | "owner"
+  | "admin"
+  | "accountant"
+  | "producer"
+  | "staff"
+  | "tax_advisor";
+
+/** One entry in the company switcher, as GET /companies returns it. */
+export interface CompanySummary {
+  id: string;
+  legal_name: string;
+  trading_name: string | null;
+  display_name: string;
+  default_currency: string;
+  role: CompanyRole;
+  /** Dotted permission keys the caller holds here, computed server-side from
+   *  apps/api/services/permissions.py.
+   *
+   *  Presentation only. Every endpoint runs its own check, so a client that
+   *  ignored this would be a client whose extra menu entries all answer 404 —
+   *  never one that reached something it should not. */
+  permissions: string[];
+  /** When the caller's OWN access to this company lapses, if it does. */
+  expires_at: string | null;
+}
+
+/** The full company record, as GET /company returns it. */
+export interface Company {
+  id: string;
+  legal_name: string;
+  trading_name: string | null;
+  legal_form: string | null;
+  register_number: string | null;
+  register_court: string | null;
+  vat_id: string | null;
+  tax_number: string | null;
+  address_street: string | null;
+  address_zip: string | null;
+  address_city: string | null;
+  address_country: string | null;
+  email: string | null;
+  phone: string | null;
+  website: string | null;
+  default_currency: string;
+  default_language: string;
+  fiscal_year_start_month: number;
+  timezone: string;
+  logo_s3_key: string | null;
+  require_2fa_roles: CompanyRole[];
+  tax_advisor_reports: boolean;
+  created_at: string;
+  archived_at: string | null;
+}
+
+/** A membership row, as the Members screen shows it. */
+export interface CompanyMember {
+  id: string;
+  user_id: string;
+  email: string;
+  name: string;
+  role: CompanyRole;
+  status: UserStatus;
+  granted_at: string;
+  expires_at: string | null;
+  revoked_at: string | null;
+  /** Whether the row grants anything right now — computed server-side from
+   *  `expires_at` and `revoked_at` so two clients cannot derive it
+   *  differently. */
+  is_active: boolean;
+  two_factor_enabled: boolean;
+}

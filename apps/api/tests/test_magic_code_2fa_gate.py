@@ -21,7 +21,13 @@ from apps.api.models.user import UserStatus
 from apps.api.services import totp_service
 
 _REDIS_OK = "apps.api.routers.auth.redis_verify_magic_code"
-_REQUIRE_2FA = "apps.api.routers.auth.require_2fa_enabled"
+#: Driving the instance-wide switch now goes through `conftest.require_2fa`,
+#: which sets it at BOTH readers. Since P0b-1 `_login_outcome` asks
+#: `two_factor_required_for` (services/site_settings_service) rather than the
+#: router's own `require_2fa_enabled` import, and patching only the latter left
+#: the login branch reading the mock session — where every attribute is truthy,
+#: so every plain login came back as forced enrolment. See that helper.
+from .conftest import require_2fa as _require_2fa_switch
 
 
 def _user(*, two_factor_enabled=False, password_hash="$2b$12$fake", email="u@example.com"):
@@ -53,7 +59,7 @@ def _user(*, two_factor_enabled=False, password_hash="$2b$12$fake", email="u@exa
 def _verify(client, mock_db, user, *, require_2fa=False):
     mock_db.first.return_value = user
     with patch(_REDIS_OK, return_value=(True, "")),\
-         patch(_REQUIRE_2FA, return_value=require_2fa):
+         _require_2fa_switch(require_2fa):
         return client.post(
             "/auth/verify-magic-code",
             json={"email": user.email, "code": "123456"},
@@ -331,7 +337,7 @@ class TestTheBranchIsActuallyShared:
         ):
             user = _user(two_factor_enabled=enrolled)
             mock_db.first.return_value = user
-            with patch(_REQUIRE_2FA, return_value=require_2fa),\
+            with _require_2fa_switch(require_2fa),\
                  patch("apps.api.routers.auth.verify_password", return_value=True):
                 by_password = client.post(
                     "/auth/login",
@@ -340,7 +346,7 @@ class TestTheBranchIsActuallyShared:
 
             user = _user(two_factor_enabled=enrolled)
             mock_db.first.return_value = user
-            with patch(_REQUIRE_2FA, return_value=require_2fa),\
+            with _require_2fa_switch(require_2fa),\
                  patch(_REDIS_OK, return_value=(True, "")):
                 by_code = client.post(
                     "/auth/verify-magic-code",

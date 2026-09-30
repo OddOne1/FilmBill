@@ -26,6 +26,14 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+#: Driving the instance-wide switch now goes through `conftest.require_2fa`,
+#: which sets it at BOTH readers. Since P0b-1 `_login_outcome` asks
+#: `two_factor_required_for` (services/site_settings_service) rather than the
+#: router's own `require_2fa_enabled` import, and patching only the latter left
+#: the login branch reading the mock session — where every attribute is truthy,
+#: so every plain login came back as forced enrolment. See that helper.
+from .conftest import require_2fa
+
 from apps.api.models.user import UserGlobalRole, UserStatus
 from apps.api.services import redis_service as rs
 from apps.api.services import totp_service
@@ -217,7 +225,7 @@ class TestTheEndpointsUseTheRightPool:
     def test_a_reset_request_writes_only_the_reset_key(self, client, mock_db, fake_redis):
         mock_db.first.return_value = _user()
 
-        with patch("apps.api.routers.auth.require_2fa_enabled", return_value=False),\
+        with require_2fa(False),\
              patch("apps.api.routers.auth.send_task_safe"):
             resp = client.post(
                 "/auth/send-magic-code",
@@ -231,7 +239,7 @@ class TestTheEndpointsUseTheRightPool:
     def test_a_login_request_writes_only_the_login_key(self, client, mock_db, fake_redis):
         mock_db.first.return_value = _user()
 
-        with patch("apps.api.routers.auth.require_2fa_enabled", return_value=False),\
+        with require_2fa(False),\
              patch("apps.api.routers.auth.send_task_safe"):
             resp = client.post("/auth/send-magic-code", json={"email": EMAIL})
 
@@ -243,7 +251,7 @@ class TestTheEndpointsUseTheRightPool:
         mock_db.first.return_value = _user()
         rs.store_password_reset_code(EMAIL, "222222")
 
-        with patch("apps.api.routers.auth.require_2fa_enabled", return_value=False):
+        with require_2fa(False):
             wrong_pool = client.post(
                 "/auth/verify-magic-code",
                 json={"email": EMAIL, "code": "222222"},
@@ -262,7 +270,7 @@ class TestTheEndpointsUseTheRightPool:
         mock_db.first.return_value = _user()
         rs.store_magic_code(EMAIL, "111111")
 
-        with patch("apps.api.routers.auth.require_2fa_enabled", return_value=False):
+        with require_2fa(False):
             resp = client.post(
                 "/auth/verify-magic-code", json={"email": EMAIL, "code": "111111"}
             )
@@ -291,7 +299,7 @@ class TestTheTwoFactorGateIsUnchangedForBOTHPurposes:
             rs.store_magic_code(EMAIL, "111111")
             code = "111111"
 
-        with patch("apps.api.routers.auth.require_2fa_enabled", return_value=False):
+        with require_2fa(False):
             resp = client.post(
                 "/auth/verify-magic-code",
                 json={"email": EMAIL, "code": code, "purpose": purpose},
@@ -311,7 +319,7 @@ class TestTheTwoFactorGateIsUnchangedForBOTHPurposes:
         mock_db.first.return_value = user
         rs.store_password_reset_code(EMAIL, "222222")
 
-        with patch("apps.api.routers.auth.require_2fa_enabled", return_value=False):
+        with require_2fa(False):
             client.post(
                 "/auth/verify-magic-code",
                 json={"email": EMAIL, "code": "222222", "purpose": "password_reset"},
