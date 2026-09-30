@@ -11,6 +11,7 @@ from them. `docs/SCOPE.md` is where the product is decided.
 | P0a-fix | Post-login 404 and leftover FreeFrame branding | [`05-filmbill-P0a-fix-login-redirect-and-branding.md`](05-filmbill-P0a-fix-login-redirect-and-branding.md) | `90173fe` | done — see notes |
 | P0b-0 | Port FreeFrame §199–§206: the account-security layer | [`07-P0b-0-port-auth.md`](07-P0b-0-port-auth.md) | `7cf9069` | done — see notes |
 | P0b-0b | SMTP security modes (ported with P0b-0, decided separately) | [`07-P0b-0-port-auth.md`](07-P0b-0-port-auth.md) | `7cf9069` | done — see notes |
+| P0b-1 | Companies, memberships, `X-Company-Id` scoping, permissions, per-role 2FA | [`09-P0b-1-companies.md`](09-P0b-1-companies.md) | `eba7b5f` | done — see notes |
 | P0b | Foundations: companies, roles, number series, audit, money, codegen | [`03-filmbill-P0b-foundations.md`](03-filmbill-P0b-foundations.md) | — | superseded — split into P0b-0, P0b-1, P0b-2 |
 
 ---
@@ -299,3 +300,78 @@ Carries `0003_email_smtp_security`, `services/email_config.py`,
 `smtp_security` on `email_settings`, and `test_smtp_security_modes.py`.
 `smtp_use_tls` is kept and still read, so nothing already configured changes
 behaviour on upgrade.
+
+## P0b-1 — notes
+
+Full report: [`10-P0b-1-outcome.md`](10-P0b-1-outcome.md).
+
+**What landed.** Three tables (`companies`, `company_bank_accounts`,
+`company_memberships`) in migration `0005`, six company roles, a
+twelve-key permission map, and eight endpoints under one new `companies` tag.
+The active company travels in `X-Company-Id` and nowhere else; `apps/web`
+attaches it in `lib/api` centrally, so no call site sets it.
+
+**Two ladders, kept apart.** `User.role` runs the installation; company
+authority lives only in `CompanyMembership`. A superadmin who is not a member
+gets the same 404 a stranger does — asserted in
+`test_a_superadmin_is_not_a_member_of_every_company`. The one bridge is that a
+superadmin may CREATE a company, which makes them its Owner.
+
+**Path shape.** `/companies` (plural) is the two operations with no company
+context — list yours, create one. `/company/...` (singular) is everything that
+acts inside the company the header names. No company id ever appears in both a
+path and a header, so there is no request in which the two can disagree.
+
+**Permissions module: the rewritten `services/permissions.py`**, not a new
+`core/permissions.py` — the prompt allowed either and asked which. The FastAPI
+dependencies (`current_membership`, `require`) are in
+`middleware/company.py`, beside `middleware/auth.py`, which is where this
+codebase keeps request-scoped dependencies.
+
+**The two 2FA lines went in as specified**, and `routers/auth.py:231`
+(`send_magic_code`) was left alone — issuing a credential and accepting one
+are separate levers, and gating issuance per person would refuse a
+role-required user the very code they need in order to enrol. Mutation 3
+proves a test fails if that changes.
+
+**The new tests run against real Postgres.** A MagicMock session cannot prove
+that a query filters by `company_id` — it returns what it was told for every
+filter and for none, so a cross-company test written against `mock_db` passes
+against a router with the scoping deleted (CLAUDE.md 17b). New `pg_*` fixtures
+build a scratch database and point the app's own `SessionLocal` at it, because
+the account gate and setup guard open their own sessions. They skip where
+there is no Postgres; CI has one.
+
+**The isolation case list is derived from the OpenAPI document**, filtered to
+the `companies` tag, and every operation must appear in the case table — so an
+endpoint added under that tag without a case fails the file rather than
+escaping the suite.
+
+**Two test files were fixed, both for the right reason.** Three 2FA files were
+patching `apps.api.routers.auth.require_2fa_enabled` — the router's import,
+not the policy — so once `_login_outcome` started asking
+`two_factor_required_for`, the patch stopped reaching the login branch and six
+tests failed loudly. Replaced with `conftest.require_2fa()`, which sets both
+readers and keeps the real `two_factor_required_for` in the path. And
+`test_setup_superadmin.py` read the new user as "the last thing `add` was
+called with", which is now the membership; it picks by type instead.
+
+**Deferred, as instructed: per-company branding** (logo, colours, fonts for
+documents). It is coupled to companies and tempting, but it touches the
+branding router and the settings shell and nothing in P0b needs it. It lands
+with the layout work in **P4**.
+
+**Known gap, flagged for P0b-2:** creating a company has an endpoint
+(`POST /companies`) but no screen. The company-settings UI is P0b-2 and the
+prompt says not to start on it, so the browser walkthrough creates the two
+acceptance companies through `/docs`. `CompanyBankAccount` is likewise
+modelled and migrated but has no endpoint yet, for the same reason.
+
+**Counts.** API **615 passed** (537 at P0b-0), web **361 passed / 41 files**
+(338 / 37). `tsc`, `next lint` and `next build` clean. `alembic upgrade head`
+→ `check` → `downgrade base` → `upgrade head` clean on a scratch database. All
+six required mutations produced real FAIL lines.
+
+**Not checked:** the whole browser walkthrough — it needs
+`docker compose down -v`, which the permission classifier refuses, so it needs
+a human at the Mac. Nothing pushed to any registry (rule 18).
