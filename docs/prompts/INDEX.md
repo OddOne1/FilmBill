@@ -12,6 +12,7 @@ from them. `docs/SCOPE.md` is where the product is decided.
 | P0b-0 | Port FreeFrame §199–§206: the account-security layer | [`07-P0b-0-port-auth.md`](07-P0b-0-port-auth.md) | `7cf9069` | done — see notes |
 | P0b-0b | SMTP security modes (ported with P0b-0, decided separately) | [`07-P0b-0-port-auth.md`](07-P0b-0-port-auth.md) | `7cf9069` | done — see notes |
 | P0b-1 | Companies, memberships, `X-Company-Id` scoping, permissions, per-role 2FA | [`09-P0b-1-companies.md`](09-P0b-1-companies.md) | `eba7b5f` | done — see notes |
+| P0b-2 | Money, generated API types, company settings screens | [`12-P0b-2-money-codegen-settings.md`](12-P0b-2-money-codegen-settings.md) | `d767fbf` | done — see notes |
 | P0b | Foundations: companies, roles, number series, audit, money, codegen | [`03-filmbill-P0b-foundations.md`](03-filmbill-P0b-foundations.md) | — | superseded — split into P0b-0, P0b-1, P0b-2 |
 
 ---
@@ -375,3 +376,120 @@ six required mutations produced real FAIL lines.
 **Not checked:** the whole browser walkthrough — it needs
 `docker compose down -v`, which the permission classifier refuses, so it needs
 a human at the Mac. Nothing pushed to any registry (rule 18).
+
+## P0b-2 — notes
+
+Full report: [`13-P0b-2-outcome.md`](13-P0b-2-outcome.md).
+
+**Money.** `apps/api/core/money.py` — `Money` / `Quantity` as `Decimal`,
+serialised as strings, **JSON numbers refused with a 422** (a double has
+already lost the value; an integer is accepted because it survives intact).
+Trailing zeros preserved, non-finite values refused, and `quantize_amount` /
+`quantize_qty` pass an explicit local `Context` to `quantize` so no library can
+change FilmBill's rounding through the global one. Half-UP, not Python's
+default half-EVEN. `AmountColumn()` / `QtyColumn()` are functions, not shared
+type instances.
+
+`lib/money.ts` formats only, everything a string end to end via
+`Intl.NumberFormat`'s string argument. The ESLint override on that one file
+bans **all** arithmetic rather than the brief's "arithmetic on non-string
+operands": ESLint selectors have no type information, so that distinction
+cannot be expressed without guessing in both directions. Strictly stronger, and
+free — formatting needs no arithmetic. `.eslintrc.json` became `.eslintrc.js`
+so the reason could sit next to the rule.
+
+**Codegen.** `pnpm gen:api` dumps the schema by IMPORTING the app (no server, no
+database, no network — verified with `--network none` and no env) and runs
+`openapi-typescript` into `apps/web/types/api.gen.ts`. New CI job
+`api-types-are-generated` regenerates and `git diff --exit-code`s it;
+demonstrated failing on an unregenerated schema field. `gen:api:docker` exists
+for a machine with no API Python environment, which is every Mac here.
+
+`types/index.ts` is now a naming layer over the generated types. Four things
+stayed hand-written and each says why in the file: `LoginResponse` (a union
+FastAPI cannot declare), `SmtpSecurity` (deliberately narrower than the API,
+which types it loosely so the router can answer a readable 400 instead of
+pydantic's 422), `PasswordStrength` (computed in the browser), and the
+`ACCOUNT_SETUP_REQUIRED` const.
+
+**Four schema bugs the generated types found**, every one a case of the
+generator being right:
+- `User.deleted_at` never existed — the hand-written interface claimed a field
+  `/auth/me` has never sent. Exactly the drift rule 10 exists for.
+- `preferences`, `theme_colors` and `ActivityLogResponse.payload` generated as
+  `Record<string, never>` — a map that can hold nothing. A bare `dict` emits an
+  OpenAPI object with no value type, and `dict[str, Any]` is **not** enough
+  either (Pydantic sees `Any` as no constraint). Fixed with a shared
+  `JsonObject` alias.
+- `EmailSettingsUpdate` requires the two `*_clear` flags; the admin page now
+  sends them explicitly as `false`, which is what Save means.
+
+**The company screens.** Settings → Company is a group of five: General,
+Bank accounts, Accounting, Security, Members. Creating a company is
+`/settings/company/new`, reached from **"New company…"** in the switcher — which
+now shows for a superadmin with one company, and with none, because otherwise
+the second company can only be created from a URL you have to know. **That
+closes P0b-1's reported hole**: its acceptance had to go through Swagger.
+
+IBAN validation is server-side only (`apps/api/core/iban.py`: structure,
+per-country length, ISO 7064 MOD-97-10, no network). No TypeScript copy — a
+second implementation of mod-97 would be a second thing to keep in step, and
+the one that matters is the one the database sits behind. An unknown country
+code passes on checksum alone, so a self-hosted install somewhere the registry
+has not heard of can still enter its own account.
+
+Bank accounts are gated on `company.settings.edit` for **reads** as well as
+writes — stricter than `company.view`, because an IBAN is the detail a
+convincing invoice fraud needs. Exactly one default, enforced server-side in
+one transaction; demoting the only default is refused with the action that does
+work named.
+
+The Accounting selectors are **stored and read by nothing** (SCOPE §10, D13),
+and the screen says so in a banner. A control that secretly does nothing is a
+false statement to the user — the same bug as a notification category that
+gates nothing.
+
+The Security screen states the lockout consequence **before** the save: it
+names the roles being added, **names the members** who hold them without a
+second factor, says plainly when nobody is at risk, and relabels the button
+"Save and require two-factor". Ten jsdom tests on that warning alone.
+
+**The suite was reading its answer off its surroundings — fixed.**
+`SetupGuardMiddleware` opens its own `SessionLocal`, so the ambient
+`DATABASE_URL` decided the result: no tables → the guard fails open and
+everything passes; tables and no superadmin → **503 on everything, 258
+failures**; one superadmin row → passes again. All three observed from the same
+commit within an hour. Same shape as the Redis problem P0b-0 §0 fixed, and
+worse: the passing configuration is the one where the middleware never runs, so
+**P0b-1's reported 615 was obtained in it**. `conftest.client` now sets
+`setup_guard._setup_complete` explicitly and restores it; `SessionLocal` is
+deliberately left alone (patching it broke a gate test, because the shared mock
+handed the gate the wrong user). New **`test_setup_guard.py`** drives the real
+middleware — nothing tested it before. Deterministic after: 705 with and
+without a superadmin in the ambient database.
+
+**Confirmed for §5:** the bank-account endpoints joined the parametrised
+isolation test automatically — all four were caught as "no isolation case" the
+first time it ran. The OpenAPI-derived case list needed no change; the row
+*substitution* did, since `{membership_id}` was hard-coded. It is now a table,
+with a test for the one silent failure mode left (an unmapped placeholder
+leaves `{bank_account_id}` in the URL and the endpoint 404s for the wrong
+reason).
+
+**Counts.** API **705 passed** (615 at P0b-1), web **391 passed / 43 files**
+(361 / 41). `tsc`, `next lint`, `next build` clean, all five company routes in
+the build. `alembic upgrade head` → `check` → `downgrade base` → `upgrade head`
+→ `check` clean on a scratch database. All four required mutations produced real
+FAIL lines; the ESLint rule and the codegen drift check were each demonstrated
+failing and then reverted.
+
+Live on the dev stack: migration `0006` applied, setup created the first
+company with the accounting defaults and an owner membership, a valid IBAN
+stored normalised and auto-defaulted, a wrong check digit refused with its
+readable sentence, an invalid selector 422'd.
+
+**Not checked:** the browser walkthrough (needs `down -v`, which the permission
+classifier refuses — steps in the report). None of the five screens was opened
+in a browser. No `NUMERIC` column ships yet — nothing stores an amount until
+P1, so the column helpers are asserted on precision and scale, not
+round-tripped through Postgres. Nothing pushed to any registry (rule 18).
