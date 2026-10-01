@@ -244,7 +244,7 @@ the sentence that should always come with a reason.
 
 Empty database. **In Terminal, at the Mac:**
 
-> **Mail did not actually reach Mailpit until `PENDING`.** The dev compose resolved SMTP security to `implicit_tls` against Mailpit's plaintext port, so every step below that waits for a code or an invite link would have waited forever — see `docs/prompts/16-dev-mail-smtp-none.md`.
+> **Mail did not actually reach Mailpit until `fe6730e`.** The dev compose resolved SMTP security to `implicit_tls` against Mailpit's plaintext port, so every step below that waits for a code or an invite link would have waited forever — see `docs/prompts/16-dev-mail-smtp-none.md`.
 
 
 ```

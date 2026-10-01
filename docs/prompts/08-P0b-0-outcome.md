@@ -68,7 +68,7 @@ On the live dev stack: migrations auto-applied, the new endpoints answer (403 un
 
 The browser walkthrough. Empty database, `down -v`, rebuild, `up -d`, then at `http://localhost:3100` with Mailpit at `http://localhost:8125`:
 
-> **Mail did not actually reach Mailpit until `PENDING`.** The dev compose resolved SMTP security to `implicit_tls` against Mailpit's plaintext port, so every step below that waits for a code or an invite link would have waited forever — see `docs/prompts/16-dev-mail-smtp-none.md`.
+> **Mail did not actually reach Mailpit until `fe6730e`.** The dev compose resolved SMTP security to `implicit_tls` against Mailpit's plaintext port, so every step below that waits for a code or an invite link would have waited forever — see `docs/prompts/16-dev-mail-smtp-none.md`.
 
 
 1. Setup → create admin. `Sommer2026!` must be **rejected with a stated reason**, and the submit button must never be dead-and-silent (rule 17c). Then a real password.

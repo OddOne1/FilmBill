@@ -14,6 +14,7 @@ from them. `docs/SCOPE.md` is where the product is decided.
 | P0b-1 | Companies, memberships, `X-Company-Id` scoping, permissions, per-role 2FA | [`09-P0b-1-companies.md`](09-P0b-1-companies.md) | `eba7b5f` | done — see notes |
 | P0b-2 | Money, generated API types, company settings screens | [`12-P0b-2-money-codegen-settings.md`](12-P0b-2-money-codegen-settings.md) | `d767fbf` | done — see notes |
 | CI-fix | The CI web flake: a readiness gate that waited for static chrome | [`14-ci-web-flake.md`](14-ci-web-flake.md) | `e68d879` | done — see notes |
+| dev-mail | Dev mail was never delivered: SMTP mode `none` for Mailpit | [`16-dev-mail-smtp-none.md`](16-dev-mail-smtp-none.md) | `fe6730e` | done — see notes |
 | P0b | Foundations: companies, roles, number series, audit, money, codegen | [`03-filmbill-P0b-foundations.md`](03-filmbill-P0b-foundations.md) | — | superseded — split into P0b-0, P0b-1, P0b-2 |
 
 ---
@@ -557,3 +558,105 @@ Green at injected fetch delays of 20, 50 and 120ms. Container pipeline green.
 `setup-buildx` 3→4, `lucide-react`, `pydantic`. On PR branches, some red since
 2026-09-20, and **not** the flake fixed above — recorded here so a future
 reader does not mistake one for the other. Nothing in this change touches them.
+
+## dev-mail — notes
+
+Prompt: [`16-dev-mail-smtp-none.md`](16-dev-mail-smtp-none.md).
+
+**No dev mail had ever been delivered.** The dev compose set
+`SMTP_USE_TLS: "false"` and nothing else, and `smtp_security_from` maps a false
+boolean to **implicit_tls** — deliberately, because that is what the boolean has
+always DONE and P0b-0 would not silently switch off anybody's production
+encryption. So the client opened an SMTP_SSL socket to Mailpit's plaintext port
+1025 and every send died with `[SSL: WRONG_VERSION_NUMBER] wrong version
+number`, which reads like a certificate problem. Reproduced before the prompt
+existed; the fix is `SMTP_SECURITY: "none"` in the `&api_env` block, which
+`worker`, `email_worker` and `beat` inherit.
+
+**P0b-0 fixed the mechanism and its acceptance never exercised the dev compose
+against Mailpit.** That is the whole reason the gap survived it: the three-mode
+setting, the transport selection and a 323-line test file all landed and were
+correct, while the one file that decides what dev actually connects with was
+never part of the check. The mapping itself is untouched here, and no
+production default changed.
+
+**It invalidated an acceptance step in three walkthroughs.** P0b-0, P0b-1 and
+P0b-2 all say a code or an invite link "arrives in Mailpit". None would have.
+Each outcome doc now carries a one-line note saying so.
+
+**`SMTP_USE_TLS` stays in the block**, and the comment says why. It is still
+read — `apps/api/config.py` declares it, `email_config.resolve_mail_config`
+reads it into `MailConfig.smtp_use_tls` (both the row and no-row branches),
+`routers/email_settings.py` reports it, and the admin screen writes it back in
+sync with the mode. Dropping it from dev would make dev inherit the library
+default `True` and *report* "TLS on" for a plaintext connection — the same class
+of quiet mismatch as the bug.
+
+**`.env.example` gained a documented, commented `SMTP_SECURITY`.** There was no
+"set `SMTP_USE_TLS=false` for a plaintext relay" line to correct; the trap was
+the **omission** — the boolean was the only encryption knob documented, so a
+self-hoster with a plaintext relay reaches for `false` and hits the same wall.
+`SMTP_USE_TLS=true` is unchanged. `docker-compose.prod.yml` carries no SMTP
+settings at all (they come from the operator's `.env`), so nothing there was
+touched; with no `SMTP_SECURITY` in `.env` production resolves to `starttls`,
+which is right for Microsoft 365.
+
+**Tests** — `apps/api/tests/test_dev_mail_config.py`, three layers:
+1. the compose file is parsed as YAML (the parser resolves the anchor) and its
+   `api` values pushed through the real `Settings` → `resolve_mail_config` path,
+   asserting mode `none`, host `mailpit`, port 1025. Runs anywhere, needs no
+   Docker. A control test asserts the same values resolve to `implicit_tls`
+   without the explicit mode, so the line is shown to be load-bearing rather
+   than merely present;
+2. `worker`, `email_worker` and `beat` resolve to the same mail config as
+   `api` — the anchor is a promise, and a service given its own
+   `environment:` block silently stops inheriting;
+3. a real delivery, both through `EmailService` and through the real
+   `send_invite_email` Celery task, read back out of **Mailpit's own API** by
+   recipient. **Skips loudly** with a named reason where Mailpit is
+   unreachable, which is what CI will do.
+
+Layer 3 configures its send **from the compose file**, not from the test
+runner's environment. First written the other way it failed with "Name or
+service not known" in a harness that set no `SMTP_HOST` — a failure that says
+nothing about the bug.
+
+**`PyYAML` is now declared** in `apps/api/requirements.txt`. The repo's own
+`test_declared_dependencies.py` caught the new import as transitive-only, which
+is exactly its job.
+
+**Mutations, real FAIL line each:** removing `SMTP_SECURITY` from the block
+(3 failures, naming the mode and the fix); giving `email_worker` its own env
+block without it (1 failure, naming the service and both resolved values).
+The new file also fails against the **parent commit's** compose file (rule 12),
+checked by putting `git show HEAD:docker-compose.dev.yml` in place.
+
+**Counts.** API **714 passed** (705 at P0b-2) with the dev stack reachable;
+**10 passed / 2 skipped** for the two new files where Mailpit is absent, which
+is the CI shape. Both probe messages were confirmed present in Mailpit by
+querying its API directly.
+
+**One more instance for the P0b-3 consolidation, not added to CLAUDE.md 17b as
+instructed:** a component's *effective configuration* was never asserted
+anywhere, so the one file that decides it drifted from the mechanism that reads
+it. Same family as the ambient-`DATABASE_URL` finding — the thing that was true
+in the tests was not the thing that was true in the stack.
+
+### Report-only: `filmbill_web` shows (unhealthy) while serving fine
+
+Diagnosed, **not fixed** (out of scope here).
+
+The healthcheck is `wget -q --spider http://localhost:3000`. Inside the
+container `/etc/hosts` maps `localhost` to both `127.0.0.1` **and** `::1`;
+BusyBox wget tries the IPv6 address first, and Next's dev server binds
+`0.0.0.0:3000` — IPv4 only (`netstat` confirms, and `http://[::1]:3000` is
+refused). So the probe has never succeeded: `FailingStreak: 213`.
+
+`http://127.0.0.1:3000` answers 307 → `/login` → 200, and BusyBox wget follows
+the redirect, so the path is fine once the address is literal.
+
+**Proposed fix:** change the probe to `http://127.0.0.1:3000`. Optionally probe
+`/login`, which returns 200 directly and does not depend on redirect-following.
+Nothing else in the stack `depends_on` web's health, so the only cost so far
+has been a misleading `(unhealthy)` in `docker compose ps` — which is its own
+problem, since it trains people to ignore the column.
