@@ -9,7 +9,8 @@
     "lint": "next lint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "gen:types": "openapi-typescript ../../apps/api/openapi.json -o types/api.gen.ts"
   },
   "dependencies": {
     "@radix-ui/react-avatar": "^1.1.10",
@@ -47,6 +48,7 @@
     "eslint": "^8.57.1",
     "eslint-config-next": "14.2.29",
     "jsdom": "^29.0.0",
+    "openapi-typescript": "^7.4.4",
     "postcss": "^8.5.4",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.8.3",

@@ -33,31 +33,40 @@ from .company_factories import auth_headers, grant, make_company, make_superadmi
 #: about.
 EXPECTED: dict[CompanyRole, dict[str, int]] = {
     CompanyRole.owner: {
+        "GET /company/bank-accounts": 200,
         "GET /company": 200,
         "PATCH /company": 200,
         "GET /company/members": 200,
     },
     CompanyRole.admin: {
+        "GET /company/bank-accounts": 200,
         "GET /company": 200,
         "PATCH /company": 200,
         "GET /company/members": 200,
     },
     CompanyRole.accountant: {
+        "GET /company/bank-accounts": 404,
         "GET /company": 200,
         "PATCH /company": 404,
         "GET /company/members": 404,
     },
     CompanyRole.producer: {
+        "GET /company/bank-accounts": 404,
         "GET /company": 200,
         "PATCH /company": 404,
         "GET /company/members": 404,
     },
     CompanyRole.staff: {
+        "GET /company/bank-accounts": 404,
         "GET /company": 200,
         "PATCH /company": 404,
         "GET /company/members": 404,
     },
     CompanyRole.tax_advisor: {
+        # 404 like everything else. An external advisor reads the archive;
+        # the company's bank details are not part of that and are exactly
+        # what an invoice fraud would want.
+        "GET /company/bank-accounts": 404,
         # Sees WHOSE archive this is, and nothing else about the company.
         "GET /company": 200,
         "PATCH /company": 404,

@@ -15,7 +15,12 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from apps.api.models.company import Company, CompanyMembership, CompanyRole
+from apps.api.models.company import (
+    Company,
+    CompanyBankAccount,
+    CompanyMembership,
+    CompanyRole,
+)
 from apps.api.models.user import User, UserGlobalRole, UserStatus
 from apps.api.services.auth_service import (
     create_access_token,
@@ -152,3 +157,34 @@ def refresh_token_for(user: User) -> str:
 def unrelated_company_id() -> str:
     """An id that names nothing. For the "does not exist" half of 404."""
     return str(uuid.uuid4())
+
+
+def make_bank_account(
+    db,
+    company: Company,
+    *,
+    iban: str = "AT61 1904 3002 3457 3201",
+    label: Optional[str] = None,
+    is_default: bool = False,
+) -> CompanyBankAccount:
+    """A bank account row, written directly.
+
+    Directly rather than through `POST /company/bank-accounts`, for the same
+    reason `grant` does not use the members endpoint: these tests are about
+    what the row DOES, and building the world through the endpoint under test
+    would let a bug in the endpoint hide a bug in the scoping. The IBAN is
+    stored normalised, exactly as the schema's validator would leave it, so a
+    row built here is indistinguishable from one the API wrote.
+    """
+    from apps.api.core.iban import normalise_iban
+
+    account = CompanyBankAccount(
+        company_id=company.id,
+        iban=normalise_iban(iban),
+        label=label,
+        is_default=is_default,
+    )
+    db.add(account)
+    db.commit()
+    db.refresh(account)
+    return account

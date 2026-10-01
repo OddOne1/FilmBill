@@ -117,7 +117,7 @@ export function LoginForm() {
   async function handleLoginResponse(res: LoginResponse, emailUsed: string) {
     if (res.requires_2fa) {
       setPendingToken(res.pending_token)
-      setTwoFactorMethod(res.method)
+      setTwoFactorMethod(res.method ?? null)
       setTwoFactorEmail(emailUsed)
       setCode(EMPTY_CODE)
       setCodeError('')
@@ -417,7 +417,7 @@ export function LoginForm() {
       // rather than used until the user says they have saved the codes —
       // redirecting on arrival would destroy them by design.
       setBackupCodes(res.backup_codes)
-      setEnrolledTokens(res.tokens)
+      setEnrolledTokens(res.tokens ?? null)
       setSetupStage('backup')
     } catch (err) {
       setCodeError(err instanceof ApiError ? err.detail : 'Invalid code. Please try again.')

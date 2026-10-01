@@ -190,7 +190,46 @@ def mock_db():
 
 @pytest.fixture
 def client(mock_db):
-    """Return a TestClient with mocked DB and S3."""
+    """A TestClient with the database and S3 mocked, and the setup guard satisfied.
+
+    **Why the guard is set explicitly.** `SetupGuardMiddleware` runs before any
+    route, so it has no dependency to take — it opens its own session through
+    `apps.api.database.SessionLocal`, which is the **ambient** database named
+    by `DATABASE_URL`. That made this suite's result depend on what happened to
+    be in that database:
+
+      * no tables at all (CI, and any machine with no dev stack up) → the
+        guard's query raises, it fails open, everything passes;
+      * a dev database with tables and no superadmin → **503 to every
+        request**, and 258 tests fail;
+      * the same database with one superadmin row → everything passes again.
+
+    All three were observed from the same commit within an hour. It is the
+    same shape as the Redis problem P0b-0 §0 fixed — a suite that reads its
+    answer off its surroundings — and worse in one respect: the configuration
+    that passes is the one where the middleware never runs.
+
+    `_setup_complete` is therefore set here, and restored afterwards because it
+    is a process global and a suite that inherits it is a suite whose result
+    depends on test order.
+
+    This is the one place the fixture is deliberately kinder than production,
+    so it carries the obligation rule 17b attaches: the thing switched off is
+    made real elsewhere. `test_setup_guard.py` drives the actual middleware
+    against a database that says "no superadmin" — the state this line stands
+    in for, and which nothing tested at all before P0b-2.
+
+    `SessionLocal` itself is left alone. `AccountGateMiddleware` also opens its
+    own session, and `test_account_setup_gate.py` already patches
+    `get_user_by_id` to point that lookup wherever it means to — which is the
+    honest way to exercise it, and which a blanket mock here would quietly
+    override.
+    """
+    from apps.api.middleware import setup_guard
+
+    previous_setup_complete = setup_guard._setup_complete
+    setup_guard._setup_complete = True
+
     with patch("apps.api.services.s3_service.ensure_bucket_exists"):
         with patch("apps.api.services.s3_service.get_s3_client", return_value=MagicMock()):
             from fastapi.testclient import TestClient
@@ -201,6 +240,8 @@ def client(mock_db):
             client = TestClient(app, raise_server_exceptions=False)
             yield client
             app.dependency_overrides.clear()
+
+    setup_guard._setup_complete = previous_setup_complete
 
 
 @pytest.fixture

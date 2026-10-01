@@ -283,7 +283,7 @@ export default function CompanyMembersPage() {
                     </select>
                   </td>
                   <td className="px-3 py-2 text-text-secondary">
-                    {formatDate(member.expires_at)}
+                    {formatDate(member.expires_at ?? null)}
                   </td>
                   <td className="px-3 py-2 text-text-secondary">
                     {member.two_factor_enabled ? 'On' : '—'}

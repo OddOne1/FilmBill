@@ -8,11 +8,33 @@ serialise as strings, via `core/money.py` (CLAUDE.md rule 1).
 
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
+from ..core.iban import InvalidIBAN, validate_iban
 from ..models.company import CompanyRole
+
+
+# ─── Accounting vocabularies ────────────────────────────────────────────────
+#
+# `Literal` rather than `str`, and that choice is worth one line: it is what
+# puts `"ear" | "double_entry"` into the OpenAPI document and therefore into
+# `apps/web/types/api.gen.ts`, so the selector on the Accounting screen is
+# typed by the API rather than by a list somebody retyped. A `str` here would
+# generate `string` and the two lists would start drifting the same afternoon.
+#
+# The two placeholder lists — charts of accounts and export formats — are
+# deliberately NOT Literals. Their real options come from region packs
+# (CLAUDE.md rule 7), so pinning today's stand-ins into the schema would make
+# the region pack a schema change.
+
+#: Einnahmen-Ausgaben-Rechnung, or double-entry bookkeeping.
+BookkeepingMode = Literal["ear", "double_entry"]
+#: Soll-Versteuerung (VAT owed when invoiced) or Ist-Versteuerung (when paid).
+VatTiming = Literal["soll", "ist"]
+#: Which date decides the period a document is archived under.
+ArchiveDateBasis = Literal["invoice_date", "payment_date"]
 
 
 class CompanyBase(BaseModel):
@@ -89,6 +111,17 @@ class CompanyUpdate(BaseModel):
     require_2fa_roles: Optional[list[CompanyRole]] = None
     #: Whether this company's tax advisor also gets reports and exports.
     tax_advisor_reports: Optional[bool] = None
+    # ── Accounting (P0b-2) ───────────────────────────────────────────
+    #
+    # Stored, and read by nothing. See the model's own comment and
+    # migration 0006: these are answers, not behaviour, until P6.
+    bookkeeping_mode: Optional[BookkeepingMode] = None
+    vat_timing: Optional[VatTiming] = None
+    kleinunternehmer: Optional[bool] = None
+    chart_of_accounts_template: Optional[str] = Field(default=None, max_length=64)
+    export_format: Optional[str] = Field(default=None, max_length=64)
+    archive_date_basis: Optional[ArchiveDateBasis] = None
+    month_approval_enabled: Optional[bool] = None
 
     @field_validator("address_country", "default_currency")
     @classmethod
@@ -121,6 +154,13 @@ class CompanyResponse(BaseModel):
     logo_s3_key: Optional[str] = None
     require_2fa_roles: list[CompanyRole] = []
     tax_advisor_reports: bool = False
+    bookkeeping_mode: BookkeepingMode = "ear"
+    vat_timing: VatTiming = "soll"
+    kleinunternehmer: bool = False
+    chart_of_accounts_template: Optional[str] = None
+    export_format: Optional[str] = None
+    archive_date_basis: ArchiveDateBasis = "invoice_date"
+    month_approval_enabled: bool = False
     created_at: datetime
     archived_at: Optional[datetime] = None
 
@@ -191,3 +231,84 @@ class MemberUpdate(BaseModel):
     #: Pydantic cannot express that difference in the type, so the router
     #: reads `model_fields_set` — see `update_member`.
     expires_at: Optional[datetime] = None
+
+
+# ─── Bank accounts ──────────────────────────────────────────────────────────
+
+
+class BankAccountBase(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    #: "Production account", "Payroll" — what a human picks it by. Optional:
+    #: a company with one account has no need to name it.
+    label: Optional[str] = Field(default=None, max_length=255)
+    bic: Optional[str] = Field(default=None, max_length=16)
+    bank_name: Optional[str] = Field(default=None, max_length=255)
+    #: Whether this is the account that goes on a document unless something
+    #: says otherwise. Exactly one per company holds it, enforced server-side
+    #: in `company_service.set_default_bank_account` — never by the client,
+    #: which cannot make two writes atomic.
+    is_default: bool = False
+
+
+class BankAccountCreate(BankAccountBase):
+    #: Validated here rather than in the router, so every write path gets the
+    #: same rule and the same message. Structure plus ISO 7064 MOD-97-10
+    #: check digits, with no network call — see `core/iban.py` for what that
+    #: does and does not prove.
+    iban: str = Field(min_length=1, max_length=64)
+
+    @field_validator("iban")
+    @classmethod
+    def _check_iban(cls, value: str) -> str:
+        try:
+            # Returns the NORMALISED value, which is what gets stored. Storing
+            # what was typed instead would leave some rows spaced and some
+            # compact, and every later comparison quietly wrong.
+            return validate_iban(value)
+        except InvalidIBAN as exc:
+            raise ValueError(str(exc)) from None
+
+    @field_validator("bic")
+    @classmethod
+    def _tidy_bic(cls, value: Optional[str]) -> Optional[str]:
+        # Upper-cased and de-spaced, not validated. A BIC has a structure, but
+        # it is optional on a SEPA transfer and refusing a slightly odd one
+        # would block a save for a field the payment does not need.
+        return value.replace(" ", "").upper() if value else value
+
+
+class BankAccountUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    label: Optional[str] = Field(default=None, max_length=255)
+    iban: Optional[str] = Field(default=None, max_length=64)
+    bic: Optional[str] = Field(default=None, max_length=16)
+    bank_name: Optional[str] = Field(default=None, max_length=255)
+    #: Present-and-true promotes this account and demotes the current default
+    #: in the same transaction. Present-and-FALSE is refused by the router:
+    #: a company must keep a default, and "no default" is not a state any
+    #: document renderer has an answer for.
+    is_default: Optional[bool] = None
+
+    _check_iban = field_validator("iban")(
+        lambda cls, value: (
+            None if value is None else BankAccountCreate._check_iban(value)
+        )
+    )
+
+
+class BankAccountResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    label: Optional[str] = None
+    iban: str
+    #: The same IBAN in groups of four, as it is printed on a bank statement.
+    #: Served rather than formatted client-side so the app and a PDF cannot
+    #: group it differently.
+    iban_formatted: str
+    bic: Optional[str] = None
+    bank_name: Optional[str] = None
+    is_default: bool
+    created_at: datetime

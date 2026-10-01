@@ -361,6 +361,14 @@ function EmailSettingsSection() {
         smtp_use_tls: smtpSecurity === "starttls",
         aws_mail_access_key_id: awsKeyId,
         aws_mail_region: awsRegion,
+        // Saving the form never clears a stored secret. Sent explicitly
+        // rather than omitted: the generated type (P0b-2) makes these two
+        // required, because the API gives them a default and therefore always
+        // has a value for them — and "false" is what this form means. Clearing
+        // a secret is its own deliberate action, not a side effect of pressing
+        // Save with an empty box.
+        smtp_password_clear: false,
+        aws_mail_secret_access_key_clear: false,
         // Only sent when non-empty -- an untouched box leaves the stored
         // credential alone rather than wiping it.
         ...(smtpPassword ? { smtp_password: smtpPassword } : {}),

@@ -21,7 +21,12 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from ..models.company import Company, CompanyMembership, CompanyRole
+from ..models.company import (
+    Company,
+    CompanyBankAccount,
+    CompanyMembership,
+    CompanyRole,
+)
 from ..models.user import User
 from .auth_service import bump_token_version
 from .permissions import active_memberships, roles_requiring_2fa
@@ -176,3 +181,62 @@ def two_factor_required_by_membership(db: Session, user: User) -> bool:
     required = roles_requiring_2fa(companies)
 
     return any(record.role in required for record in memberships)
+
+
+# ─── Bank accounts ──────────────────────────────────────────────────────────
+
+
+def set_default_bank_account(
+    db: Session,
+    *,
+    company_id: uuid.UUID,
+    account: CompanyBankAccount,
+    is_default: bool,
+) -> None:
+    """Make `account` the company's default, demoting whichever held it. No commit.
+
+    Server-side and in one transaction, because the client cannot do this: it
+    would have to demote the old default and promote the new one as two
+    requests, and between them the company either has two defaults or none.
+    Both are states a document renderer has no answer for.
+
+    The demotion is a single UPDATE over the other rows rather than a read
+    followed by writes. Same reason — a read-then-write leaves a window, and
+    the window is exactly where a second person saving the same form lands.
+
+    Called for EVERY create and update, not only when `is_default` is true,
+    so the "first account is automatically the default" rule and the "you
+    cannot un-default the only one" rule both live here rather than being
+    re-derived at each call site.
+    """
+    if not is_default:
+        return
+
+    db.query(CompanyBankAccount).filter(
+        CompanyBankAccount.company_id == company_id,
+        CompanyBankAccount.id != account.id,
+        CompanyBankAccount.is_default.is_(True),
+    ).update({"is_default": False}, synchronize_session="fetch")
+    account.is_default = True
+    db.flush()
+
+
+def has_other_bank_accounts(
+    db: Session, *, company_id: uuid.UUID, exclude_id: uuid.UUID
+) -> bool:
+    """Whether this company has a bank account other than `exclude_id`.
+
+    Used to answer "may this one stop being the default" and "may it be
+    deleted": a company with accounts must have exactly one default, so the
+    last one cannot give the flag up and the default cannot be removed while
+    another account could inherit it.
+    """
+    return (
+        db.query(CompanyBankAccount)
+        .filter(
+            CompanyBankAccount.company_id == company_id,
+            CompanyBankAccount.id != exclude_id,
+        )
+        .first()
+        is not None
+    )

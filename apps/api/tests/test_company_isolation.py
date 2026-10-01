@@ -32,6 +32,7 @@ from apps.api.models.company import CompanyRole
 from .company_factories import (
     auth_headers,
     grant,
+    make_bank_account,
     make_company,
     make_superadmin,
     make_user,
@@ -50,8 +51,18 @@ SCOPED_TAG = "companies"
 #: cases. A new endpoint cannot land here by omission.
 NO_COMPANY_CONTEXT = "no-company-context"
 
-#: How to exercise each operation. `path` may contain `{membership_id}`, which
-#: is substituted with the id of a membership belonging to the OTHER company.
+#: How to exercise each operation.
+#:
+#: A path may contain `{membership_id}` or `{bank_account_id}`. Both are
+#: substituted with the id of a row belonging to the **other** company, which
+#: is what makes the second test below a real check rather than a request for
+#: something that does not exist: a router that forgot its `company_id` filter
+#: FINDS that row, and answering anything but 404 for it confirms it exists.
+#:
+#: Every placeholder a path can carry must appear in `OTHER_COMPANY_ROWS`
+#: below, or the substitution silently leaves `{…}` in the URL and the
+#: endpoint 404s for the wrong reason — a green test proving nothing. There is
+#: an assertion for exactly that.
 CASES: dict[str, object] = {
     "GET /companies": NO_COMPANY_CONTEXT,
     "POST /companies": NO_COMPANY_CONTEXT,
@@ -63,6 +74,19 @@ CASES: dict[str, object] = {
     },
     "PATCH /company/members/{membership_id}": {"body": {"role": "admin"}},
     "DELETE /company/members/{membership_id}": {"body": None},
+    "GET /company/bank-accounts": {"body": None},
+    "POST /company/bank-accounts": {
+        "body": {"iban": "AT61 1904 3002 3457 3201", "label": "Theirs"}
+    },
+    "PATCH /company/bank-accounts/{bank_account_id}": {"body": {"label": "Stolen"}},
+    "DELETE /company/bank-accounts/{bank_account_id}": {"body": None},
+}
+
+#: Placeholder -> the key in the `two_companies` fixture holding a row that
+#: belongs to company B.
+OTHER_COMPANY_ROWS = {
+    "{membership_id}": "membership_in_b",
+    "{bank_account_id}": "bank_account_in_b",
 }
 
 
@@ -99,7 +123,7 @@ def test_every_company_endpoint_has_an_isolation_case(client):
 
 def test_the_case_list_is_not_empty(client):
     """A filter that matched nothing would make the file above pass silently."""
-    assert len(_scoped_operations()) >= 6
+    assert len(_scoped_operations()) >= 10
 
 
 #: Only the operations that DO take a company context get the two checks.
@@ -123,19 +147,53 @@ def two_companies(pg_db):
     company_b = make_company(pg_db, "Company B")
     grant(pg_db, company_a, ada, CompanyRole.owner)
     bo_in_b = grant(pg_db, company_b, bo, CompanyRole.owner)
+    # A row of B's that is NOT a membership, so the scoped lookups in the
+    # bank-accounts router are exercised against a real neighbour rather than
+    # against an id that names nothing.
+    bank_in_b = make_bank_account(pg_db, company_b, iban="AT61 1904 3002 3457 3201")
     return {
         "ada": ada,
         "bo": bo,
         "a": company_a,
         "b": company_b,
         "membership_in_b": bo_in_b,
+        "bank_account_in_b": bank_in_b,
     }
 
 
-def _send(client, operation: str, headers: dict, case: dict, membership_id: str):
+def _send(client, operation: str, headers: dict, case: dict, world: dict):
     method, path = operation.split(" ", 1)
-    path = path.replace("{membership_id}", membership_id)
+    for placeholder, key in OTHER_COMPANY_ROWS.items():
+        path = path.replace(placeholder, str(world[key].id))
     return client.request(method, path, headers=headers, json=case.get("body"))
+
+
+def _targets_another_companys_row(operation: str) -> bool:
+    return any(placeholder in operation for placeholder in OTHER_COMPANY_ROWS)
+
+
+def test_every_placeholder_has_a_row_in_the_other_company(client):
+    """The check that keeps the substitution honest.
+
+    A path parameter with no entry in `OTHER_COMPANY_ROWS` leaves a literal
+    `{bank_account_id}` in the URL. FastAPI then 404s it — for being an
+    unparseable UUID, not for being another company's row — and the isolation
+    test passes while proving nothing at all. This is the one failure mode of
+    this file that would be completely silent.
+    """
+    import re
+
+    placeholders = {
+        match
+        for operation in CASES
+        for match in re.findall(r"\{[a-z_]+\}", operation)
+    }
+    missing = sorted(placeholders - set(OTHER_COMPANY_ROWS))
+    assert not missing, (
+        f"path parameters with no row in the other company: {missing}. Add one "
+        f"to OTHER_COMPANY_ROWS and to the two_companies fixture, or the case "
+        f"for that endpoint tests nothing."
+    )
 
 
 @pytest.mark.parametrize("operation", _SCOPED_CASES)
@@ -148,7 +206,7 @@ def test_pointing_the_header_at_another_company_is_404(
         operation,
         auth_headers(world["ada"], world["b"]),
         CASES[operation],
-        str(world["membership_in_b"].id),
+        world,
     )
     assert response.status_code == 404, (
         f"{operation} answered {response.status_code} for a company the caller "
@@ -175,10 +233,10 @@ def test_naming_another_companys_row_while_correctly_scoped_is_404(
         operation,
         auth_headers(world["ada"], world["a"]),
         case,
-        str(world["membership_in_b"].id),
+        world,
     )
 
-    if "{membership_id}" in operation:
+    if _targets_another_companys_row(operation):
         assert response.status_code == 404, (
             f"{operation} reached a membership belonging to another company: "
             f"{response.status_code} {response.text}"
@@ -202,9 +260,7 @@ def test_a_company_that_does_not_exist_is_404(pg_client, two_companies, operatio
     world = two_companies
     headers = auth_headers(world["ada"])
     headers["X-Company-Id"] = unrelated_company_id()
-    response = _send(
-        pg_client, operation, headers, CASES[operation], str(world["membership_in_b"].id)
-    )
+    response = _send(pg_client, operation, headers, CASES[operation], world)
     assert response.status_code == 404
 
 

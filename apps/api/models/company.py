@@ -163,6 +163,60 @@ class Company(Base):
         Boolean, nullable=False, server_default="false"
     )
 
+    # ── Accounting, as answers rather than behaviour ─────────────────
+    #
+    # P0b-2 stores these and CHANGES NOTHING with them. No calculation reads
+    # them yet, no export looks at them, no document renders differently.
+    # They are here because the answers belong to the company and are settled
+    # once, with a tax advisor, long before P6 has anything to do with them —
+    # and because a company that has already recorded "Ist-Versteuerung,
+    # Kleinunternehmer" is a company whose first invoice can be right rather
+    # than migrated.
+    #
+    # SCOPE §10 (D13). Whoever wires these up: the value is the contract, the
+    # column is not, and a selector that silently starts doing something is a
+    # worse surprise than a feature that arrives late.
+
+    #: "ear" (Einnahmen-Ausgaben-Rechnung) or "double_entry" (doppelte
+    #: Buchführung). A `String`, not a database enum: the vocabulary is fixed
+    #: by law here but not everywhere, and an enum type costs a migration per
+    #: value while buying nothing a `Literal` in the schema does not already
+    #: give the API and the generated TypeScript.
+    bookkeeping_mode: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default="ear"
+    )
+    #: "soll" (VAT owed when the invoice is issued) or "ist" (when it is
+    #: paid). The single most consequential answer on this screen: it decides
+    #: which month a euro of VAT belongs to.
+    vat_timing: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default="soll"
+    )
+    #: §6 UStG 1994 Kleinunternehmer — no VAT charged, no input tax deducted.
+    kleinunternehmer: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+    #: Which chart of accounts to start from. NULL until chosen. A free
+    #: string rather than an enum because the real list comes from a region
+    #: pack (CLAUDE.md rule 7), and hardcoding today's placeholder options as
+    #: an enum would make the region pack a migration.
+    chart_of_accounts_template: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True
+    )
+    #: Which bookkeeping export this company's advisor wants. NULL until
+    #: chosen. Free string, same reason as above.
+    export_format: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    #: "invoice_date" or "payment_date" — which date decides the period a
+    #: document is archived under. Usually follows `vat_timing`, and is
+    #: nevertheless separate, because the two genuinely can differ and a
+    #: derived value would be one nobody could override.
+    archive_date_basis: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default="invoice_date"
+    )
+    #: Whether a month has to be approved before it is considered closed.
+    month_approval_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

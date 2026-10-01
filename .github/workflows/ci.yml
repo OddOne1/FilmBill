@@ -191,6 +191,56 @@ jobs:
         env:
           NEXT_PUBLIC_API_URL: /api
 
+  # ─── Generated API types ───────────────────────────────────────────────────
+  api-types-are-generated:
+    name: API types match the schema
+    runs-on: ubuntu-latest
+
+    # CLAUDE.md rule 10. FreeFrame's hand-written response interfaces drifted
+    # from its Pydantic schemas repeatedly, and the drift is invisible: the
+    # app compiles, the types are simply wrong about what arrives. This job is
+    # what makes "generated, never hand-edited" enforceable.
+    #
+    # The very first run of it found one — the hand-written `User` carried a
+    # `deleted_at` that /auth/me has never sent.
+    #
+    # It needs BOTH toolchains, which is why it is its own job rather than a
+    # step in `web`: the schema comes from importing the FastAPI app (no
+    # server, no database — see apps/api/scripts/dump_openapi.py) and the
+    # TypeScript comes from openapi-typescript.
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: apps/api/requirements.txt
+      - run: pip install -r apps/api/requirements.txt
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Regenerate
+        run: pnpm gen:api
+
+      # `--exit-code` rather than a diff somebody has to read in the log: a
+      # non-zero exit is the whole signal, and the diff is printed alongside it
+      # so the fix is one `pnpm gen:api` away.
+      - name: apps/web/types/api.gen.ts is up to date
+        run: |
+          if ! git diff --exit-code apps/web/types/api.gen.ts; then
+            echo "::error::apps/web/types/api.gen.ts is out of date. Run 'pnpm gen:api' and commit the result — do not hand-edit it (CLAUDE.md rule 10)."
+            exit 1
+          fi
+
   # ─── Images ────────────────────────────────────────────────────────────────
   docker-build:
     name: Docker build (no push)

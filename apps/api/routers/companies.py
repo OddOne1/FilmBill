@@ -27,9 +27,18 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..middleware.company import Membership, current_membership, require
 from ..middleware.auth import get_current_user
-from ..models.company import Company, CompanyMembership, CompanyRole
+from ..core.iban import format_iban
+from ..models.company import (
+    Company,
+    CompanyBankAccount,
+    CompanyMembership,
+    CompanyRole,
+)
 from ..models.user import User, UserStatus
 from ..schemas.company import (
+    BankAccountCreate,
+    BankAccountResponse,
+    BankAccountUpdate,
     CompanyCreate,
     CompanyResponse,
     CompanySummary,
@@ -416,3 +425,181 @@ def revoke_member(
     db.refresh(record)
     db.refresh(user)
     return _member_response(record, user)
+
+
+# ─── Bank accounts of the active company ────────────────────────────────────
+#
+# Gated on `company.settings.edit` for READS as well as writes, which is
+# stricter than `company.view` and deliberate: an IBAN is the detail a
+# convincing invoice fraud needs, and there is no reason for every member of a
+# production company to be able to read one out of the settings screen. No new
+# permission key was invented for it — this is the company's settings screen,
+# and `company.settings.edit` is the key that already means "may work on this
+# company's own configuration".
+
+
+def _bank_account_response(account: CompanyBankAccount) -> BankAccountResponse:
+    return BankAccountResponse(
+        id=account.id,
+        label=account.label,
+        iban=account.iban,
+        iban_formatted=format_iban(account.iban),
+        bic=account.bic,
+        bank_name=account.bank_name,
+        is_default=account.is_default,
+        created_at=account.created_at,
+    )
+
+
+def _bank_account_or_404(
+    db: Session, membership: Membership, account_id: uuid.UUID
+) -> CompanyBankAccount:
+    """Look an account up INSIDE the active company, through `scoped()`.
+
+    Same rule as `_member_or_404` above: an id belonging to another company is
+    not found rather than found-and-refused, because a 403 would confirm that
+    the id names a real bank account somewhere on this installation.
+    """
+    account = (
+        scoped(db.query(CompanyBankAccount), membership)
+        .filter(CompanyBankAccount.id == account_id)
+        .first()
+    )
+    if account is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    return account
+
+
+@router.get("/company/bank-accounts", response_model=list[BankAccountResponse])
+def list_bank_accounts(
+    db: Session = Depends(get_db),
+    membership: Membership = Depends(require("company.settings.edit")),
+):
+    """This company's bank accounts, default first."""
+    accounts = (
+        scoped(db.query(CompanyBankAccount), membership)
+        .order_by(CompanyBankAccount.is_default.desc(), CompanyBankAccount.created_at)
+        .all()
+    )
+    return [_bank_account_response(account) for account in accounts]
+
+
+@router.post(
+    "/company/bank-accounts",
+    response_model=BankAccountResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_bank_account(
+    body: BankAccountCreate,
+    db: Session = Depends(get_db),
+    membership: Membership = Depends(require("company.settings.edit")),
+):
+    """Add an account. The first one is the default whether it asked to be.
+
+    A company with accounts but no default is a company whose next invoice has
+    no account number on it, and nothing downstream has a sensible answer for
+    that — so the state is made unreachable here rather than handled
+    everywhere else.
+    """
+    existing = scoped(db.query(CompanyBankAccount), membership).first()
+
+    account = CompanyBankAccount(
+        company_id=membership.company_id,
+        label=body.label,
+        iban=body.iban,
+        bic=body.bic,
+        bank_name=body.bank_name,
+        is_default=False,
+    )
+    db.add(account)
+    db.flush()
+
+    company_service.set_default_bank_account(
+        db,
+        company_id=membership.company_id,
+        account=account,
+        is_default=body.is_default or existing is None,
+    )
+    db.commit()
+    db.refresh(account)
+    return _bank_account_response(account)
+
+
+@router.patch(
+    "/company/bank-accounts/{bank_account_id}", response_model=BankAccountResponse
+)
+def update_bank_account(
+    bank_account_id: uuid.UUID,
+    body: BankAccountUpdate,
+    db: Session = Depends(get_db),
+    membership: Membership = Depends(require("company.settings.edit")),
+):
+    """Edit an account, or make it the default.
+
+    `is_default: false` is refused rather than obeyed. Demoting the default
+    without naming a replacement is the "no default" state again; promoting
+    the intended account instead is one request and demotes this one as a
+    side effect, atomically.
+    """
+    account = _bank_account_or_404(db, membership, bank_account_id)
+    changes = body.model_dump(exclude_unset=True)
+    promote = changes.pop("is_default", None)
+
+    if promote is False and account.is_default:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "A company keeps one default account. Make another account "
+                "the default instead — this one is demoted automatically."
+            ),
+        )
+
+    for field, value in changes.items():
+        setattr(account, field, value)
+
+    if promote:
+        company_service.set_default_bank_account(
+            db,
+            company_id=membership.company_id,
+            account=account,
+            is_default=True,
+        )
+
+    db.commit()
+    db.refresh(account)
+    return _bank_account_response(account)
+
+
+@router.delete(
+    "/company/bank-accounts/{bank_account_id}", status_code=status.HTTP_204_NO_CONTENT
+)
+def delete_bank_account(
+    bank_account_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    membership: Membership = Depends(require("company.settings.edit")),
+):
+    """Remove an account.
+
+    Deleted outright, unlike a membership: a bank account carries no history
+    of its own, and the documents that were paid into it keep their own
+    snapshot of it (CLAUDE.md rule 4) rather than pointing at this row.
+
+    The default may only go when it is the last one left — otherwise the
+    company would be left with accounts and no default. Promote another first.
+    """
+    account = _bank_account_or_404(db, membership, bank_account_id)
+
+    if account.is_default and company_service.has_other_bank_accounts(
+        db, company_id=membership.company_id, exclude_id=account.id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "That is the default account. Make another account the "
+                "default first, then remove this one."
+            ),
+        )
+
+    db.delete(account)
+    db.commit()
+    return None

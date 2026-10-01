@@ -225,7 +225,7 @@ async function handleAvatarCropped(blob: Blob) {
         // /auth/2fa/verify-login — this page already holds a session, and
         // spending the code to mint a second one would leave nothing to
         // prove the change with.
-        setPw2faMethod(res.method)
+        setPw2faMethod(res.method ?? null)
         setPwCode(EMPTY_CODE)
         setPw2faCode(EMPTY_CODE)
         setPwCodeDialogOpen(false)

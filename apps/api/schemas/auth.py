@@ -1,8 +1,22 @@
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, WithJsonSchema, field_validator
 import uuid
 from datetime import datetime
-from typing import Literal, Optional, Union
+from typing import Annotated, Any, Literal, Optional, Union
 from ..models.user import UserStatus, UserGlobalRole
+
+#: Arbitrary JSON object, as an OpenAPI schema a generator can use.
+#:
+#: `dict[str, Any]` alone is not enough. Pydantic sees that `Any` constrains
+#: nothing and emits a bare `{"type": "object"}` with no `additionalProperties`
+#: — and openapi-typescript reads that, correctly, as `Record<string, never>`:
+#: an object that may hold no keys at all. Every read of a preference key then
+#: fails to typecheck, and the temptation is to blame the generator. The
+#: generator is right; the schema was vague. This says what was meant.
+JsonObject = Annotated[
+    dict[str, Any],
+    WithJsonSchema({"type": "object", "additionalProperties": True}),
+]
+
 
 class RegisterRequest(BaseModel):
     email: EmailStr
@@ -318,7 +332,9 @@ class UserResponse(BaseModel):
     email_verified: bool = False
     role: UserGlobalRole = UserGlobalRole.user
     invite_token: str | None = None
-    preferences: dict = {}
+    #: Arbitrary per-user JSON: theme, the active company id, notification
+    #: settings. See `JsonObject` above for why it is not a bare `dict`.
+    preferences: JsonObject = {}
     created_at: datetime
     #: a user's own second-factor state, so the settings screen can
     #: render "on, via an authenticator app" without a second endpoint.

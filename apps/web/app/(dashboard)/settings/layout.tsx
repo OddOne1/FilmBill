@@ -3,7 +3,19 @@
 import * as React from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { User, Bell, Shield, Palette, Brush, LayoutTemplate, Users } from 'lucide-react'
+import {
+  User,
+  Bell,
+  Shield,
+  Palette,
+  Brush,
+  LayoutTemplate,
+  Users,
+  Building2,
+  Landmark,
+  Calculator,
+  ShieldCheck,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 import { usePermissions } from '@/hooks/use-permissions'
@@ -15,6 +27,12 @@ interface SettingsNavItem {
   /** Gated on the INSTALLATION role (User.role === superadmin): branding,
    *  design, user administration. Nothing to do with companies. */
   adminOnly?: boolean
+  /** Highlight only on an exact path match.
+   *
+   *  For a parent path whose children are siblings in the same list:
+   *  /settings/company is the General screen AND the prefix of every other
+   *  company entry, so without this it stays highlighted on all of them. */
+  exact?: boolean
   /** Gated on a COMPANY permission in the company currently active.
    *
    *  The two are separate on purpose and must stay so — an installation
@@ -45,7 +63,43 @@ const settingsNavGroups: SettingsNavItem[][] = [
     { href: '/settings/branding', label: 'Branding', icon: Brush, adminOnly: true },
     { href: '/settings/design', label: 'Design', icon: LayoutTemplate, adminOnly: true },
   ],
+  // ── The active company ────────────────────────────────────────────────
+  //
+  // One group, in the order someone actually fills it in: who we are, where
+  // we are paid, how we are booked, who must have 2FA, who is in. Each entry
+  // is gated on the permission its own endpoints enforce, so a member who
+  // cannot edit settings sees only the entries they can use rather than a
+  // list of 404s.
+  //
+  // `exact` on General, because every other entry in this group is a path
+  // UNDER /settings/company — without it, General would highlight on all of
+  // them.
   [
+    {
+      href: '/settings/company',
+      label: 'Company',
+      icon: Building2,
+      permission: 'company.settings.edit',
+      exact: true,
+    },
+    {
+      href: '/settings/company/bank-accounts',
+      label: 'Bank accounts',
+      icon: Landmark,
+      permission: 'company.settings.edit',
+    },
+    {
+      href: '/settings/company/accounting',
+      label: 'Accounting',
+      icon: Calculator,
+      permission: 'company.settings.edit',
+    },
+    {
+      href: '/settings/company/security',
+      label: 'Security',
+      icon: ShieldCheck,
+      permission: 'company.settings.edit',
+    },
     {
       href: '/settings/company/members',
       label: 'Members',
@@ -108,8 +162,10 @@ export default function SettingsLayout({
               )}
             >
               {group.map((item) => {
-                const isActive =
-                  pathname === item.href || pathname?.startsWith(item.href + '/')
+                const isActive = item.exact
+                  ? pathname === item.href
+                  : pathname === item.href ||
+                    pathname?.startsWith(item.href + '/')
                 const Icon = item.icon
 
                 return (

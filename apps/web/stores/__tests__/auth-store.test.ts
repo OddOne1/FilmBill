@@ -27,7 +27,12 @@ const mockUser: User = {
   email_verified: true,
   preferences: {},
   created_at: '2024-01-01T00:00:00Z',
-  deleted_at: null,
+  // No `deleted_at`: the hand-written `User` interface claimed one and
+  // /auth/me has never sent it. The generated type is what found that.
+  must_set_password: false,
+  backup_email_state: 'verified',
+  two_factor_enabled: false,
+  two_factor_required: false,
 }
 
 describe('Auth store', () => {

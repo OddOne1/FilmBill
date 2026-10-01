@@ -128,3 +128,10 @@ dmypy.json
 .windsurf/skills/
 skills-lock.json
 .worktrees/
+
+# Intermediate for `pnpm gen:api`: the OpenAPI document, dumped so
+# openapi-typescript can read it. Deliberately NOT committed — the
+# generated artefact under version control is apps/web/types/api.gen.ts,
+# and one generated file means one drift check rather than two that can
+# disagree. Root-anchored (CLAUDE.md rule 17).
+/apps/api/openapi.json
