@@ -52,6 +52,17 @@ type Settings = {
 }
 
 let settings: Settings
+/** How many times `/site-settings` has RESOLVED.
+ *
+ *  The readiness gate below needs it. On a fixture whose fetched values happen
+ *  to equal the pre-fetch defaults — a fresh install, `org_name: 'FilmBill'`
+ *  and no logo — every rendered check is already true before the fetch lands,
+ *  so a gate built only from what is on screen passes immediately and the
+ *  `queryByRole(...).toBeNull()` assertions after it pass **vacuously**: they
+ *  would hold just as well against a page that never loaded. This is the one
+ *  clause `branding-draft.test.tsx` lacks, and it is the one that makes an
+ *  absence assertion mean something. */
+let fetches = 0
 
 beforeEach(() => {
   settings = {
@@ -63,7 +74,11 @@ beforeEach(() => {
     theme_colors: null,
   }
   ;[get, patch, upload].forEach((m) => m.mockReset())
-  get.mockImplementation(async () => settings)
+  fetches = 0
+  get.mockImplementation(async () => {
+    fetches += 1
+    return settings
+  })
   patch.mockImplementation(async (_p: string, body: Record<string, unknown>) => {
     settings = { ...settings, ...(body as Partial<Settings>) }
     return settings
@@ -82,16 +97,57 @@ beforeEach(() => {
   vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {}).mockClear()
 })
 
-/** A fresh SWR cache per render — see branding-draft.test.tsx for why. */
+/** A fresh SWR cache per render — see branding-draft.test.tsx for why.
+ *
+ *  **It waits for the FETCHED settings, never for static chrome.** This is the
+ *  CI flake, and it is worth spelling out because the obvious simplification
+ *  brings it straight back:
+ *
+ *  `'Workspace name'` is an `<h2>`. It is on screen on the first render,
+ *  before any fetch resolves. Half this page, though, is rendered from the
+ *  fetched settings — `page.tsx` only renders the Reset button when
+ *  `hasResettableBranding` is true, and that is derived from the fetched org
+ *  name, which is `'FilmBill'` until `/site-settings` lands. So a gate on the
+ *  heading waited for something that does not depend on the data, and the
+ *  `getByRole` after it — synchronous, no retry — needed something that does.
+ *
+ *  On a fast machine the fetch settled inside the same flush and it passed. On
+ *  a Linux container and on GitHub's runners it did not, which is why CI was
+ *  intermittently red from #13 and why the suite growing (338 → 361 → 391
+ *  tests) kept moving the odds. Nothing was ever wrong with the component: a
+ *  conditional that flips when data arrives is ordinary SWR behaviour.
+ *
+ *  Reproduced by giving `get` a 20ms delay, which turns it from intermittent
+ *  into certain — and which surfaced a SECOND racy test in this file that CI
+ *  had never shown (`darkSlotSrc()` read a slot that still had no `<img>`).
+ *  Run `pnpm ci:web` to check the whole pipeline the way CI does.
+ *
+ *  Do not replace any of the three clauses below with a heading, a timeout or
+ *  a `retry:` in the vitest config. The first hides this bug again; the other
+ *  two hide the entire class of it. */
 async function renderPage() {
   const r = render(
     <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
       <BrandingPage />
     </SWRConfig>,
   )
-  await screen.findByText('Workspace name')
+  await waitFor(() => {
+    // 1. The fetch has actually resolved. Carries the fixtures whose values
+    //    match the defaults — see `fetches`.
+    expect(fetches).toBeGreaterThan(0)
+    // 2. …and a render consumed it: the committed name is in its own field.
+    expect(nameField().value).toBe(settings.org_name)
+    // 3. …including the logo, for the fixtures that have one. The name alone
+    //    is not enough: a fixture that customises only a logo leaves the name
+    //    at the default, so clause 2 is already true mid-flight.
+    if (settings.logo_dark_url) {
+      expect(darkSlotSrc()).toContain(settings.logo_dark_url)
+    }
+  })
   return r
 }
+
+const nameField = () => screen.getByPlaceholderText('e.g. Acme Studio') as HTMLInputElement
 
 /** The slot's own preview image, which is what an admin is looking at.
  *
@@ -101,7 +157,12 @@ async function renderPage() {
  *  which image is on screen. */
 function darkSlotSrc(): string {
   const slot = screen.getByText('Dark theme logo').closest('div')!.parentElement!
-  return slot.querySelector('img')!.getAttribute('src') ?? ''
+  // `?.` and not `!`: this is called from inside `renderPage`'s `waitFor`,
+  // where the slot legitimately has no image yet, and a TypeError thrown
+  // there is not a retryable assertion failure — it is the gate crashing.
+  // Returning '' lets the gate poll again, and an empty string is also the
+  // honest answer for the fresh-install fixtures, which show "No logo".
+  return slot.querySelector('img')?.getAttribute('src') ?? ''
 }
 
 const fileInputs = () =>
@@ -119,14 +180,16 @@ describe('a configured logo', () => {
   it('says so, rather than leaving the absence to be discovered', async () => {
     await renderPage()
 
+    // `findBy`, not `getBy`: this sentence only renders for a slot that HAS a
+    // committed logo, so it is fetched-dependent. The gate above already
+    // guarantees it — this is the second lock on the same door.
     expect(
-      screen.getByText(/can be replaced, but not removed/i),
+      await screen.findByText(/can be replaced, but not removed/i),
     ).toBeInTheDocument()
   })
 
   it('is never cleared by anything this page can send', async () => {
-    const user = await renderPage()
-    void user
+    await renderPage()
 
     // Every control on the page, exercised: nothing produces a null for a
     // brand-image key. This is the assertion that would have caught the
@@ -185,7 +248,12 @@ describe('"reset" no longer reaches the logos', () => {
     const user = userEvent.setup()
     await renderPage()
 
-    await user.click(screen.getByRole('button', { name: /reset name and colors/i }))
+    // `findBy` for the same reason: this button is the one the flake was
+    // about, and it exists only once the fetched name differs from the
+    // default.
+    await user.click(
+      await screen.findByRole('button', { name: /reset name and colors/i }),
+    )
     await user.click(screen.getByRole('button', { name: /save changes/i }))
 
     await waitFor(() => expect(patch).toHaveBeenCalled())

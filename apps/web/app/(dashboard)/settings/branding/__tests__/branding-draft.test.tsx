@@ -44,6 +44,10 @@ type Settings = {
 }
 
 let settings: Settings
+/** Resolutions of `/site-settings`. See the gate in `renderPage`: the two
+ *  rendered clauses there are both already true, mid-flight, for a fixture
+ *  whose values equal the pre-fetch defaults. */
+let fetches = 0
 
 beforeEach(() => {
   settings = {
@@ -55,7 +59,11 @@ beforeEach(() => {
     theme_colors: null,
   }
   ;[get, patch, upload].forEach((m) => m.mockReset())
-  get.mockImplementation(async () => settings)
+  fetches = 0
+  get.mockImplementation(async () => {
+    fetches += 1
+    return settings
+  })
   patch.mockImplementation(async (_p: string, body: Record<string, unknown>) => {
     settings = { ...settings, ...(body as Partial<Settings>) }
     return settings
@@ -99,6 +107,9 @@ function renderPage() {
     </SWRConfig>,
   )
   return waitFor(() => {
+    // The fetch has resolved at all. Needed for a fixture whose values match
+    // the defaults, where both rendered checks below are true before it does.
+    expect(fetches).toBeGreaterThan(0)
     expect(nameField().value).toBe(settings.org_name)
     // The name alone is not a sufficient gate: a test that changes only a
     // logo leaves org_name at the default, so the check above is already

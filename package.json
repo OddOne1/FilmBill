@@ -9,6 +9,7 @@
     "typecheck": "pnpm --filter web typecheck",
     "test": "pnpm --filter web test",
     "gen:api": "python3 -m apps.api.scripts.dump_openapi --out apps/api/openapi.json && pnpm --filter web gen:types",
-    "gen:api:docker": "docker compose -f docker-compose.dev.yml exec -T api python -m apps.api.scripts.dump_openapi --out /workspace/apps/api/openapi.json && pnpm --filter web gen:types"
+    "gen:api:docker": "docker compose -f docker-compose.dev.yml exec -T api python -m apps.api.scripts.dump_openapi --out /workspace/apps/api/openapi.json && pnpm --filter web gen:types",
+    "ci:web": "./scripts/ci-web-local.sh"
   }
 }
