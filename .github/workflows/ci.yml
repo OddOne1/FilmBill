@@ -162,7 +162,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 9.12.3
 
@@ -219,7 +219,7 @@ jobs:
           cache-dependency-path: apps/api/requirements.txt
       - run: pip install -r apps/api/requirements.txt
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 9.12.3
       - uses: actions/setup-node@v4
