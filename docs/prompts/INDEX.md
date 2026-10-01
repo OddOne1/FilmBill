@@ -13,6 +13,7 @@ from them. `docs/SCOPE.md` is where the product is decided.
 | P0b-0b | SMTP security modes (ported with P0b-0, decided separately) | [`07-P0b-0-port-auth.md`](07-P0b-0-port-auth.md) | `7cf9069` | done — see notes |
 | P0b-1 | Companies, memberships, `X-Company-Id` scoping, permissions, per-role 2FA | [`09-P0b-1-companies.md`](09-P0b-1-companies.md) | `eba7b5f` | done — see notes |
 | P0b-2 | Money, generated API types, company settings screens | [`12-P0b-2-money-codegen-settings.md`](12-P0b-2-money-codegen-settings.md) | `d767fbf` | done — see notes |
+| CI-fix | The CI web flake: a readiness gate that waited for static chrome | [`14-ci-web-flake.md`](14-ci-web-flake.md) | `e68d879` | done — see notes |
 | P0b | Foundations: companies, roles, number series, audit, money, codegen | [`03-filmbill-P0b-foundations.md`](03-filmbill-P0b-foundations.md) | — | superseded — split into P0b-0, P0b-1, P0b-2 |
 
 ---
@@ -493,3 +494,66 @@ classifier refuses — steps in the report). None of the five screens was opened
 in a browser. No `NUMERIC` column ships yet — nothing stores an amount until
 P1, so the column helpers are asserted on precision and scale, not
 round-tripped through Postgres. Nothing pushed to any registry (rule 18).
+
+## CI-fix — the web flake — notes
+
+Prompt: [`14-ci-web-flake.md`](14-ci-web-flake.md). Diagnosed by Cowork on
+2026-10-01; the cause in that prompt was correct and is confirmed here by a
+reproduction.
+
+**The bug was the test's readiness gate, not the component.**
+`logo-never-clears.test.tsx` gated on `findByText('Workspace name')` — an `<h2>`
+that paints on the first render — then reached synchronously, with `getByRole`
+and no retry, for a button that only exists once `/site-settings` has resolved
+(`hasResettableBranding` is derived from the fetched org name, which is
+`'FilmBill'` until then). The gate waited for something that does not depend on
+the data; the assertion needed something that does. macOS won that race every
+time; Linux and GitHub's runners did not. Growing the suite (338 → 361 → 391)
+only moved the odds, which is why #16 looked like a fix.
+
+**Reproduced before being touched**, with a 20ms delay on the `get` mock — which
+also surfaced a **second** racy test in the same file that CI had never shown
+(`darkSlotSrc()` read a slot with no `<img>` yet and threw).
+
+The gate now has three clauses: the fetch has resolved at all; the committed
+name is in its field; and the committed logo is in its slot. The first is the
+one `branding-draft.test.tsx` was missing and is why it was added there too —
+on a fixture whose values equal the pre-fetch defaults (a fresh install) the
+other two are already true mid-flight, so every `queryBy…().toBeNull()` after
+the gate passed **vacuously**, exactly as it would against a page that never
+loaded.
+
+**Sweep:** of 43 web test files, only three exercise a real SWR hook —
+this one, `branding-draft` (correct gate since P0a-fix, now hardened), and
+`sidebar-logo-ssr`, which deliberately leaves the fetch pending forever and
+asserts the first paint. Everything else mocks its data hook with a synchronous
+object or already awaits, so its `getBy` calls are correct and were left alone.
+Two queries in the fixed file became `findBy` as defence in depth; the suite was
+**not** converted wholesale, because `findBy` on something that should already
+be present hides a slow regression. No sleep, no timeout, no `retry:`.
+
+**`pnpm ci:web`** (`scripts/ci-web-local.sh`) runs lint, typecheck, test and
+build on Linux in `node:20` with pnpm 9.12.3, from a clean `git archive HEAD`
+export. Run against the parent commit it reproduced CI's failure to the
+character — `1 failed | 390 passed (391)`, same test, same line — and against
+the fix it is green end to end. It warns when `apps/web` has uncommitted
+changes, since it tests HEAD and so would CI. Its empty-array guard exists
+because macOS ships bash 3.2, where `"${arr[@]}"` on an empty array is an error
+under `set -u`; found by running the script on the Mac it is for.
+
+CLAUDE.md gains **rule 17e** for the class and a Local development note.
+
+**Counts.** Web 391 passed / 43 files, ten consecutive local runs all 391.
+Green at injected fetch delays of 20, 50 and 120ms. Container pipeline green.
+
+**Open: CI #22 was not observed** — nothing has been pushed from here. Run
+`git push origin main` and check the four jobs.
+
+---
+
+## Open items, unrelated to the above
+
+**Red dependabot PR runs: #2, #3, #4, #9, #11, #21.** `setup-python` 5→7,
+`setup-buildx` 3→4, `lucide-react`, `pydantic`. On PR branches, some red since
+2026-09-20, and **not** the flake fixed above — recorded here so a future
+reader does not mistake one for the other. Nothing in this change touches them.
