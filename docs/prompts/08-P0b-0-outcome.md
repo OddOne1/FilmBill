@@ -68,6 +68,9 @@ On the live dev stack: migrations auto-applied, the new endpoints answer (403 un
 
 The browser walkthrough. Empty database, `down -v`, rebuild, `up -d`, then at `http://localhost:3100` with Mailpit at `http://localhost:8125`:
 
+> **Mail did not actually reach Mailpit until `PENDING`.** The dev compose resolved SMTP security to `implicit_tls` against Mailpit's plaintext port, so every step below that waits for a code or an invite link would have waited forever — see `docs/prompts/16-dev-mail-smtp-none.md`.
+
+
 1. Setup → create admin. `Sommer2026!` must be **rejected with a stated reason**, and the submit button must never be dead-and-silent (rule 17c). Then a real password.
 2. The account gate: password first, then a backup address; the code arrives in Mailpit; a same-domain address must say so readably; the gate clears only once the code is entered.
 3. Enrol in email 2FA. Subject **"Confirm two-factor authentication on FilmBill"**, **no code in the subject**, body says the code cannot be used to sign in.

@@ -135,8 +135,26 @@ services:
       S3_REGION: us-east-1
       S3_PUBLIC_ENDPOINT: http://localhost:9100
       GOTENBERG_URL: http://gotenberg:3000
-      # Dev mail goes to Mailpit, always. No credentials, no TLS, nothing
-      # leaves this machine.
+      # ── Dev mail: Mailpit, always. Nothing leaves this machine ─────────
+      #
+      # SMTP_SECURITY is the load-bearing line here and it must stay.
+      #
+      # Mailpit's port 1025 is PLAINTEXT. `SMTP_USE_TLS: "false"` does not
+      # say that — `smtp_security_from` maps a false boolean to
+      # **implicit_tls**, deliberately, because that is what the boolean has
+      # always DONE and P0b-0 would not silently switch anybody's production
+      # encryption off (see services/email_config.py). So without the
+      # explicit mode below, the client opens an SMTP_SSL socket to a server
+      # that speaks no TLS and every send dies with
+      # `[SSL: WRONG_VERSION_NUMBER] wrong version number` — which reads like
+      # a certificate problem and is really the client talking TLS to a
+      # plaintext port. No mail reaches Mailpit at all, and nothing says so:
+      # the invite links, 2FA codes and backup-address codes that three
+      # acceptance walkthroughs depend on were simply never delivered.
+      #
+      # `tests/test_dev_mail_config.py` parses this file and asserts the
+      # resolved mode, so deleting the line fails the suite rather than the
+      # next person's afternoon.
       MAIL_PROVIDER: smtp
       MAIL_FROM_ADDRESS: noreply@filmbill.local
       MAIL_FROM_NAME: FilmBill
@@ -144,6 +162,13 @@ services:
       SMTP_PORT: 1025
       SMTP_USER: ""
       SMTP_PASSWORD: ""
+      SMTP_SECURITY: "none"
+      # Kept alongside the mode, not replaced by it. `settings.smtp_use_tls`
+      # is still read — it populates `MailConfig.smtp_use_tls`, which
+      # GET /email-settings reports and the admin screen round-trips — so
+      # dropping it here would make dev inherit the library default `True`
+      # and *report* "TLS on" for a plaintext connection. Untrue, and the
+      # same class of quiet mismatch as the bug above.
       SMTP_USE_TLS: "false"
     depends_on:
       postgres:

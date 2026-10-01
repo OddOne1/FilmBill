@@ -73,3 +73,8 @@ qrcode[pil]==7.4.2
 # rule can give its own specific message and can be audited without reading
 # a dependency's internals.
 zxcvbn==4.4.28
+# Reading docker-compose.dev.yml in tests/test_dev_mail_config.py, which
+# asserts the dev stack's resolved mail settings. It was already installed
+# transitively; declared because test_declared_dependencies.py is right
+# that an undeclared import works only until whatever pulls it in changes.
+PyYAML==6.0.3
