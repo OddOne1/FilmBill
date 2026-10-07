@@ -15,7 +15,7 @@ from them. `docs/SCOPE.md` is where the product is decided.
 | P0b-2 | Money, generated API types, company settings screens | [`12-P0b-2-money-codegen-settings.md`](12-P0b-2-money-codegen-settings.md) | `d767fbf` | done — see notes |
 | CI-fix | The CI web flake: a readiness gate that waited for static chrome | [`14-ci-web-flake.md`](14-ci-web-flake.md) | `e68d879` | done — see notes |
 | dev-mail | Dev mail was never delivered: SMTP mode `none` for Mailpit | [`16-dev-mail-smtp-none.md`](16-dev-mail-smtp-none.md) | `fe6730e` | done — see notes |
-| server-test | A LAN-only test instance on the TrueNAS server | [`17-server-test-instance.md`](17-server-test-instance.md) | `PENDING` | done — see notes |
+| server-test | A LAN-only test instance on the TrueNAS server | [`17-server-test-instance.md`](17-server-test-instance.md) | `eb9f4dd` | done — see notes |
 | P0b | Foundations: companies, roles, number series, audit, money, codegen | [`03-filmbill-P0b-foundations.md`](03-filmbill-P0b-foundations.md) | — | superseded — split into P0b-0, P0b-1, P0b-2 |
 
 ---
