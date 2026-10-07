@@ -78,6 +78,14 @@ next-env.d.ts
 # local or production secrets and must never be committed.
 .env*
 !.env.example
+# The LAN test instance's TEMPLATE is tracked; its real file is not.
+# Root-anchored (CLAUDE.md rule 17) so these two lines can only ever match
+# the files at the repo root, never an `apps/*/.env.server-test*` someone
+# adds later. The negation is needed because `.env*` above would otherwise
+# swallow the template too — which is how a committed example quietly stops
+# being committed.
+!/.env.server-test.example
+/.env.server-test
 .envrc
 .venv
 /env/

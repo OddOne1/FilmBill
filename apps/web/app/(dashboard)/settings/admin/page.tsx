@@ -777,12 +777,32 @@ export default function AdminPage() {
 
   const [copiedId, setCopiedId] = React.useState<string | null>(null);
 
-  const handleCopyInviteLink = (u: AdminUser) => {
+  const [copyFailed, setCopyFailed] = React.useState<string | null>(null);
+
+  const handleCopyInviteLink = async (u: AdminUser) => {
     if (!u.invite_token) return;
     const link = `${window.location.origin}/invite/${u.invite_token}`;
-    navigator.clipboard.writeText(link);
-    setCopiedId(u.id);
-    setTimeout(() => setCopiedId(null), 2000);
+    // `navigator.clipboard` exists only in a SECURE CONTEXT. https and
+    // http://localhost qualify; plain `http://192.168.1.100:3100` — which is
+    // how the LAN test instance is reached (docs/deploy/server-test.md) — does
+    // not, so the whole API is `undefined` there. This used to be
+    // `navigator.clipboard.writeText(link)` unguarded, which threw a
+    // TypeError before `setCopiedId` ran: the button did nothing, said
+    // nothing, and the link was not on the clipboard either (rule 17c).
+    //
+    // On failure the link is shown instead, so it can still be copied by
+    // hand — the point of the button is to get the link to the person, not to
+    // use a particular browser API.
+    try {
+      if (!navigator.clipboard) throw new Error("no clipboard in this context");
+      await navigator.clipboard.writeText(link);
+      setCopyFailed(null);
+      setCopiedId(u.id);
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch {
+      setCopiedId(null);
+      setCopyFailed(link);
+    }
   };
 
   const handleClearAccountGate = async (u: AdminUser) => {
@@ -912,6 +932,15 @@ export default function AdminPage() {
                 </>
               )}
             </Button>
+          )}
+          {/* The clipboard is unavailable outside a secure context (plain
+              http on a LAN IP), so the link is shown to be copied by hand
+              rather than the button failing in silence. */}
+          {copyFailed && copyFailed.endsWith(u.invite_token ?? "\u0000") && (
+            <span className="max-w-[22rem] break-all text-xs text-text-tertiary">
+              Could not reach the clipboard — copy this link:{" "}
+              <code className="text-text-secondary">{copyFailed}</code>
+            </span>
           )}
           {/* FreeFrame §200 — shown only for a user who is ACTUALLY gated, so it is
               not a standing button that waives a requirement nobody has.

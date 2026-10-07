@@ -1,0 +1,405 @@
+# FilmBill — LAN-only test instance on the TrueNAS server.
+#
+# NOT production, NOT reachable from the internet. See
+# docs/deploy/server-test.md for how to run it; this header covers only why
+# the file looks the way it does.
+#
+# Isolation (CLAUDE.md rule 18). A FilmBill v1 may exist somewhere and may be
+# auto-updated from a registry. Nothing here can collide with it:
+#   * `name: filmbill-v2` is fixed, so the project name never defaults to the
+#     directory name and can never be the one v1 uses;
+#   * every built image is tagged `filmbill-v2-<service>:test`, a name no
+#     registry serves, so there is nothing for an updater to pull;
+#   * every service carries `com.centurylinklabs.watchtower.enable=false`;
+#   * the network is this project's own. No `external:` network or volume, no
+#     Traefik labels, nothing a Cloudflare Tunnel could route to.
+# The label is a courtesy, not a guarantee: DockMon (running on this host)
+# has its own notion of auto-update and does not read it. Do not enable
+# auto-update for these containers.
+#
+# Addressing. Every published port binds to ${LAN_IP} — the server's own LAN
+# address — and never to 0.0.0.0, so nothing is offered on an interface we did
+# not choose. If ${LAN_IP} is ever not present on the host, `up` fails with
+# "cannot assign requested address"; that is the intended failure, and the
+# pre-flight script checks for it first.
+#
+# Persistence. Postgres and MinIO write to BIND MOUNTS under ${DATA_DIR}, not
+# named volumes, so that no `docker compose down -v` anywhere can remove the
+# test instance's data. `-v` is forbidden in the docs and appears in no
+# script. A rebuild/redeploy never touches ${DATA_DIR}.
+#
+# Healthchecks address 127.0.0.1, never `localhost`. Inside these images
+# `/etc/hosts` maps `localhost` to both 127.0.0.1 and ::1, BusyBox wget tries
+# the IPv6 address first, and the servers bind IPv4 only — so a `localhost`
+# probe never succeeds and the container sits `(unhealthy)` forever while
+# working fine. That cost FilmBill's dev web service a FailingStreak of 213
+# before anyone looked (docs/prompts/INDEX.md).
+name: filmbill-v2
+
+x-filmbill-labels: &labels
+  com.centurylinklabs.watchtower.enable: "false"
+  studio.yon.filmbill.instance: "v2-server-test"
+
+# One definition of the API family's environment, shared by api/worker/
+# email_worker/beat. They run the same image and must agree about the
+# database, the broker and the mail transport; four copies of this list is how
+# one of them ends up talking to something else.
+x-api-env: &api_env
+  DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+  REDIS_URL: redis://redis:6379/0
+  SECRET_KEY: ${SECRET_KEY}
+  JWT_SECRET: ${JWT_SECRET}
+  # The browser's origin. Read by main.py into the CORS allow-list, and used
+  # for the links in invite and magic-code mail — so it must be the LAN URL a
+  # person actually types, never `localhost`, or every emailed link points at
+  # the recipient's own machine.
+  FRONTEND_URL: http://${LAN_IP}:${WEB_PORT}
+  S3_STORAGE: minio
+  S3_ACCESS_KEY: ${MINIO_ROOT_USER}
+  S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+  S3_ENDPOINT: http://minio:9000
+  S3_BUCKET: ${S3_BUCKET}
+  S3_REGION: us-east-1
+  # CLAUDE.md rule 16 — what goes into a presigned URL handed to a BROWSER.
+  # `http://minio:9000` resolves only inside the compose network, so a
+  # presigned URL built from it is unreachable from the office LAN.
+  S3_PUBLIC_ENDPOINT: http://${LAN_IP}:${MINIO_PORT}
+  GOTENBERG_URL: http://gotenberg:3000
+  # Mail goes to Mailpit, in this stack, and leaves the server never.
+  #
+  # SMTP_SECURITY is load-bearing and must stay. Mailpit's 1025 is PLAINTEXT,
+  # and `SMTP_USE_TLS: "false"` does not say that: `smtp_security_from` maps a
+  # false boolean to implicit_tls (deliberately, see
+  # services/email_config.py). Without the explicit mode the client opens an
+  # SMTP_SSL socket to a plaintext port and every send dies with
+  # `[SSL: WRONG_VERSION_NUMBER]` — which reads like a certificate problem and
+  # is really the wrong protocol. No mail arrives and nothing says so.
+  MAIL_PROVIDER: smtp
+  MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS}
+  MAIL_FROM_NAME: ${MAIL_FROM_NAME}
+  SMTP_HOST: mailpit
+  SMTP_PORT: 1025
+  SMTP_USER: ""
+  SMTP_PASSWORD: ""
+  SMTP_SECURITY: "none"
+  # Kept beside the mode rather than replaced by it: `settings.smtp_use_tls`
+  # still populates what GET /email-settings reports, so dropping it would
+  # make this instance claim "TLS on" for a plaintext connection.
+  SMTP_USE_TLS: "false"
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: filmbill-v2-postgres
+    labels: *labels
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    # No published port. Nothing outside this stack needs the database, and
+    # publishing it on the LAN would be the one service here worth attacking.
+    volumes:
+      # Bind mount, and `postgres` in the container runs as uid 999 — the
+      # directory must be owned by 999:999. See docs/deploy/server-test.md.
+      - ${DATA_DIR}/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -h 127.0.0.1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: filmbill-v2-redis
+    labels: *labels
+    command: redis-server --appendonly yes
+    volumes:
+      - ${DATA_DIR}/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-h", "127.0.0.1", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:RELEASE.2024-09-13T20-26-02Z
+    container_name: filmbill-v2-minio
+    labels: *labels
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_CORS_ALLOW_ORIGIN: http://${LAN_IP}:${WEB_PORT}
+      MINIO_CORS_ALLOW_METHODS: GET,PUT,POST,DELETE,HEAD
+      MINIO_CORS_ALLOW_HEADERS: "*"
+      MINIO_CORS_EXPOSE_HEADERS: ETag,Content-Length,x-amz-request-id
+    ports:
+      # Published because a presigned URL is resolved by the BROWSER
+      # (rule 16). The console (9001) is deliberately NOT published.
+      - "${LAN_IP}:${MINIO_PORT}:9000"
+    volumes:
+      - ${DATA_DIR}/minio:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  minio-init:
+    image: minio/mc:latest
+    container_name: filmbill-v2-minio-init
+    labels: *labels
+    depends_on:
+      minio:
+        condition: service_healthy
+    # No `mc anonymous set download`: nothing in FilmBill is world-readable
+    # from the bucket. Every browser read goes through the API's object proxy
+    # (apps/api/routers/files.py).
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD};
+      mc mb --ignore-existing local/${S3_BUCKET};
+      exit 0;
+      "
+    restart: "no"
+
+  gotenberg:
+    image: gotenberg/gotenberg:8.21.1
+    container_name: filmbill-v2-gotenberg
+    labels: *labels
+    command:
+      - "gotenberg"
+      - "--chromium-disable-javascript=false"
+      - "--api-timeout=60s"
+    # No published port — reachable from api and worker on this network only.
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  mailpit:
+    image: axllent/mailpit:v1.21.8
+    container_name: filmbill-v2-mailpit
+    labels: *labels
+    environment:
+      MP_MAX_MESSAGES: 5000
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+      # Without this Mailpit keeps messages in memory only, and the bind
+      # mount below would be an empty directory — a code sent before a
+      # rebuild would be gone after one.
+      MP_DATABASE: /data/mailpit.db
+    ports:
+      # NO AUTHENTICATION. Anyone on the office LAN who reaches this port can
+      # read every message this instance has sent, including magic codes and
+      # invite links — which is the same as being able to sign in as anyone
+      # here. Acceptable for a test instance with test data; never put real
+      # customer mail through it.
+      - "${LAN_IP}:${MAILPIT_UI_PORT}:8025"
+    volumes:
+      # Captured mail survives a redeploy, so a code sent before a rebuild is
+      # still readable after one.
+      - ${DATA_DIR}/mailpit:/data
+    healthcheck:
+      test: ["CMD", "sh", "-c", "nc -z 127.0.0.1 1025"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile.prod
+    image: filmbill-v2-api:test
+    container_name: filmbill-v2-api
+    labels: *labels
+    ports:
+      # Published because `NEXT_PUBLIC_API_URL` is baked into the web bundle
+      # at BUILD time and the browser resolves it itself — see the web service
+      # and docs/deploy/server-test.md for why this instance uses an absolute
+      # LAN URL rather than production's `/api` (there is no reverse proxy
+      # here, and adding one for a test instance is more moving parts than
+      # publishing a port).
+      - "${LAN_IP}:${API_PORT}:8000"
+    environment: *api_env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      gotenberg:
+        condition: service_started
+      mailpit:
+        condition: service_started
+    # Alembic runs here, as it does in dev and prod: migrations are never a
+    # separate step anyone has to remember (CLAUDE.md rule 9).
+    command: >
+      sh -c "cd /workspace/apps/api && alembic upgrade head && cd /workspace &&
+      uvicorn apps.api.main:app --host 0.0.0.0 --port 8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4).status==200 else 1)"]
+      interval: 10s
+      timeout: 6s
+      retries: 10
+      start_period: 40s
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile.prod
+    image: filmbill-v2-worker:test
+    container_name: filmbill-v2-worker
+    labels: *labels
+    environment: *api_env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    command: celery -A apps.api.tasks.celery_app worker -Q documents -c ${DOCUMENT_CONCURRENCY:-2} --loglevel=info
+    # The prod IMAGE carries `HEALTHCHECK CMD curl -f
+    # http://localhost:8000/health` (apps/api/Dockerfile.prod:25), which is
+    # the API's probe. A Celery process serves no HTTP, so a service that
+    # does not override it reports `(unhealthy)` forever while working
+    # perfectly — and an `(unhealthy)` column people learn to ignore is worse
+    # than none. docker-compose.prod.yml overrides it per service; so does
+    # this file.
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A apps.api.tasks.celery_app inspect ping -d celery@$$HOSTNAME --timeout 10 > /dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+  email_worker:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile.prod
+    image: filmbill-v2-email-worker:test
+    container_name: filmbill-v2-email-worker
+    labels: *labels
+    environment: *api_env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+    command: celery -A apps.api.tasks.celery_app worker -Q email_high,email_low -c ${EMAIL_CONCURRENCY:-2} --loglevel=info
+    # The prod IMAGE carries `HEALTHCHECK CMD curl -f
+    # http://localhost:8000/health` (apps/api/Dockerfile.prod:25), which is
+    # the API's probe. A Celery process serves no HTTP, so a service that
+    # does not override it reports `(unhealthy)` forever while working
+    # perfectly — and an `(unhealthy)` column people learn to ignore is worse
+    # than none. docker-compose.prod.yml overrides it per service; so does
+    # this file.
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A apps.api.tasks.celery_app inspect ping -d celery@$$HOSTNAME --timeout 10 > /dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+  beat:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile.prod
+    image: filmbill-v2-beat:test
+    container_name: filmbill-v2-beat
+    labels: *labels
+    environment: *api_env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # `-s` is load-bearing with the PRODUCTION image, which runs as
+    # `appuser` and cannot write to /workspace. Celery beat's default
+    # schedule path is `celerybeat-schedule` in the working directory, so
+    # without this it dies on `[Errno 13] Permission denied` and restarts
+    # forever. The dev compose omits it and gets away with it because that
+    # stack runs the source as root over a bind mount; docker-compose.prod.yml
+    # has carried `-s /tmp/...` all along for this reason.
+    #
+    # /tmp rather than DATA_DIR: the file is only a record of when each
+    # periodic task last ran, and the schedule itself comes from
+    # tasks/celery_app.py. Losing it on restart costs nothing (and the
+    # schedule is empty in P0a anyway), while a bind mount here would be a
+    # fourth directory to own correctly for no benefit.
+    command: celery -A apps.api.tasks.celery_app beat --loglevel=info -s /tmp/celerybeat-schedule
+    # The prod IMAGE carries `HEALTHCHECK CMD curl -f
+    # http://localhost:8000/health` (apps/api/Dockerfile.prod:25), which is
+    # the API's probe. A Celery process serves no HTTP, so a service that
+    # does not override it reports `(unhealthy)` forever while working
+    # perfectly — and an `(unhealthy)` column people learn to ignore is worse
+    # than none. docker-compose.prod.yml overrides it per service; so does
+    # this file.
+    #
+    # beat answers no `inspect ping` either (it is a scheduler, not a worker),
+    # so it is probed on the one thing it must be able to do: reach the
+    # broker.
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"from apps.api.tasks.celery_app import celery_app; celery_app.connection().ensure_connection(max_retries=1)\" || exit 1"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile.prod
+      args:
+        # BAKED IN at build time. Changing LAN_IP or WEB_PORT therefore needs
+        # a rebuild of this service, not just a restart — stated here because
+        # a restart appearing to work and then serving the old origin is
+        # exactly the kind of quiet mismatch rule 15 exists for.
+        NEXT_PUBLIC_API_URL: http://${LAN_IP}:${API_PORT}
+    image: filmbill-v2-web:test
+    container_name: filmbill-v2-web
+    labels: *labels
+    ports:
+      - "${LAN_IP}:${WEB_PORT}:3000"
+    environment:
+      # What Next's SERVER-SIDE code uses: middleware.ts and
+      # lib/site-settings-server.ts run in this container, where the LAN
+      # address is a round trip out and back and `localhost` is nothing
+      # (CLAUDE.md rule 15). Without it, the setup redirect silently never
+      # happens on a fresh install.
+      API_INTERNAL_URL: http://api:8000
+      NODE_ENV: production
+      HOSTNAME: 0.0.0.0
+    depends_on:
+      api:
+        condition: service_started
+    healthcheck:
+      # 127.0.0.1, not localhost (see the file header), and `/login` because
+      # it answers 200 directly rather than depending on redirect-following.
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3000/login"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    restart: unless-stopped
+
+# Deliberately empty of named volumes for anything stateful: every durable
+# path is a bind mount under ${DATA_DIR} (see the header). Nothing here can be
+# destroyed by `down -v`.
+networks:
+  default:
+    name: filmbill-v2-net

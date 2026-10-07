@@ -15,9 +15,64 @@ from them. `docs/SCOPE.md` is where the product is decided.
 | P0b-2 | Money, generated API types, company settings screens | [`12-P0b-2-money-codegen-settings.md`](12-P0b-2-money-codegen-settings.md) | `d767fbf` | done — see notes |
 | CI-fix | The CI web flake: a readiness gate that waited for static chrome | [`14-ci-web-flake.md`](14-ci-web-flake.md) | `e68d879` | done — see notes |
 | dev-mail | Dev mail was never delivered: SMTP mode `none` for Mailpit | [`16-dev-mail-smtp-none.md`](16-dev-mail-smtp-none.md) | `fe6730e` | done — see notes |
+| server-test | A LAN-only test instance on the TrueNAS server | [`17-server-test-instance.md`](17-server-test-instance.md) | `PENDING` | done — see notes |
 | P0b | Foundations: companies, roles, number series, audit, money, codegen | [`03-filmbill-P0b-foundations.md`](03-filmbill-P0b-foundations.md) | — | superseded — split into P0b-0, P0b-1, P0b-2 |
 
 ---
+
+## server-test — a LAN-only test instance on the TrueNAS server
+
+New files only: `docker-compose.server-test.yml`, `.env.server-test.example`,
+`scripts/gen-server-test-env.sh`, `scripts/server-test-preflight.sh`,
+`scripts/server-test-backup.sh`, `docs/deploy/server-test.md`, and two test
+modules. The dev and prod compose files are untouched.
+
+**Isolation (rule 18).** Fixed `name: filmbill-v2`; every built image tagged
+`filmbill-v2-<service>:test`, a name no registry serves; the Watchtower-disable
+label on every service; its own network; no `external:` network or volume, no
+Traefik or Cloudflare labels. Every published port binds to `${LAN_IP}` and
+never `0.0.0.0`. Only `web`, `api`, `minio` and `mailpit` publish at all —
+Postgres, Redis, Gotenberg and the workers stay internal.
+
+**Why four ports and not the three the prompt listed.** `NEXT_PUBLIC_API_URL`
+is baked into the web bundle at build time and production gets `/api` from
+Traefik, which this stack does not have. Publishing the API (`API_PORT`, 8100)
+and building the bundle against `http://${LAN_IP}:${API_PORT}` is what dev
+already does and needs no reverse proxy; auth is a bearer token and no cookie
+is marked `Secure`, so the cross-origin pair costs nothing. Recorded because
+the prompt named three ports and this is a deliberate departure.
+
+**Three bugs the smoke run found, all in this new file, all already solved in
+`docker-compose.prod.yml` — found only because the smoke test ran the PROD
+images rather than dev's:**
+  1. `beat` crash-looped on `[Errno 13] Permission denied:
+     'celerybeat-schedule'`. The prod image runs as `appuser` and cannot write
+     `/workspace`; dev gets away with it as root over a bind mount. Needs
+     `-s /tmp/celerybeat-schedule`, which prod has always carried.
+  2. `worker` and `email_worker` sat `(unhealthy)` forever. The prod image's
+     own `HEALTHCHECK` is the API's `curl .../health`; a Celery process serves
+     no HTTP. Prod overrides it per service with `celery inspect ping`, and
+     `beat` with a broker-connection probe. So does this file now.
+  3. The pre-flight reported every port "free" and PASSED on a host with
+     neither `ss` nor `netstat` — the worst available answer for the one step
+     whose job is not colliding with FreeFrame. It now refuses and says which
+     tool to install.
+
+**Step 0 findings on plain `http://<LAN IP>`.** Cookies carry `SameSite=Lax`
+and no `Secure`, so sessions work; no HSTS, no forced https, no service
+worker, no WebAuthn, no `crypto.subtle`/`randomUUID`. One real break, fixed:
+`handleCopyInviteLink` called `navigator.clipboard.writeText` unguarded, and
+`navigator.clipboard` is `undefined` outside a secure context — the button
+threw before setting its own "Copied" state, so it did nothing and said
+nothing (rule 17c). It now shows the link to copy by hand.
+
+**Reported, not fixed.** `apps/api/Dockerfile.prod`'s `HEALTHCHECK` probes
+`http://localhost:8000/health` — the same `localhost`/IPv6 trap that left the
+dev web service at FailingStreak 213. Every compose file overrides it, so
+nothing is broken today, but an image whose own healthcheck is wrong is a trap
+for the next service that forgets to override. And
+`test_declared_dependencies.py`'s stdlib list is missing `stat`, so importing
+it fails that test; worked around here by not importing it.
 
 ## P0a — notes
 
