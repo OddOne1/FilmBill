@@ -16,6 +16,7 @@ from them. `docs/SCOPE.md` is where the product is decided.
 | CI-fix | The CI web flake: a readiness gate that waited for static chrome | [`14-ci-web-flake.md`](14-ci-web-flake.md) | `e68d879` | done — see notes |
 | dev-mail | Dev mail was never delivered: SMTP mode `none` for Mailpit | [`16-dev-mail-smtp-none.md`](16-dev-mail-smtp-none.md) | `fe6730e` | done — see notes |
 | server-test | A LAN-only test instance on the TrueNAS server | [`17-server-test-instance.md`](17-server-test-instance.md) | `eb9f4dd` | done — see notes |
+| minio-fork | Replace the withdrawn MinIO images; weekly image-reference guard | [`18-minio-fork-and-image-guard.md`](18-minio-fork-and-image-guard.md) | `45dacb5` | done — see notes |
 | P0b | Foundations: companies, roles, number series, audit, money, codegen | [`03-filmbill-P0b-foundations.md`](03-filmbill-P0b-foundations.md) | — | superseded — split into P0b-0, P0b-1, P0b-2 |
 
 ---
@@ -715,3 +716,161 @@ the redirect, so the path is fine once the address is literal.
 Nothing else in the stack `depends_on` web's health, so the only cost so far
 has been a misleading `(unhealthy)` in `docker compose ps` — which is its own
 problem, since it trains people to ignore the column.
+
+## minio-fork — the withdrawn MinIO images, and a guard against the next one
+
+Prompt: [`18-minio-fork-and-image-guard.md`](18-minio-fork-and-image-guard.md).
+Decision by Mathias 2026-10-07; remote verified as `OddOne1/filmbill` before
+any work, as the prompt required.
+
+**The premise, re-checked independently here.** `docker manifest inspect` on
+`minio/minio:RELEASE.2024-09-13T20-26-02Z` and `minio/mc:latest` both fail;
+`pgsty/minio:RELEASE.2026-08-04T00-00-00Z` resolves. The pinned tags had
+stopped existing and **nothing failed**, because every machine that ran the
+stack already had the layers cached — a green smoke test on a warm Docker
+cache says nothing about a fresh host.
+
+**The swap.** `pgsty/minio:RELEASE.2026-08-04T00-00-00Z` in both
+`docker-compose.dev.yml` and `docker-compose.server-test.yml`, pinned, service
+name unchanged. Verified in the image rather than assumed: `curl` is present
+(`wget`, `nc` and busybox are **not**), `minio --version` reports that exact
+release under AGPLv3, and the container still runs as uid 0 — which is what
+`docs/deploy/server-test.md`'s bind-mount ownership instruction depends on.
+The healthcheck uses `127.0.0.1`, not `localhost`: dev's old one said
+`localhost`, which resolves to `::1` first while MinIO binds IPv4. It happened
+to work, and "happened to" is the same trap that has `filmbill_web` reporting
+`(unhealthy)` after 213 probes.
+
+**`minio-init` was never load-bearing.** Removing it needed no `depends_on`
+substitution, because **nothing ever declared `depends_on: minio-init`** — api
+and worker already waited on `minio: condition: service_healthy`, in both
+files. The init job raced the API rather than preceding it, so the bucket has
+in fact always been created by the API's own `ensure_bucket_exists`. That is
+now the only thing that creates it, and it is idempotent.
+
+**What the API did if S3 was unreachable: it refused to start.**
+`ensure_bucket_exists` ran in FastAPI's `lifespan` with no guard, and an
+unreachable endpoint raises `EndpointConnectionError` — a `BotoCoreError`,
+**not** a `ClientError`, so none of the existing `except` clauses caught it.
+Uvicorn logs "Application startup failed" and exits: in dev a dead stack
+needing a manual `up`, and on the server-test instance, where the API is
+`restart: unless-stopped`, a crash loop whose restart noise hides the cause —
+while the `/health` endpoint you would use to diagnose it is the thing that did
+not start.
+
+Compose ordering alone is *nearly* enough (it gates on `service_healthy`), but
+not for the gap between "health endpoint answers" and "server accepts an API
+call", nor for a restart racing MinIO coming back. So: connection failures are
+now retried for ~30s and the API then starts **degraded** with a loud ERROR
+line, rather than not at all. A `ClientError` is still raised — a 403, a bad
+region or a wrong key is configuration that is wrong rather than late, and no
+waiting fixes it.
+
+The retry needed its own botocore config. **Measured, not assumed:** with
+botocore's defaults (60s connect timeout, 3 internal retries) one unreachable
+attempt took ~7 seconds, so "10 attempts 3s apart" would have hung startup for
+97s while the comment claimed 30. `_PROBE_CONFIG` cuts the probe to ~2s per
+try; real uploads keep the generous defaults. Re-measured after: 32.4s.
+
+### The guard
+
+`scripts/image_references.py` parses every `image:` in every compose file and
+every Dockerfile `FROM`, skips locally built `filmbill-*` tags, and resolves
+the rest with `docker manifest inspect` (which pulls no layers).
+`.github/workflows/image-references.yml` runs it **weekly**, on
+`workflow_dispatch`, and on changes to compose files, Dockerfiles or the script
+itself — deliberately **not** on every push: a registry lookup depends on
+Docker Hub being up, and a job that goes red for reasons the author cannot act
+on is a job people learn to ignore. The path filter covers every way a
+reference changes from inside the repository; the weekly run covers the way it
+changed from outside, which is what actually happened.
+
+**A rate-limited registry is not a withdrawn image, and `docker manifest
+inspect` exits 1 for both.** Found the hard way: running `--check` a few times
+in a row exhausted Docker Hub's anonymous quota, and the first version of the
+script then reported `redis:7-alpine` and `traefik:v2.11` as BROKEN. Measured
+stderr tells them apart —
+
+| | stderr | verdict |
+|---|---|---|
+| throttled | `toomanyrequests: You have reached your unauthenticated pull rate limit` | INCONCLUSIVE, retried |
+| withdrawn | `denied: requested access… / unauthorized: authentication required` | MISSING, not retried |
+
+— so `classify()` returns three verdicts, retries only the transient one, and
+fails on an inconclusive run with a message naming the rate limit. Failing
+rather than passing there is deliberate: a false red costs a glance and a
+re-run, a false green is the bug that started all this and it hid for weeks.
+
+32 tests for the parser (`apps/api/tests/test_image_references.py`): compose
+`image:` with and without a tag, registry host with a port, digest pins,
+quoted values, the word "image" in a comment or command (must **not** match),
+`${VAR}` references reported as unresolvable rather than skipped, multi-stage
+`FROM … AS` with stage names excluded, `ARG`-defaulted and `ARG`-undefaulted
+base images, `--platform=` flags, `FROM scratch`, lowercase `from`. Plus the
+three-verdict classification, including a **live** check that
+`minio/minio:RELEASE…` really classifies as MISSING, so the recorded stderr
+strings are not the only evidence (17b). And one test asserts the parser still
+finds this repository's own references — without it, a regex that stopped
+matching would report "every image reference resolves" forever, a false green
+one level up from the original.
+
+**Mutation, real FAIL line:** `axllent/mailpit:v99.99.99-does-not-exist` →
+exit 1, `MISSING` naming the reference and `docker-compose.dev.yml`. Reverted.
+
+### Two test defects the work exposed
+
+Neither was caused by the MinIO change; both were found because this run
+declared more of its environment than previous ones.
+
+- **`test_declared_dependencies.py`** reported `image_references` as an
+  undeclared PyPI package called "image-references". `scripts/*.py` module
+  names are now derived into its `LOCAL` set, so the next repo-local tool a
+  test imports needs no edit.
+- **`test_smtp_security_modes.py::test_the_response_reports_both_stored_and_effective`**
+  asserted the effective mode was one of two values and passed only because no
+  environment it had run in defined `SMTP_SECURITY`. With the dev stack's own
+  `SMTP_SECURITY=none` present it failed: `assert 'none' in ('starttls',
+  'implicit_tls')`. The behaviour was right; the test was reading its expected
+  value off its surroundings. It now patches the env side explicitly and
+  asserts `starttls` exactly once. **Another instance of the ambient-config
+  family** — see the harness-traps note below.
+
+### Verification
+
+Covered in the report; the parts worth recording here:
+
+- **Cold cache (a):** `pgsty/minio` deleted locally, and the next `up` really
+  pulled it — the first attempt hit `429 Too Many Requests` (my own
+  `manifest inspect` calls had used the quota), the retry succeeded. Still
+  cached and not clearable without breaking the stack: `postgres:15-alpine`,
+  `redis:7-alpine`, `gotenberg/gotenberg:8.21.1` (2.48GB),
+  `axllent/mailpit:v1.21.8`, `node:20`, `node:20-alpine`, `python:3.11-slim`,
+  and the locally built `filmbill-*` images.
+- **No init job (b):** on a scratch MinIO with an empty volume, no bucket
+  existed; the API's `ensure_bucket_exists` created it, `put_object` stored an
+  object and MinIO itself listed both. `filmbill_miniodata` untouched.
+- **Existing volume (c):** the real dev volume holds the `filmbill` bucket but
+  **no objects**, so there was nothing of the old MinIO's to read back. The
+  underlying question was answered directly instead, which the warm cache made
+  possible: the still-cached `minio/minio` wrote an object to a scratch volume,
+  the fork then started on that same volume and read it back — both through
+  `mc` and through the API's own boto3 client. On-disk format is compatible.
+- **Effective-config tests (e):** all 20 pass with the real `docker compose
+  config` loader and needed **no changes** — they never named `minio-init`.
+  They need the Docker CLI *and* Python 3.11, which no single environment here
+  had: the API image has no `docker`, and the Mac's `python3` is 3.9 and cannot
+  even load the conftest. Run by mounting the static Linux Docker CLI and
+  compose plugin (from download.docker.com and GitHub, not Hub) plus the socket
+  into the API image.
+- **Suites (f):** API **774 passed, 7 skipped** — all 7 one reason, the API
+  image has neither `ss` nor `netstat` for the pre-flight's port checks. Web
+  **391 passed / 43 files**, lint and typecheck clean.
+
+### For the P0b-3 harness-traps file
+
+**Ninth instance of the 17b family:** a warm local Docker cache hid two
+withdrawn images, so a green smoke test said nothing about a fresh host — the
+check that was missing asked the local daemon's cache rather than the registry.
+(A tenth, found in passing: a test that asserted the effective SMTP mode was
+one of two values and passed only because no environment it ran in set the
+third.)
