@@ -1,0 +1,71 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Every container image this repository names must still exist.
+#
+# MinIO withdrew `minio/minio` and `minio/mc` from Docker Hub. Both were
+# PINNED to exact tags in two compose files, which is normally the careful
+# thing to do — and it made no difference: the references stopped resolving and
+# nothing failed, because every machine that ran the stack already had the
+# layers cached. A green smoke test on a warm Docker cache says nothing about
+# a fresh host. This asks the registry instead of the local daemon.
+#
+# WHY IT DOES NOT RUN ON EVERY PUSH
+#
+# It is scheduled weekly, runnable by hand, and otherwise triggered ONLY by a
+# change to a compose file or a Dockerfile. A registry lookup depends on Docker
+# Hub, quay.io and their rate limits being up; wiring that into every push
+# would mean an unrelated typo fix goes red because a registry had a bad
+# minute, and a job that is red for reasons the author cannot act on is a job
+# people learn to ignore. The path filter covers the only way a reference can
+# change from inside the repository, and the weekly run covers the way it
+# changes from outside — which is what actually happened here.
+#
+# It pushes nothing (CLAUDE.md rule 18) and pulls nothing: `docker manifest
+# inspect` reads the manifest and no layers.
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: Image references
+
+on:
+  schedule:
+    # Mondays 06:17 UTC. Off the hour on purpose — the top of the hour is when
+    # every scheduled workflow on GitHub fires at once and queues.
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "docker-compose*.yml"
+      - "**/Dockerfile"
+      - "**/Dockerfile.*"
+      - "scripts/image_references.py"
+      - ".github/workflows/image-references.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "docker-compose*.yml"
+      - "**/Dockerfile"
+      - "**/Dockerfile.*"
+      - "scripts/image_references.py"
+      - ".github/workflows/image-references.yml"
+
+jobs:
+  image-references-resolve:
+    name: Image references resolve
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # No `docker login`. Everything referenced is public, and needing
+      # credentials to verify a dependency would itself be worth knowing —
+      # quay.io's MinIO mirror is exactly that case, which is why it was
+      # rejected as the replacement.
+      - name: List what is referenced
+        run: python3 scripts/image_references.py --list
+
+      - name: Every reference resolves
+        run: python3 scripts/image_references.py --check

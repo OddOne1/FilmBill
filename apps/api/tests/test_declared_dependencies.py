@@ -52,6 +52,28 @@ LOCAL = {
     "middleware", "models", "routers", "schemas", "services", "tasks", "utils",
 }
 
+
+def _repo_scripts() -> set:
+    """Module names under `scripts/`, which tests import by path.
+
+    Derived rather than listed, so the next repo-local tool a test imports
+    needs no edit here. `test_image_references.py` imports
+    `scripts/image_references.py` this way, and without this the scanner
+    reported it as an undeclared PyPI package called "image-references" — a
+    false positive that would have to be silenced one name at a time.
+    """
+    import pathlib
+
+    scripts = pathlib.Path(__file__).resolve().parents[3] / "scripts"
+    return {
+        path.stem
+        for path in scripts.glob("*.py")
+        if not path.stem.startswith("_")
+    }
+
+
+LOCAL |= _repo_scripts()
+
 # import name -> distribution name, where pip's name differs.
 ALIAS = {
     "PIL": "pillow",

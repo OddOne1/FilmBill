@@ -24,6 +24,11 @@ from .middleware.no_cache_errors import NoCacheErrorsMiddleware
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Waits for object storage and returns False rather than raising if it
+    # never answers — see services/s3_service.ensure_bucket_exists for why a
+    # degraded start beats a crash loop. The return value is deliberately not
+    # acted on here: the function has already logged, and there is nothing
+    # this layer could usefully do with it that is not worse than starting.
     ensure_bucket_exists()
     yield
 

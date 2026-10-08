@@ -308,16 +308,42 @@ class TestTheSettingsEndpointAcceptsTheMode:
         self, client, mock_db, test_user, auth_headers
     ):
         """An empty stored value must not read as "no encryption" when the
-        real answer is "STARTTLS, by default"."""
+        real answer is "STARTTLS, by default".
+
+        The env side is patched rather than inherited. This test used to assert
+        that the effective mode was one of two values and passed only because
+        no environment it had ever run in defined `SMTP_SECURITY` — run it with
+        `SMTP_SECURITY=none` set (which is now the dev stack's own value, so
+        any harness that borrows the dev environment has it) and it failed with
+        `assert 'none' in ('starttls', 'implicit_tls')`. The behaviour was
+        right and the test was reading its expected value off its
+        surroundings.
+
+        So: the stored value is NULL and the environment explicitly offers no
+        mode, which is the state this test is actually about — an install that
+        has only ever set the old boolean. The answer is then STARTTLS, exactly
+        once, rather than "one of two, depending on where you ran it".
+        """
+        from unittest.mock import patch
+
+        from apps.api.config import Settings
         from apps.api.models.user import UserGlobalRole
 
         test_user.role = UserGlobalRole.superadmin
         mock_db.first.return_value = _row()
 
-        body = client.get("/email-settings", headers=auth_headers).json()
+        env_without_a_mode = Settings(
+            _env_file=None,
+            database_url="postgresql://x",
+            redis_url="redis://x",
+            jwt_secret="x",
+            smtp_security=None,
+            smtp_use_tls=True,
+        )
+        with patch(
+            "apps.api.services.email_config.settings", env_without_a_mode
+        ):
+            body = client.get("/email-settings", headers=auth_headers).json()
 
         assert body["smtp_security"] is None
-        assert body["effective_smtp_security"] in (
-            SMTP_SECURITY_STARTTLS,
-            SMTP_SECURITY_IMPLICIT_TLS,
-        )
+        assert body["effective_smtp_security"] == SMTP_SECURITY_STARTTLS

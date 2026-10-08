@@ -120,7 +120,33 @@ sudo chown -R 999:999 /mnt/HDDs/Applications/Dockers/stacks/filmbill-v2-data/pos
 sudo chown -R 999:1000 /mnt/HDDs/Applications/Dockers/stacks/filmbill-v2-data/redis
 ```
 
-MinIO and Mailpit run as root in their images and need no change.
+MinIO and Mailpit run as root in their images and need no change. (Checked for
+the fork named below, not assumed: `pgsty/minio` declares no `USER` and `id`
+inside it reports uid 0.)
+
+> **The S3 server here is a community fork, and that is a deliberate,
+> bounded choice.**
+>
+> MinIO withdrew `minio/minio` and `minio/mc` from Docker Hub, and the quay.io
+> mirror now requires authentication, so the images this stack used no longer
+> resolve anywhere we can reach. The replacement is
+> **`pgsty/minio:RELEASE.2026-08-04T00-00-00Z`** — a fork maintained by the
+> Pigsty project: AGPL-3.0, **one maintainer**, whose stated scope is to
+> "track CVEs and fix bugs", with **no commercial SLA**.
+>
+> That is acceptable *for this instance and for dev* because this is a LAN
+> test environment, and because **production storage is real S3** —
+> `docker-compose.prod.yml` runs no MinIO at all. A fork going quiet costs a
+> test environment and never a customer's documents.
+>
+> It is **not** a reason to put this fork behind production storage. If a
+> production deployment ever needs self-hosted object storage, that is its own
+> decision with its own review, not an inheritance from this file.
+>
+> `.github/workflows/image-references.yml` now checks weekly that every image
+> this repository names still resolves. That check did not exist when the
+> MinIO images were withdrawn, which is why nobody noticed for weeks: every
+> machine that ran the stack already had the layers cached.
 
 ```
 ls -la /mnt/HDDs/Applications/Dockers/stacks/filmbill-v2-data/

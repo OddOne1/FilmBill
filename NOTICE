@@ -70,5 +70,16 @@ Third-party services
 FilmBill calls Gotenberg (https://gotenberg.dev, MIT) as a separate container
 to render HTML to PDF. No Gotenberg code is included in this repository.
 
+The development stack and the LAN test instance run `pgsty/minio` (AGPL-3.0),
+a community fork of MinIO, as a separate container for S3-compatible object
+storage. No MinIO or fork code is included in this repository, and production
+uses real S3 rather than a self-hosted server. The fork is used because MinIO
+withdrew `minio/minio` from Docker Hub; see docs/deploy/server-test.md for the
+maintenance situation and why it is scoped to non-production use.
+
+Rule 8 in CLAUDE.md is about source copied INTO FilmBill and does not apply to
+either of these: both are services FilmBill talks to over a network, and
+neither contributes code to this repository.
+
 Python and JavaScript dependencies keep their own licences; see
 apps/api/requirements.txt and apps/web/package.json.

@@ -1,8 +1,13 @@
+import logging
 import os
 import re
+import time
 import boto3
-from botocore.exceptions import ClientError
+from botocore.config import Config as BotoConfig
+from botocore.exceptions import BotoCoreError, ClientError
 from ..config import settings
+
+logger = logging.getLogger(__name__)
 
 # S3 Content-Type and Cache-Control mappings.
 #
@@ -30,29 +35,29 @@ def _is_aws_s3() -> bool:
     """Check if using AWS S3 (vs MinIO/local). Controlled by S3_STORAGE env var."""
     return settings.s3_storage.lower() == "s3"
 
-def get_s3_client():
+def get_s3_client(config=None):
     """
     Create S3 client. Auto-detects AWS vs MinIO:
     - S3_STORAGE=s3 -> use AWS S3 (no endpoint_url)
     - Otherwise -> use custom endpoint (MinIO or S3-compatible)
+
+    `config` overrides botocore's timeouts and retries for one caller. Only
+    the startup probe passes it (see `_PROBE_CONFIG`); every real read and
+    write keeps the defaults, where a generous timeout and automatic retries
+    are what you want.
     """
-    if _is_aws_s3():
-        # Real AWS S3 - don't pass endpoint_url
-        return boto3.client(
-            "s3",
-            aws_access_key_id=settings.s3_access_key,
-            aws_secret_access_key=settings.s3_secret_key,
-            region_name=settings.s3_region,
-        )
-    else:
-        # MinIO or S3-compatible storage
-        return boto3.client(
-            "s3",
-            endpoint_url=settings.s3_endpoint,
-            aws_access_key_id=settings.s3_access_key,
-            aws_secret_access_key=settings.s3_secret_key,
-            region_name=settings.s3_region,
-        )
+    kwargs = {
+        "aws_access_key_id": settings.s3_access_key,
+        "aws_secret_access_key": settings.s3_secret_key,
+        "region_name": settings.s3_region,
+    }
+    # Real AWS S3 takes no endpoint_url; MinIO and other S3-compatible
+    # storage does.
+    if not _is_aws_s3():
+        kwargs["endpoint_url"] = settings.s3_endpoint
+    if config is not None:
+        kwargs["config"] = config
+    return boto3.client("s3", **kwargs)
 
 def _get_presign_client():
     """
@@ -75,9 +80,106 @@ def _get_presign_client():
         kwargs["endpoint_url"] = endpoint
     return boto3.client("s3", **kwargs)
 
-def ensure_bucket_exists():
-    """Create the S3 bucket if it does not exist. Called on app startup."""
-    s3 = get_s3_client()
+#: How long startup waits for object storage to answer, and how often it asks.
+#:
+#: Compose already gates the API on `minio: condition: service_healthy`, so in
+#: the ordinary case the first attempt succeeds and none of this runs. The
+#: window exists for the gap between "the health endpoint answers" and "the
+#: server will accept an API call", for a restart that races MinIO coming back,
+#: and — on the server-test instance — for a `restart: unless-stopped` API that
+#: would otherwise crash-loop against a slower disk.
+#:
+#: 10 attempts, 3s apart, each one capped at ~2s by `_PROBE_CONFIG` below:
+#: about 30s of real waiting. Far more than the observed gap, and short enough
+#: that a genuinely absent S3 is reported rather than hung on.
+BUCKET_WAIT_ATTEMPTS = 10
+BUCKET_WAIT_SECONDS = 3.0
+
+#: Boto's own timeouts and retries, cut down for the startup probe only.
+#:
+#: Measured, not assumed: with the defaults (60s connect timeout, 3 internal
+#: retries with backoff) a single unreachable attempt took ~7 SECONDS, so
+#: "10 attempts 3s apart" would have been a 97-second startup hang while the
+#: comment above claimed 30. The retrying is this function's job — see the
+#: loop — so boto doing its own on top is duplicated waiting that only makes
+#: the total unpredictable.
+#:
+#: Applies to the probe ONLY. Real uploads and downloads keep the default
+#: client, where a generous timeout and automatic retries are what you want.
+_PROBE_CONFIG = BotoConfig(
+    connect_timeout=2,
+    read_timeout=5,
+    retries={"max_attempts": 1, "mode": "standard"},
+)
+
+
+def ensure_bucket_exists(
+    attempts: int = BUCKET_WAIT_ATTEMPTS, delay: float = BUCKET_WAIT_SECONDS
+) -> bool:
+    """Create the bucket if it is missing, waiting for S3 to come up first.
+
+    Returns whether the bucket is ready. **Does not raise when S3 is simply
+    unreachable**, and that is a deliberate change of behaviour worth stating,
+    because this runs in FastAPI's `lifespan`:
+
+    Before, an unreachable S3 raised `EndpointConnectionError` — a
+    `BotoCoreError`, NOT a `ClientError`, so nothing here caught it — straight
+    out of `lifespan`. Uvicorn logs "Application startup failed" and the
+    process exits. In dev that is a dead stack needing a manual `up`; on the
+    server-test instance, where the API is `restart: unless-stopped`, it is a
+    crash loop whose restart noise hides the actual cause. And in both, the
+    `/health` endpoint you would use to diagnose it is the thing that did not
+    start.
+
+    So: connection failures are retried, and if S3 is still not there the API
+    starts **degraded** with a loud ERROR line. Everything that does not touch
+    object storage — login, companies, documents, mail — works; uploads and
+    brand images fail until S3 is back and the API is restarted. That is a
+    strictly better failure than no API at all.
+
+    A `ClientError` is NOT swallowed. A 403 against non-AWS storage, a bad
+    region, a wrong key: those are configuration that is wrong rather than
+    late, no amount of waiting fixes them, and they must surface at startup.
+    """
+    last_error: Exception | None = None
+    for attempt in range(1, max(1, attempts) + 1):
+        try:
+            _ensure_bucket_once()
+            if attempt > 1:
+                logger.info(
+                    "Object storage ready after %s attempt(s) (%s)",
+                    attempt,
+                    settings.s3_endpoint,
+                )
+            return True
+        except BotoCoreError as exc:
+            # Unreachable, DNS not resolving yet, connection refused, timeout.
+            # Late rather than wrong — worth waiting for.
+            last_error = exc
+            if attempt < attempts:
+                logger.warning(
+                    "Object storage not reachable yet (attempt %s/%s): %s",
+                    attempt,
+                    attempts,
+                    exc,
+                )
+                time.sleep(delay)
+
+    logger.error(
+        "Object storage (%s) did not answer after %s attempts over %.0fs. "
+        "The API is starting WITHOUT it: uploads and brand images will fail "
+        "until it is reachable and the API is restarted. Last error: %s",
+        settings.s3_endpoint,
+        attempts,
+        attempts * delay,
+        last_error,
+    )
+    return False
+
+
+def _ensure_bucket_once():
+    """One attempt at the original logic. Raises on anything it cannot fix."""
+    s3 = get_s3_client(config=_PROBE_CONFIG)
     try:
         s3.head_bucket(Bucket=settings.s3_bucket)
     except ClientError as e:
