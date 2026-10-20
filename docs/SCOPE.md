@@ -618,8 +618,40 @@ Compliance sources: [Brandauer – E-Rechnung AT 2026](https://brandauer-rechtsa
 | D34 | Release gate R1 (v1 import + first real use by YON) moved from after P7 to **after P3** | 2026-09-17 |
 | D25 | TOTP 2FA built in FreeFrame first, then copied into FilmBill P0a (one implementation); P0 split into P0a (repo from FreeFrame core) and P0b (companies, roles, number series, audit, money, codegen) | 2026-09-16 |
 | D20 | Archive folder structure is a per-company template; default = YON advisor structure (Year / Allgemeine Ordner · Ausgaben · Bank · Einnahmen · Revisionen / Quartal) | 2026-09-16 |
+| D40 | **Bank-account deletion keeps today's rule** — a default account may be deleted only when it is the last one; demoting without naming a replacement is refused. **Later:** finalising a document requires the company to have a default bank account, and an account referenced by any document is **archived, never deleted** (same reasoning as `companies.archived_at` and `company_memberships.revoked_at` — a row that explains a statutory record cannot go away while the record exists). Until documents exist there is nothing to reference, so the rule changes when P2 lands, not now. | 2026-10-20 |
+| D41 | **A readiness checklist at finalise, sourced from the region pack.** Finalising is blocked while a legally required field is missing — company name, address, VAT ID, and whatever else the pack names — and the screen says which ones. Per rule 7 the list is DATA in the region pack, never `if country == "AT"` in code: the required set differs by country and by document type, and a hardcoded list is a list that is wrong for the second country and for every later legal change. | 2026-10-20 |
+| D42 | **A first-run setup wizard is a late milestone**, and mandatory company data is collected there. Today `POST /setup/create-superadmin` creates the first company itself (`routers/setup.py`, named after the instance — "FilmBill" until Branding is set) so a fresh install is usable from its first login; the wizard replaces that with something that asks. Until then renaming it is the first thing Settings → Company offers. | 2026-10-20 |
+| D43 | **`audit.view`: Owner, Admin and the tax advisor (read-only).** The advisor is in because reconstructing what happened to a document is exactly what an external advisor is handed the archive to do; the accountant is NOT, which narrows P0b-1's seeded placeholder. There is no write permission and there cannot be one — no endpoint writes an audit row, and the table refuses UPDATE/DELETE/TRUNCATE. Because the advisor is an outside party, bank-account **IBANs are stored masked** in `audit_events.changes` (country code + last four): reading a bank account needs `company.settings.edit`, and the audit log must not be a way round that gate. | 2026-10-20 |
+| D44 | **The audit log is tamper-EVIDENT, not tamper-proof.** Triggers refuse UPDATE and DELETE (row-level) and TRUNCATE (statement-level), so no code path in FilmBill — and no bug or compromised handler — can rewrite or remove an audit row. What that does **not** stop: the table's owner running `ALTER TABLE audit_events DISABLE TRIGGER USER`, a superuser doing anything at all, and anybody holding a backup or the data directory reading the rows outside the database. Real tamper-proofing needs append-only storage outside this database (a WORM bucket, a hash chain anchored elsewhere) and is **not in v1**. The weaker claim is recorded deliberately: the stronger one is the more dangerous error. | 2026-10-20 |
+| D45 | **Out-of-order document dates are allowed with a warning**, not refused (Mathias; Claude recommended refusing). A document dated before the latest date already allocated in its series goes through and carries the warning `document_date_before_latest` with that date and its number. On a `yearly` series a date in an earlier period draws from **that period's own counter** (its highest allocated value + 1) and the current period's counter is untouched — the only reading under which both years stay gap-free. **P2's finalize flow must show the warning and require an explicit confirmation.** The rule is **not tax-advised** and awaits the Steuerberater's confirmation (see §17). | 2026-10-20 |
+| D46 | **Continuous numbering is a real option, chosen per series.** `reset = never` means the counter never restarts, and a year token is allowed with it (it prints the year without restarting the count). Seeded defaults stay yearly. Yearly → continuous keeps the counter exactly where it is; continuous → yearly takes effect at the **next period boundary**, not immediately. Both switches are audited with the old and new mode, and neither may re-issue an allocated number — `unique (series_id, number)` decides, and a collision is a 409 naming the number rather than a duplicate or a gap. | 2026-10-20 |
 
 ## 17. Questions for the Steuerberater
+
+**Status 2026-10-20 — one new question, from D45.** Out-of-order document
+dates: FilmBill now allows a document dated before the latest one already
+numbered in its series, with a warning, and on a yearly series it takes the
+number from that earlier year's own counter. **Q8 below asks whether that is
+acceptable in Austria.** Until it is answered the behaviour is a decision by
+Mathias and not an advised one, and P2's finalize flow must make somebody
+confirm it per document.
+
+**8. Back-dated invoices:** may we issue an invoice dated earlier than one we
+have already issued in the same number series — for instance entering
+November's invoice in January — taking the next free number from November's
+own sequence? Our sequence stays gap-free and no number is issued twice, but
+the numbers are then not in date order. If that is not acceptable, should we
+refuse it outright, or require a separate series per period?
+
+**8. Rückdatierte Rechnungen:** Dürfen wir eine Rechnung mit einem Datum
+ausstellen, das vor einer bereits ausgestellten Rechnung derselben
+Nummernserie liegt — etwa die November-Rechnung erst im Jänner —, wobei die
+Nummer aus der fortlaufenden Nummerierung des November kommt? Die Serie bleibt
+lückenlos und keine Nummer wird zweimal vergeben, die Nummern sind dann aber
+nicht in Datumsreihenfolge. Falls das nicht zulässig ist: ablehnen, oder pro
+Periode eine eigene Serie?
+
+---
 
 **Status 2026-09-16:** answered by Mathias for YON — Q2/Q3 → configurable policies (D12), Q4 Soll (D13), Q5 OK provided every item is listed (already §8.1), Q6 not used by YON (D15), Q7 → selectors (D13). Q1 (studio rental) → **not built into the software** (D19): YON configures a per-item tax override for its studio once the advisor answers. Optional check: whether the YON rebill practice (gross base + 20 %) matches how the advisor books the input VAT. Original questions kept below for other users' onboarding docs.
 

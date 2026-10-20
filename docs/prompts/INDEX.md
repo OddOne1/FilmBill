@@ -17,6 +17,7 @@ from them. `docs/SCOPE.md` is where the product is decided.
 | dev-mail | Dev mail was never delivered: SMTP mode `none` for Mailpit | [`16-dev-mail-smtp-none.md`](16-dev-mail-smtp-none.md) | `fe6730e` | done — see notes |
 | server-test | A LAN-only test instance on the TrueNAS server | [`17-server-test-instance.md`](17-server-test-instance.md) | `eb9f4dd` | done — see notes |
 | minio-fork | Replace the withdrawn MinIO images; weekly image-reference guard | [`18-minio-fork-and-image-guard.md`](18-minio-fork-and-image-guard.md) | `45dacb5` | done — see notes |
+| P0b-3 | Healthcheck, IBAN uniqueness, CI real-DB guard, number series, audit events, backup modes, rule consolidation | [`19-filmbill-P0b-3.md`](19-filmbill-P0b-3.md) | `b8e10b3`…`0c186df` | done — see notes |
 | P0b | Foundations: companies, roles, number series, audit, money, codegen | [`03-filmbill-P0b-foundations.md`](03-filmbill-P0b-foundations.md) | — | superseded — split into P0b-0, P0b-1, P0b-2 |
 
 ---
@@ -874,3 +875,74 @@ check that was missing asked the local daemon's cache rather than the registry.
 (A tenth, found in passing: a test that asserted the effective SMTP mode was
 one of two values and passed only because no environment it ran in set the
 third.)
+
+---
+
+## P0b-3 — healthcheck, IBAN uniqueness, number series, audit events
+
+Seven commits, each green on its own, in the prompt's order.
+
+**Part 1 — healthchecks (`b8e10b3`).** `filmbill_web` had reported
+`(unhealthy)` for 213 consecutive probes while serving every request
+correctly: `wget -q --spider http://localhost:3000` had never once succeeded,
+because `/etc/hosts` maps `localhost` to `::1` as well and BusyBox wget tries
+that first while Next binds IPv4 only. Fixed in `docker-compose.dev.yml`
+(web, gotenberg, mailpit), `docker-compose.prod.yml` (gotenberg, api, web)
+and `apps/api/Dockerfile.prod`. The Dockerfile one had broken nothing because
+every compose file overrides it — which is exactly why it mattered.
+`/login` rather than `/` because `/` is a redirect. `docker-compose.server-test.yml`
+already had both and is unchanged.
+
+**Part 2 — one IBAN once per company (`0d566f4`).** Three layers:
+normalisation on every write path, a read-then-409 in the router for the
+MESSAGE (it names the existing account, and reads sensibly when there is no
+label — the usual case), and `UNIQUE (company_id, iban)` as the actual rule.
+Migration 0007 normalises first and then adds the constraint; duplicates fail
+it with every pair listed and nothing deleted or merged. Two implementation
+notes: the `try` has to wrap the whole write, because SQLAlchemy emits the
+INSERT at `db.flush()` and not at `db.commit()`; and only the IBAN
+constraint is translated, because mapping every IntegrityError to 409 would
+hide a foreign-key failure behind a message about IBANs.
+
+**Part 3 — a real-database test that does not run fails in CI (`19699aa`).**
+`conftest._no_postgres` skips locally and `pytest.fail`s when `CI` is set.
+Every test requesting `pg_engine`/`pg_db`/`pg_client` is marked `realdb`
+automatically from its fixtures — 130 of them — and a new CI step asserts
+that count is a pass count and not a skip count. The gutted-suite floor went
+250 → 750.
+
+**Part 4 — number series (`bc57f80`).** `services/number_series.py` is the
+only place a document number is formatted, validated or incremented.
+`allocate_number` locks the series row, never commits, and records every
+number issued in `number_allocations`. Back-dating is allowed with a warning
+(D45) and on a yearly series draws from the earlier period's own counter.
+Continuous numbering is per series (D46), and the asymmetry of the two
+switches is the specification. Migration 0008 backfills the eight defaults,
+written out IN the migration — alembic runs with `apps/api` on `sys.path`, so
+the service's relative imports fail there, and a migration that imports
+today's code changes its own meaning at every refactor.
+
+**Part 5 — audit events (`05e8a19`).** Append-only by trigger, including a
+statement-level trigger for TRUNCATE, which a row trigger does not cover.
+Tamper-evident against the application, not tamper-proof (D44). IBANs masked
+(D43). `audit.record` writes in the caller's transaction, so a rolled-back
+change leaves no event.
+
+**Part 6 — backup modes and the restore line (`76420d0`).** Dumps 600,
+directory 700, `sudo` on every printed compose line, and Step 9 of the deploy
+doc is now a drill that proves a restore with a row you can recognise.
+
+**Part 7 — documentation (`0c186df`, this commit).** CLAUDE.md 17b–17e
+consolidated into one rule; fifteen instances moved to
+`docs/engineering/test-harness-traps.md`; SCOPE §16 gains D40–D46 and §17
+gains question 8 for the Steuerberater.
+
+**One deviation from the prompt, deliberate and flagged.** Part 5 asked for
+**403** when a member lacks `audit.view`. It answers **404**:
+`middleware/company.py::require` gives every authorisation failure in this
+layer one body, so that no endpoint can leak the difference by being written
+slightly differently from its neighbour, and fracturing that invariant for
+one endpoint's status code was not a call to make unasked. The security
+property is identical — no access, and the menu entry is gated on the same
+permission. Changing it is one dependency, in one file, if Mathias prefers
+403.
