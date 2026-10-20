@@ -84,15 +84,30 @@ if (( ${#all[@]} > KEEP )); then
 fi
 echo "keeping the newest ${KEEP}; ${#all[@]} present before pruning"
 
-# `sudo` on every printed compose line. Without it a normal user gets
-# "permission denied while trying to connect to the Docker daemon socket",
-# which reads as a broken instruction rather than as a missing prefix — and
-# the drill of 2026-10-20 hit exactly that.
+# `sudo` on every printed stage — BOTH the compose calls and the `gunzip`
+# that reads the dump.
+#
+# The compose calls need it or a normal user gets "permission denied while
+# trying to connect to the Docker daemon socket", which reads as a broken
+# instruction rather than as a missing prefix.
+#
+# `gunzip` needs it for the same reason one step earlier, and that step was
+# missed the first time round: this script writes the dump 0600 inside a 0700
+# directory, both owned by root, so the very first stage of the printed
+# pipeline — reading the file — fails for the user the line is printed for.
+# Observed on the server on 2026-10-20: `gunzip -c <file> | head -3` →
+# `Permission denied`, `sudo gunzip -c <file> | head -3` → SQL. The restore
+# command was correct about Docker and wrong about the file.
+#
+# A test that asserts this text contains "sudo" is not the test for it. The
+# test runs the pipeline this heredoc prints, against a `gunzip` that refuses
+# unless it was reached through `sudo`, and compares what arrived at `psql`
+# with what was dumped (apps/api/tests/test_server_test_scripts.py).
 cat <<RESTORE
 
 To restore this dump (it DROPs and recreates the objects it contains):
 
-  gunzip -c ${FILE} \\
+  sudo gunzip -c ${FILE} \\
     | sudo ${COMPOSE} -f ${REPO_ROOT}/docker-compose.server-test.yml \\
         --env-file ${ENV_FILE} -p filmbill-v2 \\
         exec -T postgres psql -U ${PGUSER} -d ${PGDB}

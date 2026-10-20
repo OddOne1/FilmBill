@@ -307,8 +307,13 @@ containers.
 ## Step 9 — backup and restore (server shell)
 
 ```
-cd /mnt/HDDs/Applications/Dockers/stacks/filmbill-v2-src && ./scripts/server-test-backup.sh
+cd /mnt/HDDs/Applications/Dockers/stacks/filmbill-v2-src && sudo ./scripts/server-test-backup.sh
 ```
+
+**`sudo`, because the script needs root twice over:** it talks to the Docker
+socket, and it writes into `DATA_DIR`, which is root-owned (Step 2 created it
+with `sudo mkdir`). Run as a normal user it fails at the first of those with
+*"permission denied while trying to connect to the Docker daemon socket"*.
 
 It writes a timestamped `pg_dump` into `DATA_DIR/backups/`, keeps the newest
 14, and prints the exact restore command for the file it just made. The file
@@ -326,16 +331,33 @@ what the script intended.
 >
 > ```
 > sudo chmod 700 /mnt/HDDs/Applications/Dockers/stacks/filmbill-v2-data/backups
-> sudo chmod 600 /mnt/HDDs/Applications/Dockers/stacks/filmbill-v2-data/backups/*.sql.gz
-> ls -l /mnt/HDDs/Applications/Dockers/stacks/filmbill-v2-data/backups
+> sudo sh -c 'chmod 600 /mnt/HDDs/Applications/Dockers/stacks/filmbill-v2-data/backups/*.sql.gz'
+> sudo ls -l /mnt/HDDs/Applications/Dockers/stacks/filmbill-v2-data/backups
 > ```
+>
+> **The `sh -c` and the second `sudo` are the point.** Your shell expands
+> `*.sql.gz` *before* `sudo` runs, as you — and once the directory is 700 you
+> cannot read it, so the glob matches nothing and the line dies with
+> *"no matches found"* having changed no file at all. Wrapping it in
+> `sudo sh -c '…'` hands the pattern to a root shell, which can see the
+> directory and expand it. The same applies to every later command in this
+> document that names a path inside `backups/`: **root has to do the reading,
+> the listing and the globbing, not just the writing.**
 
-To restore, use the command the script printed. Every compose line it prints
-carries `sudo` — without it a normal user gets *"permission denied while
-trying to connect to the Docker daemon socket"*, which reads as a broken
-instruction rather than a missing prefix. It stops `api`, `worker`,
-`email_worker` and `beat` first so nothing writes mid-restore, and restarts
-them after.
+To restore, use the command the script printed. Every stage of it carries
+`sudo`, and both of them need it: the `gunzip` that **reads** the dump,
+because the file is 600 inside a 700 root-owned directory, and the compose
+call that feeds it to `psql`, because of the Docker socket. Without the first
+you get *"gzip: …: Permission denied"*; without the second, *"permission
+denied while trying to connect to the Docker daemon socket"*. Both read as a
+broken instruction rather than as a missing prefix, and the drill of
+2026-10-20 hit each of them in turn. It stops `api`, `worker`, `email_worker`
+and `beat` first so nothing writes mid-restore, and restarts them after.
+
+> Do not drop the `sudo` from the `gunzip` stage on the grounds that the
+> restore still "runs". It does: the pipeline's exit status is `psql`'s, so a
+> `gunzip` that printed *Permission denied* and nothing else leaves you with a
+> silent, successful-looking restore of an empty stream.
 
 ### Proving the backup
 
@@ -351,9 +373,13 @@ recognise**, so do this once, deliberately:
 2. **Take the dump and check the probe is in it.**
 
    ```
-   cd /mnt/HDDs/Applications/Dockers/stacks/filmbill-v2-src && ./scripts/server-test-backup.sh
-   zcat /mnt/HDDs/Applications/Dockers/stacks/filmbill-v2-data/backups/$(ls -1t /mnt/HDDs/Applications/Dockers/stacks/filmbill-v2-data/backups | head -1) | grep -c BACKUP-PROBE
+   cd /mnt/HDDs/Applications/Dockers/stacks/filmbill-v2-src && sudo ./scripts/server-test-backup.sh
+   sudo sh -c 'zcat "$(ls -1t /mnt/HDDs/Applications/Dockers/stacks/filmbill-v2-data/backups/*.sql.gz | head -1)"' | grep -c BACKUP-PROBE
    ```
+
+   Everything that touches the directory is inside `sudo sh -c '…'` — the
+   `ls`, the glob and the `zcat` — because the directory is root-only. Only
+   the `grep` runs as you, and it reads the pipe rather than the file.
 
    It must print `1` or more. `0` means the dump does not contain the row you
    just created, and nothing after this step is worth doing until that is
@@ -363,7 +389,8 @@ recognise**, so do this once, deliberately:
    `PROBE-CHANGED`.
 
 4. **Restore**, using the command the script printed in step 2 — the one with
-   `sudo` in it — including the `stop` before and the `start` after.
+   `sudo` on *both* stages, the `gunzip` as well as the compose call —
+   including the `stop` before and the `start` after.
 
 5. **Check it came back.** Reload Settings → Company → Bank accounts. The
    label must read `BACKUP-PROBE` again. That, and only that, is a proven

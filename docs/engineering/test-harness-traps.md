@@ -206,3 +206,36 @@ the gate.
 
 **The fix:** gate on a value that appears only in a fetched row — here the
 event's IP, which no filter contains.
+
+## 16. A `sudo` that existed in the text and nowhere in the command
+
+FilmBill, 2026-10-20, the day after instance 13. The backup script was fixed
+to write its dump `0600` inside a `0700` root-owned directory, and to print a
+restore command with `sudo` on every compose call. The test asserted that the
+printed text contained `sudo`. It did, and the restore was broken anyway: the
+stage *before* the compose call is `gunzip -c <file>`, which reads the file,
+and that one had no `sudo`. On the server, `gunzip -c <file> | head -3` as the
+normal user answered `Permission denied`.
+
+Two things make it worth its own entry. The first is case 2 of the mechanism
+in its purest form — the assertion was about the presence of a word, so it
+could only ever prove that somebody had typed the word, and the fix that
+created the bug (tightening the mode) is exactly the kind of change a text
+assertion cannot see. The second is that the failure is **silent**: a
+pipeline's exit status is its last command's, so a refused `gunzip` and a
+successful `psql` is a restore that prints nothing, exits 0, and loads an
+empty stream. Instance 13 said a dump that exists is not a proven backup;
+this says a restore that exits 0 is not a restore.
+
+The same shell-expansion trap sits in the documentation beside it: a
+`sudo chmod 600 …/backups/*.sql.gz` fails with *"no matches found"* and
+changes nothing, because the invoking shell expands the glob before `sudo`
+runs and cannot read a 700 directory. Root has to do the reading, the listing
+and the globbing, not just the writing.
+
+**The fix:** the test extracts the pipeline from the script's own stdout and
+*runs* it, against a stub `sudo` that marks what it starts and a `gunzip` that
+refuses unless it was so marked, then compares what reached `psql` with what
+`pg_dump` wrote, byte for byte. A second test strips the `sudo` and asserts
+the refusal really happens, because a permissive double would make the first
+test pass for any printed text at all.

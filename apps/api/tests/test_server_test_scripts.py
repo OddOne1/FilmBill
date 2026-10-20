@@ -21,6 +21,7 @@ script takes `PREFLIGHT_IP_CMD` for exactly this, and each test overrides at
 most one of the two injection points so the other stays real.
 """
 
+import base64
 import os
 import shutil
 import socket
@@ -397,6 +398,22 @@ def test_the_preflight_never_mutates_anything(tmp_path):
 #     this database holds every bcrypt hash and every IBAN in the clear;
 #   * the restore line it printed had no `sudo`, so a normal user got a
 #     Docker socket error that reads as a broken instruction.
+#
+# And what the SECOND run of the drill found, the day after the first was
+# fixed: tightening the dump to 0600 root-owned broke the restore line one
+# stage earlier than anybody had looked. `sudo` was on the compose call and
+# not on the `gunzip` that reads the file, so the pipeline's first stage
+# failed for the user it was printed for — and because a pipeline's exit
+# status is its LAST command's, it failed silently.
+#
+# The test that missed it asserted the printed text contained "sudo". It did.
+# That is CLAUDE.md 17b in its purest form: a word existed, and nothing
+# executed. So the restore is now EXECUTED — the printed pipeline is extracted
+# from the script's own output and run against a `gunzip` that refuses unless
+# it was reached through `sudo`, and what arrives at `psql` is compared byte
+# for byte with what was dumped. `test_every_printed_compose_line_has_sudo`
+# below stays as the text companion, for the `stop`/`start` lines there is
+# nothing to execute.
 
 BACKUP = REPO_ROOT / "scripts" / "server-test-backup.sh"
 
@@ -405,27 +422,104 @@ BACKUP = REPO_ROOT / "scripts" / "server-test-backup.sh"
 #: behaviour under test and every assertion below is really about the guard.
 #:
 #: Repeated INSERT lines do not: 200 of them compress to about 800 bytes.
-#: Random base64 does, which is why the stub emits that alongside one
-#: recognisable row.
+#: Random base64 does, which is why the payload below ends with that
+#: alongside one recognisable row.
 _STUB_SQL_HEAD = "-- stub dump\nINSERT INTO probe VALUES (1, 'BACKUP-PROBE');\n"
 
+def _payload() -> bytes:
+    """The bytes the stub `pg_dump` emits.
+
+    Written to a file by the fixture and `cat`-ed by the stub rather than
+    generated inside it: the restore test compares what reached `psql` with
+    this payload, and a dump that regenerated itself on each call could only
+    ever be compared against itself.
+    """
+    return _STUB_SQL_HEAD.encode() + base64.b64encode(os.urandom(20_000)) + b"\n"
+
+
+#: The real one, resolved before the stub directory goes on `PATH` — the
+#: wrapper below must exec the actual binary and not itself.
+_REAL_GUNZIP = shutil.which("gunzip")
+
+#: Set by the fake `sudo`, read by the `gunzip` wrapper. Deliberately not a
+#: file: an environment flag is inherited by exactly the processes `sudo`
+#: started, which is the property being modelled.
+_VIA_SUDO = "FILMBILL_TEST_VIA_SUDO"
+
+
+def _restore_path_dir(tmp_path: Path) -> Path:
+    """A `PATH` directory that makes the dump readable only through `sudo`.
+
+    The condition on the server is a 0600 file owned by root inside a 0700
+    directory owned by root. A test cannot create that — it does not run as
+    root, and it must not — so the refusal is modelled at the place where it
+    is observable: `gunzip` exits non-zero with `Permission denied` on
+    stderr unless it was reached through `sudo`.
+
+    That is a double, and it is the double that could lie, so the second test
+    below runs the same pipeline with the `sudo` removed and asserts the
+    refusal really happens. A wrapper that permitted everything would pass
+    the first test and fail that one.
+    """
+    path_dir = tmp_path / "stub-path"
+    path_dir.mkdir()
+
+    sudo = path_dir / "sudo"
+    sudo.write_text(
+        "#!/usr/bin/env bash\n"
+        "# `sudo` reduced to the one property the restore pipeline needs from\n"
+        "# it: what it starts runs with more rights than what it did not.\n"
+        f"export {_VIA_SUDO}=1\n"
+        'exec "$@"\n'
+    )
+    sudo.chmod(0o755)
+
+    gunzip = path_dir / "gunzip"
+    gunzip.write_text(
+        "#!/usr/bin/env bash\n"
+        "# A dump that only root can read.\n"
+        f'if [[ "${{{_VIA_SUDO}:-}}" != "1" ]]; then\n'
+        '  echo "gzip: ${@: -1}: Permission denied" >&2\n'
+        "  exit 1\n"
+        "fi\n"
+        f'exec {_REAL_GUNZIP} "$@"\n'
+    )
+    gunzip.chmod(0o755)
+
+    return path_dir
 
 @pytest.fixture
 def backup_world(tmp_path):
-    """A stub compose binary, a temporary DATA_DIR, and an env file."""
+    """A stub compose binary, a temporary DATA_DIR, an env file, and a `PATH`
+    directory holding a fake `sudo` and a `gunzip` that models a root-only
+    dump.
+
+    The stub compose binary answers to BOTH calls the script makes of it —
+    the `pg_dump` it runs itself and the `psql` its printed restore command
+    runs later — because they are the same `${DOCKER_COMPOSE}` on the server
+    and separating them here would mean the restore was tested against a
+    different stub than the backup.
+    """
     data_dir = tmp_path / "filmbill-v2-data"
     data_dir.mkdir()
+
+    payload = tmp_path / "dump-payload.sql"
+    payload.write_bytes(_payload())
+    psql_sink = tmp_path / "what-psql-received.sql"
 
     stub = tmp_path / "docker-compose-stub"
     stub.write_text(
         "#!/usr/bin/env bash\n"
-        "# Stands in for `docker compose exec -T postgres pg_dump`. Writes SQL\n"
-        "# on stdout and ignores everything else, which is the whole of what\n"
-        "# the backup script needs from it.\n"
-        f"printf '%s' {_STUB_SQL_HEAD!r}\n"
-        "# Incompressible filler, so the result clears the script's own\n"
-        "# 1000-byte guard — see the note on _STUB_SQL_HEAD.\n"
-        "head -c 20000 /dev/urandom | base64\n"
+        "# Stands in for `docker compose … exec -T postgres <client>`, for the\n"
+        "# two clients this script uses. Everything else about the invocation\n"
+        "# is ignored, which is the whole of what it needs from compose.\n"
+        'for arg in "$@"; do\n'
+        "  case \"$arg\" in\n"
+        f"    pg_dump) exec cat {payload} ;;\n"
+        f"    psql)    exec cat > {psql_sink} ;;\n"
+        "  esac\n"
+        "done\n"
+        "exit 0\n"
     )
     stub.chmod(0o755)
 
@@ -436,7 +530,14 @@ def backup_world(tmp_path):
         "POSTGRES_DB=filmbill_v2\n"
     )
 
-    return {"data_dir": data_dir, "stub": stub, "env_file": env_file}
+    return {
+        "data_dir": data_dir,
+        "stub": stub,
+        "env_file": env_file,
+        "payload": payload,
+        "psql_sink": psql_sink,
+        "path_dir": _restore_path_dir(tmp_path),
+    }
 
 
 def _run_backup(world, **extra_env) -> subprocess.CompletedProcess:
@@ -549,6 +650,110 @@ def test_every_printed_compose_line_has_sudo(backup_world):
     )
 
 
+# ── the printed restore command, EXECUTED ───────────────────────────────────
+
+
+def _printed_restore(stdout: str) -> str:
+    """The restore pipeline the script printed, on one line, ready for bash.
+
+    Found by `gunzip -c` and NOT by `sudo gunzip`, deliberately. A mutation
+    that drops the `sudo` must still produce a command this helper hands to
+    bash, so that the test fails on the pipeline's behaviour rather than on a
+    missing match in its own setup — a crash in setup is not a caught
+    mutation (CLAUDE.md rule 12).
+    """
+    lines = stdout.splitlines()
+    start = next((i for i, line in enumerate(lines) if "gunzip -c" in line), None)
+    assert start is not None, f"no restore command was printed at all:\n{stdout}"
+
+    parts = []
+    for line in lines[start:]:
+        parts.append(line.strip().rstrip("\\").strip())
+        if not line.rstrip().endswith("\\"):
+            break
+    return " ".join(parts)
+
+
+def _run_printed(command: str, world) -> subprocess.CompletedProcess:
+    """Run `command` the way a person pastes it into the server's shell."""
+    env = os.environ.copy()
+    env.pop(_VIA_SUDO, None)  # only the fake `sudo` may ever set it
+    env["PATH"] = f"{world['path_dir']}{os.pathsep}{env['PATH']}"
+    return subprocess.run(
+        ["bash", "-c", command], env=env, capture_output=True, text=True
+    )
+
+
+def test_the_printed_restore_command_reads_the_dump_and_delivers_it(
+    backup_world,
+):
+    """The subject: the command the script prints, run as printed.
+
+    Not "does the text contain sudo" — that assertion existed, passed, and
+    the restore was broken anyway (see the note at the top of this section).
+    This takes the script's own output, runs it, and compares what arrived at
+    `psql` with what `pg_dump` produced, byte for byte. A restore that
+    delivered half a stream, or an empty one, or somebody else's file, fails
+    here.
+    """
+    assert _REAL_GUNZIP, "no gunzip on PATH; this test needs a real one to wrap"
+    expected = backup_world["payload"].read_bytes()
+    assert len(expected) > 1000, "the payload is too small to clear the size guard"
+
+    backup = _run_backup(backup_world)
+    assert backup.returncode == 0, f"{backup.stdout}\n{backup.stderr}"
+
+    command = _printed_restore(backup.stdout)
+    restore = _run_printed(command, backup_world)
+
+    assert "Permission denied" not in restore.stderr, (
+        "the printed restore cannot read its own dump:\n"
+        f"{command}\n{restore.stderr}"
+    )
+    sink = backup_world["psql_sink"]
+    assert sink.exists(), (
+        f"psql received nothing.\ncommand: {command}\n"
+        f"stdout: {restore.stdout}\nstderr: {restore.stderr}"
+    )
+    assert sink.read_bytes() == expected, (
+        "what reached psql is not what pg_dump wrote "
+        f"({len(sink.read_bytes())} bytes vs {len(expected)})"
+    )
+
+
+def test_without_sudo_the_gunzip_stage_is_refused(backup_world):
+    """Proves the wrapper above really models the server.
+
+    Without this, a `gunzip` that happily read everything would make the test
+    above pass no matter what the script printed, and the harness would be
+    the thing under test (CLAUDE.md rule 17b).
+
+    It also records the shape of the original failure, which is the nasty
+    part: the pipeline's exit status is `psql`'s, so a refused `gunzip`
+    leaves a restore that looks like it worked and delivered nothing.
+    """
+    backup = _run_backup(backup_world)
+    assert backup.returncode == 0, f"{backup.stdout}\n{backup.stderr}"
+
+    printed = _printed_restore(backup.stdout)
+    without_sudo = printed.replace("sudo gunzip", "gunzip", 1)
+    assert without_sudo != printed, f"nothing to strip in: {printed}"
+
+    restore = _run_printed(without_sudo, backup_world)
+
+    assert "Permission denied" in restore.stderr, (
+        "the stub gunzip did not refuse an unprivileged read, so the test "
+        f"above proves nothing:\n{restore.stderr}"
+    )
+    assert backup_world["psql_sink"].read_bytes() != backup_world[
+        "payload"
+    ].read_bytes(), "psql somehow received the dump without being able to read it"
+    assert restore.returncode == 0, (
+        "if this ever becomes non-zero the pipeline grew a `pipefail` and the "
+        "silent-success half of this bug is gone — good, but say so in the doc"
+    )
+
+
 def test_the_printed_instructions_say_a_dump_is_not_a_proven_backup(
     backup_world,
 ):
@@ -575,11 +780,55 @@ def test_the_deploy_doc_describes_the_recognisable_row_drill():
     assert "zcat" in doc and "grep -c BACKUP-PROBE" in doc, (
         "the doc does not check that the dump CONTAINS the probe"
     )
+    # Commands only. The prose around them names `zcat` in backticks, and a
+    # sentence explaining the rule is not a line anybody pastes.
+    zcat_lines = [
+        line
+        for line in doc.splitlines()
+        if "zcat" in line and "`zcat`" not in line
+    ]
+    assert zcat_lines and all("sudo" in line for line in zcat_lines), (
+        "the probe check reads the dump as the invoking user, which cannot "
+        f"read it:\n" + "\n".join(zcat_lines)
+    )
     assert "PROBE-CHANGED" in doc, (
         "the doc does not change the row before restoring, so the restore "
         "would prove nothing"
     )
     assert "chmod 600" in doc, "no instruction for the dumps that already exist"
+
+
+def test_every_doc_command_that_touches_the_backups_folder_runs_as_root():
+    """The folder is 0700 root-owned, so the *reading* has to be root's too.
+
+    Asserted on the doc because the doc is the subject: these are lines
+    Mathias pastes, and the one that bit him was
+    `sudo chmod 600 …/backups/*.sql.gz`, where his own shell expanded the
+    glob before `sudo` ever ran and the line died with "no matches found"
+    having changed nothing.
+    """
+    doc = (REPO_ROOT / "docs" / "deploy" / "server-test.md").read_text()
+    folder = "filmbill-v2-data/backups"
+
+    lines = [line for line in doc.splitlines() if folder in line]
+    assert len(lines) >= 4, (
+        f"only {len(lines)} lines name the backups folder; this test has "
+        "stopped covering the document it is about"
+    )
+
+    unprivileged = [line for line in lines if "sudo" not in line]
+    assert not unprivileged, (
+        "these lines read a root-only folder as the invoking user:\n"
+        + "\n".join(unprivileged)
+    )
+
+    bare_globs = [
+        line for line in lines if "*" in line and "sudo sh -c" not in line
+    ]
+    assert not bare_globs, (
+        "these lines let the invoking user's shell expand a glob inside a "
+        "root-only folder, which matches nothing:\n" + "\n".join(bare_globs)
+    )
 
 
 def test_the_backup_script_still_refuses_an_empty_dump(backup_world, tmp_path):
