@@ -19,15 +19,17 @@ written by hand — the members listing goes through `scoped()`.
 """
 
 import uuid
+from contextlib import contextmanager
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..middleware.company import Membership, current_membership, require
 from ..middleware.auth import get_current_user
-from ..core.iban import format_iban
+from ..core.iban import format_iban, normalise_iban
 from ..models.company import (
     Company,
     CompanyBankAccount,
@@ -470,6 +472,71 @@ def _bank_account_or_404(
     return account
 
 
+def _refuse_duplicate_iban(
+    db: Session,
+    membership: Membership,
+    iban: str,
+    *,
+    exclude_id: Optional[uuid.UUID] = None,
+) -> None:
+    """409 if this company already has an account with `iban`.
+
+    The read-then-write check, which exists for the MESSAGE: a constraint
+    violation says "duplicate key value" and this says which account the
+    person is looking for. It is not the rule — the rule is the unique
+    constraint, and `_commit_bank_account` below is what covers the window
+    between this read and the insert.
+    """
+    existing = company_service.find_bank_account_with_iban(
+        db,
+        company_id=membership.company_id,
+        iban=iban,
+        exclude_id=exclude_id,
+    )
+    if existing is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=company_service.duplicate_iban_detail(existing),
+        )
+
+
+@contextmanager
+def _duplicate_iban_as_409(db: Session):
+    """Wrap a bank-account write so the unique violation answers 409, not 500.
+
+    Two requests adding one IBAN at the same moment both pass the read above —
+    neither can see the other's uncommitted row — and the database decides.
+    The loser must get the same answer it would have got a millisecond
+    earlier.
+
+    **It has to wrap the whole write, not just the commit.** The first version
+    of this wrapped `db.commit()` alone and the test hung instead of failing:
+    SQLAlchemy emits the INSERT at the `db.flush()` two lines into the
+    handler, so that is where the duplicate key is detected and where the
+    `IntegrityError` is raised. Nothing after it ever ran. A `try` around the
+    commit is a `try` around the wrong statement.
+
+    The rollback comes first because a failed flush leaves the session in an
+    aborted transaction, and every later statement on it — including the
+    response serialisation touching a lazy attribute — would raise
+    `PendingRollbackError` instead of the HTTPException raised here.
+
+    Only the IBAN constraint is translated; see
+    `company_service.is_duplicate_iban_error` for why mapping every
+    IntegrityError would be worse than the 500 it replaces.
+    """
+    try:
+        yield
+    except IntegrityError as exc:
+        db.rollback()
+        if company_service.is_duplicate_iban_error(exc):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=company_service.duplicate_iban_detail(None),
+            ) from None
+        raise
+
+
 @router.get("/company/bank-accounts", response_model=list[BankAccountResponse])
 def list_bank_accounts(
     db: Session = Depends(get_db),
@@ -501,26 +568,39 @@ def create_bank_account(
     that — so the state is made unreachable here rather than handled
     everywhere else.
     """
+    iban = normalise_iban(body.iban)
+    _refuse_duplicate_iban(db, membership, iban)
+
     existing = scoped(db.query(CompanyBankAccount), membership).first()
 
-    account = CompanyBankAccount(
-        company_id=membership.company_id,
-        label=body.label,
-        iban=body.iban,
-        bic=body.bic,
-        bank_name=body.bank_name,
-        is_default=False,
-    )
-    db.add(account)
-    db.flush()
+    with _duplicate_iban_as_409(db):
+        account = CompanyBankAccount(
+            company_id=membership.company_id,
+            label=body.label,
+            # Normalised again here rather than relying on the schema
+            # validator having done it. It has — `BankAccountCreate._check_iban`
+            # returns `validate_iban`'s output — and this line is what keeps
+            # the stored form correct if a later caller reaches this router
+            # through a different schema. One call, no branch, and the
+            # column's invariant stops depending on a validator two files
+            # away.
+            iban=iban,
+            bic=body.bic,
+            bank_name=body.bank_name,
+            is_default=False,
+        )
+        db.add(account)
+        # The INSERT goes out here, so this is where a duplicate is caught.
+        db.flush()
 
-    company_service.set_default_bank_account(
-        db,
-        company_id=membership.company_id,
-        account=account,
-        is_default=body.is_default or existing is None,
-    )
-    db.commit()
+        company_service.set_default_bank_account(
+            db,
+            company_id=membership.company_id,
+            account=account,
+            is_default=body.is_default or existing is None,
+        )
+        db.commit()
+
     db.refresh(account)
     return _bank_account_response(account)
 
@@ -545,6 +625,12 @@ def update_bank_account(
     changes = body.model_dump(exclude_unset=True)
     promote = changes.pop("is_default", None)
 
+    if changes.get("iban") is not None:
+        changes["iban"] = normalise_iban(changes["iban"])
+        _refuse_duplicate_iban(
+            db, membership, changes["iban"], exclude_id=account.id
+        )
+
     if promote is False and account.is_default:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -554,18 +640,20 @@ def update_bank_account(
             ),
         )
 
-    for field, value in changes.items():
-        setattr(account, field, value)
+    with _duplicate_iban_as_409(db):
+        for field, value in changes.items():
+            setattr(account, field, value)
 
-    if promote:
-        company_service.set_default_bank_account(
-            db,
-            company_id=membership.company_id,
-            account=account,
-            is_default=True,
-        )
+        if promote:
+            company_service.set_default_bank_account(
+                db,
+                company_id=membership.company_id,
+                account=account,
+                is_default=True,
+            )
 
-    db.commit()
+        db.commit()
+
     db.refresh(account)
     return _bank_account_response(account)
 

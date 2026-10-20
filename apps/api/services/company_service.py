@@ -19,8 +19,10 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from ..core.iban import format_iban, normalise_iban
 from ..models.company import (
     Company,
     CompanyBankAccount,
@@ -219,6 +221,87 @@ def set_default_bank_account(
     ).update({"is_default": False}, synchronize_session="fetch")
     account.is_default = True
     db.flush()
+
+
+#: The name of the unique constraint on `(company_id, iban)`, spelled once.
+#:
+#: Both the migration and the IntegrityError mapping below need it, and a
+#: second spelling of it is a mapping that silently stops recognising its own
+#: constraint after a rename — which would turn the race's loser back into a
+#: 500.
+IBAN_UNIQUE_CONSTRAINT = "uq_company_bank_accounts_company_iban"
+
+
+def find_bank_account_with_iban(
+    db: Session,
+    *,
+    company_id: uuid.UUID,
+    iban: str,
+    exclude_id: Optional[uuid.UUID] = None,
+) -> Optional[CompanyBankAccount]:
+    """The account in THIS company already holding `iban`, or None.
+
+    `iban` is normalised here rather than trusted, so that a caller which
+    skipped the schema (a script, a future importer) still compares like with
+    like. Normalising on both sides of the comparison would be wrong — the
+    column is normalised by construction, and normalising it in SQL would
+    throw the index away.
+
+    `exclude_id` is how an edit distinguishes "somebody else already has this"
+    from "this is the account I am editing, unchanged".
+    """
+    query = db.query(CompanyBankAccount).filter(
+        CompanyBankAccount.company_id == company_id,
+        CompanyBankAccount.iban == normalise_iban(iban),
+    )
+    if exclude_id is not None:
+        query = query.filter(CompanyBankAccount.id != exclude_id)
+    return query.first()
+
+
+def duplicate_iban_detail(account: Optional[CompanyBankAccount]) -> str:
+    """The sentence a 409 carries, naming the account that already has it.
+
+    A label is optional on this model and is in fact usually empty — the dev
+    database has two unlabelled accounts — so "already saved as 'Hauptkonto'"
+    cannot be the only wording. Without a label the sentence says so and
+    gives the grouped IBAN instead, which is what the person is looking at on
+    the screen.
+
+    `account` may be None: the race's loser learns about the conflict from the
+    database, after the row that caused it was committed by somebody else, and
+    re-reading it to decorate the message would be a third query for a
+    sentence. The generic form is still specific about what to do.
+    """
+    if account is None:
+        return (
+            "That IBAN is already saved on this company. Reload the list — "
+            "somebody added it a moment ago."
+        )
+    if account.label:
+        return f'This IBAN is already saved as "{account.label}".'
+    return (
+        "This IBAN is already saved on this company. That account has no "
+        f"label — look for {format_iban(account.iban)} in the list."
+    )
+
+
+def is_duplicate_iban_error(error: IntegrityError) -> bool:
+    """Whether `error` is the `(company_id, iban)` unique violation.
+
+    Narrow on purpose. Mapping every IntegrityError on this table to a 409
+    would hide a foreign-key or NOT NULL failure behind a message about
+    duplicate IBANs, which is worse than the 500 it replaced.
+
+    psycopg2 names the constraint in `diag.constraint_name`; the substring
+    fallback covers a driver that does not, and costs nothing because the
+    constraint name is unique in this schema.
+    """
+    diagnostic = getattr(getattr(error, "orig", None), "diag", None)
+    named = getattr(diagnostic, "constraint_name", None)
+    if named:
+        return named == IBAN_UNIQUE_CONSTRAINT
+    return IBAN_UNIQUE_CONSTRAINT in str(getattr(error, "orig", error))
 
 
 def has_other_bank_accounts(

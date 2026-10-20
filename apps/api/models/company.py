@@ -29,6 +29,7 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -271,20 +272,42 @@ class CompanyBankAccount(CompanyScoped, Base):
     normal case), one of them flagged as the one that goes on a document
     unless something says otherwise.
 
-    No endpoint serves this yet — the company-settings UI is P0b-2. It is
-    modelled here because it is part of what a company IS, and because a
-    table that arrives with the migration that creates its parent is one
-    migration instead of two.
+    **One IBAN appears once per company.** The same IBAN in a DIFFERENT
+    company is allowed and is a normal thing — two companies on one
+    installation can be paid into the same account, and an installation
+    administrator has no business deciding otherwise. Within one company it
+    is a mistake every time: two rows for one account give the settings
+    screen two entries that are the same bank account, and whichever of them
+    a document happens to snapshot is arbitrary.
     """
 
     __tablename__ = "company_bank_accounts"
+    __table_args__ = (
+        #: The rule, in the only place that can actually hold it. The router
+        #: also looks the duplicate up first, so that the answer is a 409
+        #: naming the existing account rather than a constraint violation —
+        #: but that check has a window between the read and the write, and
+        #: two requests arriving inside it are decided here.
+        UniqueConstraint(
+            "company_id", "iban", name="uq_company_bank_accounts_company_iban"
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    #: "Production account", "Payroll". What a human picks it by.
+    #: "Production account", "Payroll". What a human picks it by. Optional,
+    #: and genuinely often absent — the duplicate message below has to read
+    #: sensibly without one.
     label: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    #: Stored exactly as entered, spaces and all. Formatting for display and
-    #: for SEPA export are two different renderings of this one value, and
-    #: neither belongs in the column.
+    #: Stored NORMALISED: no whitespace, upper case. Not "as entered" — the
+    #: unique constraint above is an equality test, and a column holding
+    #: `at61 1904 …` for some rows and `AT611904…` for others is a column in
+    #: which that test silently stops working. Grouping into fours is a
+    #: display rendering (`core/iban.format_iban`), and SEPA export is
+    #: another; neither belongs in the column.
+    #:
+    #: Every write path goes through `core/iban.validate_iban`, which returns
+    #: the normalised value rather than a bool precisely so that a caller
+    #: cannot validate one string and store a different one.
     iban: Mapped[str] = mapped_column(String(64), nullable=False)
     bic: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     bank_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
