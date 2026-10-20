@@ -52,6 +52,13 @@ def create_company(
     the person creating the company, i.e. the grantee, and recording someone
     as having granted themselves authority reads as an audit finding rather
     than as the ordinary event it is.
+
+    The eight default number series are seeded in the same transaction. A
+    company whose first invoice cannot be numbered is a company that has to
+    be configured before it can be used, and "configure the numbering" is not
+    a decision anybody wants to make under time pressure on the day they are
+    issuing their first invoice. They are user-editable from the moment they
+    exist (SCOPE §16, and `services/number_series.DEFAULT_SERIES`).
     """
     company = Company(legal_name=legal_name, **fields)
     db.add(company)
@@ -65,6 +72,13 @@ def create_company(
         )
     )
     db.flush()
+
+    # Imported here rather than at module scope: `number_series` imports
+    # `models.company`, and a top-level import would close a cycle through
+    # this module's own imports.
+    from .number_series import seed_number_series
+
+    seed_number_series(db, company_id=company.id)
     return company
 
 

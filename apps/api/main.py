@@ -12,6 +12,7 @@ from .routers import (
     files,
     health,
     notifications,
+    number_series,
     setup,
     site_settings,
     users,
@@ -80,6 +81,7 @@ app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(setup.router)
 app.include_router(companies.router)
+app.include_router(number_series.router)
 app.include_router(admin.router)
 app.include_router(notifications.router)
 app.include_router(events.router)

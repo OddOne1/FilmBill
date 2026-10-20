@@ -188,3 +188,45 @@ def make_bank_account(
     db.commit()
     db.refresh(account)
     return account
+
+
+def make_number_series(
+    db,
+    company: Company,
+    *,
+    document_type: str = "invoice",
+    name: str = "Ausgangsrechnungen",
+    pattern: str = "AR-{YYYY}-{SEQ}",
+    reset: str = "yearly",
+    next_value: int = 1,
+    current_period: Optional[str] = None,
+    padding: int = 4,
+    is_active: bool = True,
+):
+    """One number series, written directly.
+
+    Directly rather than through `POST /company/number-series`, for the same
+    reason `grant` does not use the members endpoint: a bug in the endpoint
+    must not be able to hide a bug in the scoping.
+
+    `current_period` defaults to None — a series that has never allocated
+    anything — because that is the state a seeded series is in, and a test
+    that wants a counter mid-year says so.
+    """
+    from apps.api.models.number_series import NumberSeries
+
+    series = NumberSeries(
+        company_id=company.id,
+        document_type=document_type,
+        name=name,
+        pattern=pattern,
+        reset=reset,
+        next_value=next_value,
+        current_period=current_period,
+        padding=padding,
+        is_active=is_active,
+    )
+    db.add(series)
+    db.commit()
+    db.refresh(series)
+    return series

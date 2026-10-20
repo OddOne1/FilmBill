@@ -34,13 +34,27 @@ from .company_factories import (
     grant,
     make_bank_account,
     make_company,
+    make_number_series,
     make_superadmin,
     make_user,
     unrelated_company_id,
 )
 
-#: The tag whose operations must every one be covered below.
-SCOPED_TAG = "companies"
+#: What makes an operation company-scoped: its PATH, not its tag.
+#:
+#: The company-scoped routes are spelled `/company/...` — singular, "the one
+#: I am acting in" — and `/companies` (plural) is the two operations that have
+#: no company context by definition. That is the design invariant stated in
+#: `middleware/company.py`, and selecting on it is what makes this file
+#: automatic: a new router under `/company/...` is caught here whatever tag it
+#: carries.
+#:
+#: It used to select on the `companies` TAG, which was the same set until
+#: P0b-3 added `/company/number-series` under a tag of its own. Those four
+#: endpoints would have escaped silently — the file would have gone on
+#: passing, and reading as coverage.
+def _is_company_scoped(path: str) -> bool:
+    return path == "/companies" or path == "/company" or path.startswith("/company/")
 
 #: Marks an operation that takes no company context BY DESIGN, with the
 #: reason. Listing your own companies and creating a new one are the only two
@@ -80,6 +94,26 @@ CASES: dict[str, object] = {
     },
     "PATCH /company/bank-accounts/{bank_account_id}": {"body": {"label": "Stolen"}},
     "DELETE /company/bank-accounts/{bank_account_id}": {"body": None},
+    # P0b-3. `document_type` is one nothing seeds, so the legitimate-request
+    # half of the second test creates a series rather than colliding with a
+    # seeded one — a 409 there would read as a scoping failure.
+    "GET /company/number-series": {"body": None},
+    "POST /company/number-series": {
+        "body": {
+            "document_type": "isolation_probe",
+            "name": "Probe",
+            "pattern": "PR-{YYYY}-{SEQ}",
+        }
+    },
+    "PATCH /company/number-series/{series_id}": {"body": {"name": "Stolen"}},
+    # The preview carries a `series_id` in its BODY rather than its path, so
+    # the placeholder substitution below cannot reach it. Its own case lives
+    # in test_number_series.py
+    # (`test_previewing_another_companys_series_is_404`) — recorded here
+    # because this table is where somebody looks for it.
+    "POST /company/number-series/preview": {
+        "body": {"pattern": "AR-{YYYY}-{SEQ}", "reset": "yearly", "padding": 4}
+    },
 }
 
 #: Placeholder -> the key in the `two_companies` fixture holding a row that
@@ -87,6 +121,7 @@ CASES: dict[str, object] = {
 OTHER_COMPANY_ROWS = {
     "{membership_id}": "membership_in_b",
     "{bank_account_id}": "bank_account_in_b",
+    "{series_id}": "series_in_b",
 }
 
 
@@ -96,9 +131,10 @@ def _scoped_operations() -> list[str]:
     schema = get_openapi(title=app.title, version=app.version, routes=app.routes)
     found = []
     for path, operations in schema["paths"].items():
-        for method, operation in operations.items():
-            if SCOPED_TAG in (operation.get("tags") or []):
-                found.append(f"{method.upper()} {path}")
+        if not _is_company_scoped(path):
+            continue
+        for method in operations:
+            found.append(f"{method.upper()} {path}")
     return sorted(found)
 
 
@@ -151,6 +187,10 @@ def two_companies(pg_db):
     # bank-accounts router are exercised against a real neighbour rather than
     # against an id that names nothing.
     bank_in_b = make_bank_account(pg_db, company_b, iban="AT61 1904 3002 3457 3201")
+    # And a number series of B's, for the same reason: `/company/number-series/
+    # {series_id}` looked up without a `company_id` filter FINDS this row, and
+    # answering anything but 404 for it confirms it exists.
+    series_in_b = make_number_series(pg_db, company_b, document_type="invoice")
     return {
         "ada": ada,
         "bo": bo,
@@ -158,6 +198,7 @@ def two_companies(pg_db):
         "b": company_b,
         "membership_in_b": bo_in_b,
         "bank_account_in_b": bank_in_b,
+        "series_in_b": series_in_b,
     }
 
 

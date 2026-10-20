@@ -14,6 +14,7 @@ import {
   Building2,
   Landmark,
   Calculator,
+  Hash,
   ShieldCheck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -93,6 +94,15 @@ const settingsNavGroups: SettingsNavItem[][] = [
       label: 'Accounting',
       icon: Calculator,
       permission: 'company.settings.edit',
+    },
+    {
+      href: '/settings/company/number-series',
+      label: 'Number series',
+      icon: Hash,
+      // `number_series.manage`, not `company.settings.edit`: re-pointing a
+      // number series is a structural act — rule 5's gap-free promise is what
+      // is at stake — and the endpoints enforce the narrower key.
+      permission: 'number_series.manage',
     },
     {
       href: '/settings/company/security',

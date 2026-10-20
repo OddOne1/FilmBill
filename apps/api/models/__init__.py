@@ -13,6 +13,7 @@ from .company import (
     CompanyRole,
     CompanyScoped,
 )
+from .number_series import NumberAllocation, NumberSeries
 
 __all__ = [
     "User",
@@ -26,4 +27,6 @@ __all__ = [
     "CompanyMembership",
     "CompanyRole",
     "CompanyScoped",
+    "NumberSeries",
+    "NumberAllocation",
 ]

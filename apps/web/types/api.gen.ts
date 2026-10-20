@@ -979,6 +979,102 @@ export interface paths {
         patch: operations["update_member_company_members__membership_id__patch"];
         trace?: never;
     };
+    "/company/number-series": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Number Series
+         * @description This company's series, in the order the screen shows them.
+         *
+         *     Ordered by document type so the list does not reshuffle when somebody
+         *     renames one — a list that reorders on save is a list people lose their
+         *     place in.
+         */
+        get: operations["list_number_series_company_number_series_get"];
+        put?: never;
+        /**
+         * Create Number Series
+         * @description Add a series. One active series per document type.
+         *
+         *     The second active series for a document type is refused by the partial
+         *     unique index and reported as a 409 — not silently allowed, because
+         *     `allocate_number` asks for THE active series and two of them would make
+         *     which one a document gets depend on row order.
+         */
+        post: operations["create_number_series_company_number_series_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/company/number-series/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Number
+         * @description The number that WOULD be issued. Allocates nothing, writes nothing.
+         *
+         *     Takes candidate values rather than reading the series, so the screen can
+         *     preview an edit before it is saved. With a `document_date` in an earlier
+         *     year it returns the same `document_date_before_latest` warning an
+         *     allocation would, which is how somebody can see the consequence of a
+         *     back-dated document before there is a finalize flow to show it in (P2).
+         *
+         *     `document_date` absent means today in the COMPANY's timezone, not in
+         *     UTC — 31 December 23:30 UTC is already 1 January in Vienna, and on a
+         *     yearly series those are numbers from two different sequences.
+         */
+        post: operations["preview_number_company_number_series_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/company/number-series/{series_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Number Series
+         * @description Edit a series, including switching how it treats the turn of the year.
+         *
+         *     **The two switches are not symmetrical, and that is the specification.**
+         *
+         *       * yearly → continuous keeps the counter exactly where it is. No gap, no
+         *         repeat: the next number is the one the yearly series would have
+         *         issued.
+         *       * continuous → yearly takes effect at the NEXT period boundary, not
+         *         immediately. The current period carries on from where it is and only
+         *         the next year restarts at 1 — which falls out of the engine reading
+         *         the period's own allocations rather than assuming an empty period.
+         *
+         *     Neither may re-issue an allocated number, which is what
+         *     `_refuse_reissuing_an_allocated_number` is for.
+         */
+        patch: operations["update_number_series_company_number_series__series_id__patch"];
+        trace?: never;
+    };
     "/email-settings": {
         parameters: {
             query?: never;
@@ -2178,6 +2274,152 @@ export interface components {
          * @enum {string}
          */
         NotificationType: "account";
+        /**
+         * NumberPreviewRequest
+         * @description Ask what a series would issue — without issuing it.
+         *
+         *     The pattern, padding and mode are the CANDIDATE values, so the screen can
+         *     preview an unsaved edit. `series_id` supplies the counter and the history;
+         *     without one the preview is a brand-new series, which is what the create
+         *     form needs.
+         */
+        NumberPreviewRequest: {
+            /** Document Date */
+            document_date?: string | null;
+            /**
+             * Padding
+             * @default 4
+             */
+            padding: number;
+            /** Pattern */
+            pattern: string;
+            /**
+             * Reset
+             * @default yearly
+             * @enum {string}
+             */
+            reset: "yearly" | "never";
+            /** Series Id */
+            series_id?: string | null;
+        };
+        /** NumberPreviewResponse */
+        NumberPreviewResponse: {
+            /** Number */
+            number: string;
+            /** Period */
+            period: string;
+            /**
+             * Starts New Period
+             * @default false
+             */
+            starts_new_period: boolean;
+            /** Value */
+            value: number;
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: components["schemas"]["NumberWarningResponse"][];
+        };
+        /** NumberSeriesCreate */
+        NumberSeriesCreate: {
+            /** Document Type */
+            document_type: string;
+            /** Name */
+            name: string;
+            /**
+             * Next Value
+             * @default 1
+             */
+            next_value: number;
+            /**
+             * Padding
+             * @default 4
+             */
+            padding: number;
+            /** Pattern */
+            pattern: string;
+            /**
+             * Reset
+             * @default yearly
+             * @enum {string}
+             */
+            reset: "yearly" | "never";
+        };
+        /** NumberSeriesResponse */
+        NumberSeriesResponse: {
+            /**
+             * Allocated Count
+             * @default 0
+             */
+            allocated_count: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Current Period */
+            current_period?: string | null;
+            /** Document Type */
+            document_type: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Latest Number */
+            latest_number?: string | null;
+            /** Name */
+            name: string;
+            /** Next Value */
+            next_value: number;
+            /** Padding */
+            padding: number;
+            /** Pattern */
+            pattern: string;
+            /**
+             * Reset
+             * @enum {string}
+             */
+            reset: "yearly" | "never";
+            /** Updated At */
+            updated_at?: string | null;
+        };
+        /** NumberSeriesUpdate */
+        NumberSeriesUpdate: {
+            /** Is Active */
+            is_active?: boolean | null;
+            /** Name */
+            name?: string | null;
+            /** Next Value */
+            next_value?: number | null;
+            /** Padding */
+            padding?: number | null;
+            /** Pattern */
+            pattern?: string | null;
+            /** Reset */
+            reset?: ("yearly" | "never") | null;
+        };
+        /**
+         * NumberWarningResponse
+         * @description One thing the caller should know about a number before using it.
+         *
+         *     `code` as well as `message`, because P2's finalize flow has to branch on
+         *     it — show a confirmation — and branching on prose is how a translation
+         *     breaks a gate.
+         */
+        NumberWarningResponse: {
+            /** Code */
+            code: string;
+            /** Latest Document Date */
+            latest_document_date?: string | null;
+            /** Latest Number */
+            latest_number?: string | null;
+            /** Message */
+            message: string;
+        };
         /**
          * PasswordPolicyResponse
          * @description The rules, so the screen can state them before the first attempt.
@@ -3928,6 +4170,146 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MemberResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_number_series_company_number_series_get: {
+        parameters: {
+            query?: {
+                include_inactive?: boolean;
+            };
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NumberSeriesResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_number_series_company_number_series_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NumberSeriesCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NumberSeriesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_number_company_number_series_preview_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NumberPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NumberPreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_number_series_company_number_series__series_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                series_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NumberSeriesUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NumberSeriesResponse"];
                 };
             };
             /** @description Validation Error */

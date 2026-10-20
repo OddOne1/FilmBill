@@ -126,6 +126,30 @@ export type CompanyBankAccount = Schemas['BankAccountResponse']
 export type BankAccountCreate = Schemas['BankAccountCreate']
 export type BankAccountUpdate = Schemas['BankAccountUpdate']
 
+// ─── Number series ──────────────────────────────────────────────────────────
+//
+// The number is always the API's. `NumberPreview` is the whole reason the
+// preview endpoint exists: the web app never formats or increments a document
+// number (CLAUDE.md rule 2), so the screen asks what the next one would be
+// rather than working it out.
+
+export type NumberSeries = Schemas['NumberSeriesResponse']
+export type NumberSeriesCreate = Schemas['NumberSeriesCreate']
+export type NumberSeriesUpdate = Schemas['NumberSeriesUpdate']
+export type NumberPreview = Schemas['NumberPreviewResponse']
+export type NumberPreviewRequest = Schemas['NumberPreviewRequest']
+export type NumberWarning = Schemas['NumberWarningResponse']
+/** How a series treats the turn of the year. `yearly` | `never`. */
+export type ResetMode = NumberSeries['reset']
+
+/** The warning code a back-dated document carries.
+ *
+ *  Compared as a token, never as prose: the server's sentence is what gets
+ *  shown and this is what gets branched on, so a reworded message cannot
+ *  silently turn the warning off. Same reasoning as
+ *  `ACCOUNT_SETUP_REQUIRED` below. */
+export const DOCUMENT_DATE_BEFORE_LATEST = 'document_date_before_latest'
+
 // ════════════════════════════════════════════════════════════════════════════
 // Hand-written, deliberately
 //

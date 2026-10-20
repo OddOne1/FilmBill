@@ -434,7 +434,20 @@ def pg_engine():
     from apps.api.database import Base
     import apps.api.models  # noqa: F401  — registers every table on Base
 
-    engine = create_engine(_with_database(base_url, _SCRATCH_DB))
+    # A pool big enough for the concurrency tests. The default is 5 + 10
+    # overflow, and `test_number_series.py` runs 20 threads each holding a
+    # session for the length of one allocation — on the default pool five of
+    # them would spend 30 seconds waiting for a connection and then raise
+    # `TimeoutError`, which is a failure of the harness reported as a failure
+    # of the engine. `pool_pre_ping` because a connection abandoned by a
+    # worker that a previous test's `join(timeout=…)` gave up on must not be
+    # handed to the next test mid-transaction.
+    engine = create_engine(
+        _with_database(base_url, _SCRATCH_DB),
+        pool_size=30,
+        max_overflow=20,
+        pool_pre_ping=True,
+    )
     Base.metadata.create_all(engine)
 
     yield engine

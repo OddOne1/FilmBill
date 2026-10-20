@@ -57,6 +57,12 @@ EXPECTED_TAGS = {
     "files",
     "health",
     "notifications",
+    #: P0b-3. Settings → Company → Number series. A tag of its own rather
+    #: than `companies`, because this is one subject with four endpoints and
+    #: P1 onwards will add to it; the cross-company isolation suite selects on
+    #: the `/company/...` PATH rather than on the tag, so a new tag under that
+    #: path cannot escape it (see tests/test_company_isolation.py).
+    "number-series",
     "setup",
     "site-settings",
     "users",
