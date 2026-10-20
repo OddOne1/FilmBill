@@ -381,3 +381,217 @@ def test_the_preflight_never_mutates_anything(tmp_path):
         "compose down", "mkdir", "rm -", "> /", "chown", "chmod",
     ):
         assert verb not in text, f"pre-flight contains {verb!r}"
+
+
+# ─── The backup script ──────────────────────────────────────────────────────
+#
+# Run as the script it is, with `DOCKER_COMPOSE` pointed at a stub that writes
+# SQL on stdout and a temporary `DATA_DIR`. Not a Python reimplementation of
+# what it is believed to do — that would prove the reimplementation
+# (CLAUDE.md's harness rule) — and not the real compose either, because the
+# subject is the script's handling of modes and printed text, not Postgres.
+#
+# What the drill of 2026-10-20 found, and what these pin:
+#
+#   * the dumps were `-rw-r--r-- root:apps` on a shared NAS, and a pg_dump of
+#     this database holds every bcrypt hash and every IBAN in the clear;
+#   * the restore line it printed had no `sudo`, so a normal user got a
+#     Docker socket error that reads as a broken instruction.
+
+BACKUP = REPO_ROOT / "scripts" / "server-test-backup.sh"
+
+#: The stub's output has to survive `gzip -9` above the script's 1000-byte
+#: "this is not a backup" guard, or it exits 1 before reaching any of the
+#: behaviour under test and every assertion below is really about the guard.
+#:
+#: Repeated INSERT lines do not: 200 of them compress to about 800 bytes.
+#: Random base64 does, which is why the stub emits that alongside one
+#: recognisable row.
+_STUB_SQL_HEAD = "-- stub dump\nINSERT INTO probe VALUES (1, 'BACKUP-PROBE');\n"
+
+
+@pytest.fixture
+def backup_world(tmp_path):
+    """A stub compose binary, a temporary DATA_DIR, and an env file."""
+    data_dir = tmp_path / "filmbill-v2-data"
+    data_dir.mkdir()
+
+    stub = tmp_path / "docker-compose-stub"
+    stub.write_text(
+        "#!/usr/bin/env bash\n"
+        "# Stands in for `docker compose exec -T postgres pg_dump`. Writes SQL\n"
+        "# on stdout and ignores everything else, which is the whole of what\n"
+        "# the backup script needs from it.\n"
+        f"printf '%s' {_STUB_SQL_HEAD!r}\n"
+        "# Incompressible filler, so the result clears the script's own\n"
+        "# 1000-byte guard — see the note on _STUB_SQL_HEAD.\n"
+        "head -c 20000 /dev/urandom | base64\n"
+    )
+    stub.chmod(0o755)
+
+    env_file = tmp_path / ".env.server-test"
+    env_file.write_text(
+        f"DATA_DIR={data_dir}\n"
+        "POSTGRES_USER=filmbill\n"
+        "POSTGRES_DB=filmbill_v2\n"
+    )
+
+    return {"data_dir": data_dir, "stub": stub, "env_file": env_file}
+
+
+def _run_backup(world, **extra_env) -> subprocess.CompletedProcess:
+    env = os.environ.copy()
+    env.update(
+        {
+            "ENV_FILE": str(world["env_file"]),
+            "DOCKER_COMPOSE": str(world["stub"]),
+        }
+    )
+    env.update(extra_env)
+    return subprocess.run(
+        ["bash", str(BACKUP)],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+
+def _dumps(world) -> list[Path]:
+    return sorted((world["data_dir"] / "backups").glob("*.sql.gz"))
+
+
+def test_the_backup_script_writes_a_dump(backup_world):
+    """The guard for the three tests below: each of them asserts something
+    about a file, and would fail confusingly rather than clearly if no file
+    were produced at all."""
+    result = _run_backup(backup_world)
+
+    assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
+    assert len(_dumps(backup_world)) == 1, result.stdout
+
+
+def test_the_dump_is_mode_600(backup_world):
+    """It holds every password hash and every IBAN in the clear.
+
+    `-rw-r--r-- root:apps` on a shared NAS means readable by every account on
+    the box, which is what the drill found.
+    """
+    _run_backup(backup_world)
+
+    dump = _dumps(backup_world)[0]
+    assert oct(dump.stat().st_mode & 0o777) == "0o600", (
+        f"{dump.name} is {oct(dump.stat().st_mode & 0o777)}"
+    )
+
+
+def test_the_backups_directory_is_mode_700(backup_world):
+    """Tightened even when it already exists, which is the case on the
+    server: the directory was created 0755 by an earlier version of this
+    script, and `mkdir -p` on an existing directory changes nothing."""
+    (backup_world["data_dir"] / "backups").mkdir(mode=0o755)
+
+    _run_backup(backup_world)
+
+    mode = (backup_world["data_dir"] / "backups").stat().st_mode & 0o777
+    assert oct(mode) == "0o700", f"backups/ is {oct(mode)}"
+
+
+def test_the_mode_survives_a_loose_inherited_umask(backup_world):
+    """`umask 077` in the script, not inherited from the caller.
+
+    A cron or an SSH one-liner can arrive with umask 022, and the mode of the
+    dump must not depend on it. This is also what makes the explicit `chmod`
+    worth keeping rather than relying on the umask alone.
+    """
+    result = subprocess.run(
+        ["bash", "-c", f"umask 022; exec bash {BACKUP}"],
+        env={
+            **os.environ,
+            "ENV_FILE": str(backup_world["env_file"]),
+            "DOCKER_COMPOSE": str(backup_world["stub"]),
+        },
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
+
+    dump = _dumps(backup_world)[0]
+    assert oct(dump.stat().st_mode & 0o777) == "0o600"
+
+
+def test_the_script_reports_the_mode_it_achieved(backup_world):
+    """Printed, so a cron mail says what is true rather than what the script
+    intended — the difference the drill turned on."""
+    result = _run_backup(backup_world)
+
+    assert "mode 600" in result.stdout, result.stdout
+
+
+def test_every_printed_compose_line_has_sudo(backup_world):
+    """Without it a normal user gets "permission denied while trying to
+    connect to the Docker daemon socket", which reads as a broken instruction
+    rather than as a missing prefix.
+
+    Checked over EVERY printed compose invocation, not just the restore one:
+    the `stop` and `start` lines need it just as much, and the drill only
+    happened to hit the restore.
+    """
+    result = _run_backup(backup_world)
+
+    stub = str(backup_world["stub"])
+    lines = [
+        line for line in result.stdout.splitlines() if stub in line
+    ]
+    assert lines, f"no compose invocation printed at all:\n{result.stdout}"
+    missing = [line for line in lines if "sudo " + stub not in line]
+    assert not missing, (
+        "printed compose lines without sudo:\n" + "\n".join(missing)
+    )
+
+
+def test_the_printed_instructions_say_a_dump_is_not_a_proven_backup(
+    backup_world,
+):
+    """The lesson of the drill, where the first two dumps held an empty
+    `company_bank_accounts` and would have restored an empty table just as
+    happily."""
+    result = _run_backup(backup_world)
+
+    assert "only PROVEN by restoring data you can recognise" in result.stdout
+    assert "docs/deploy/server-test.md" in result.stdout
+
+
+def test_the_deploy_doc_describes_the_recognisable_row_drill():
+    """Asserted on the DOC because that is where somebody reads it.
+
+    Not a grep for a word: the four steps that make a restore proof —
+    add a recognisable row, find it in the dump, change it, restore, see it
+    back — are each looked for, so a doc that merely mentions "backup" does
+    not pass.
+    """
+    doc = (REPO_ROOT / "docs" / "deploy" / "server-test.md").read_text()
+
+    assert "BACKUP-PROBE" in doc, "no recognisable row to look for"
+    assert "zcat" in doc and "grep -c BACKUP-PROBE" in doc, (
+        "the doc does not check that the dump CONTAINS the probe"
+    )
+    assert "PROBE-CHANGED" in doc, (
+        "the doc does not change the row before restoring, so the restore "
+        "would prove nothing"
+    )
+    assert "chmod 600" in doc, "no instruction for the dumps that already exist"
+
+
+def test_the_backup_script_still_refuses_an_empty_dump(backup_world, tmp_path):
+    """The pre-existing guard, re-asserted because `umask` and `chmod` were
+    added around it: a dump that failed mid-stream still leaves a file, and
+    gzip of nothing is ~20 bytes."""
+    empty_stub = tmp_path / "empty-stub"
+    empty_stub.write_text("#!/usr/bin/env bash\nexit 0\n")
+    empty_stub.chmod(0o755)
+    backup_world["stub"] = empty_stub
+
+    result = _run_backup(backup_world)
+
+    assert result.returncode == 1
+    assert "not treating this as a backup" in result.stderr

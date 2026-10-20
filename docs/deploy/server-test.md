@@ -311,13 +311,67 @@ cd /mnt/HDDs/Applications/Dockers/stacks/filmbill-v2-src && ./scripts/server-tes
 ```
 
 It writes a timestamped `pg_dump` into `DATA_DIR/backups/`, keeps the newest
-14, and prints the exact restore command for the file it just made.
+14, and prints the exact restore command for the file it just made. The file
+is **mode 600** and the directory **700**: a dump of this database holds every
+password hash and every bank account number in the clear, and on a shared NAS
+world-readable means readable by every account on the box. The script prints
+the mode it actually achieved, so a cron mail says what is true rather than
+what the script intended.
 
-**Paste back:** its last few lines.
+**Paste back:** its last few lines, including the `mode` line.
 
-To restore, use the command it printed. It stops `api`, `worker`,
-`email_worker` and `beat` first so nothing writes mid-restore — and restarts
+> **One-off, for dumps taken before 2026-10-20.** Files that already exist
+> keep the mode they were created with; no script can fix that retroactively.
+> Run this once:
+>
+> ```
+> sudo chmod 700 /mnt/HDDs/Applications/Dockers/stacks/filmbill-v2-data/backups
+> sudo chmod 600 /mnt/HDDs/Applications/Dockers/stacks/filmbill-v2-data/backups/*.sql.gz
+> ls -l /mnt/HDDs/Applications/Dockers/stacks/filmbill-v2-data/backups
+> ```
+
+To restore, use the command the script printed. Every compose line it prints
+carries `sudo` — without it a normal user gets *"permission denied while
+trying to connect to the Docker daemon socket"*, which reads as a broken
+instruction rather than a missing prefix. It stops `api`, `worker`,
+`email_worker` and `beat` first so nothing writes mid-restore, and restarts
 them after.
+
+### Proving the backup
+
+**A dump that exists proves nothing.** The first two taken in the drill of
+2026-10-20 held an empty `company_bank_accounts` and would have restored an
+empty table just as happily — a restore that "worked" and recovered nothing
+anybody would miss. A backup is proven only by restoring **data you can
+recognise**, so do this once, deliberately:
+
+1. **Put something recognisable in.** In the browser, Settings → Company →
+   Bank accounts, add an account labelled `BACKUP-PROBE`.
+
+2. **Take the dump and check the probe is in it.**
+
+   ```
+   cd /mnt/HDDs/Applications/Dockers/stacks/filmbill-v2-src && ./scripts/server-test-backup.sh
+   zcat /mnt/HDDs/Applications/Dockers/stacks/filmbill-v2-data/backups/$(ls -1t /mnt/HDDs/Applications/Dockers/stacks/filmbill-v2-data/backups | head -1) | grep -c BACKUP-PROBE
+   ```
+
+   It must print `1` or more. `0` means the dump does not contain the row you
+   just created, and nothing after this step is worth doing until that is
+   understood.
+
+3. **Change the row.** In the browser, rename that account to
+   `PROBE-CHANGED`.
+
+4. **Restore**, using the command the script printed in step 2 — the one with
+   `sudo` in it — including the `stop` before and the `start` after.
+
+5. **Check it came back.** Reload Settings → Company → Bank accounts. The
+   label must read `BACKUP-PROBE` again. That, and only that, is a proven
+   backup: data you recognise went away and came back.
+
+6. Remove the probe account when you are satisfied.
+
+**Paste back:** the number from step 2 and what the label says in step 5.
 
 ---
 
