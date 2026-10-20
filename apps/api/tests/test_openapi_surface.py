@@ -44,6 +44,11 @@ SNAPSHOT = Path(__file__).resolve().parent / "snapshots" / "openapi_paths.txt"
 #:     browser-facing (CLAUDE.md rule 16).
 EXPECTED_TAGS = {
     "admin",
+    #: P0b-3. Settings → Company → Audit log, read-only. A tag of its own
+    #: because there will be more of it (a document's own history page in
+    #: P2), and because "is there a write endpoint on audit_events" should be
+    #: answerable by looking at one tag.
+    "audit",
     "auth",           # includes every /auth/2fa/* endpoint
     #: P0b-1. Two path shapes under one tag: `/companies` (plural) for the
     #: two operations with no company context — listing yours, creating one —

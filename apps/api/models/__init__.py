@@ -14,6 +14,7 @@ from .company import (
     CompanyScoped,
 )
 from .number_series import NumberAllocation, NumberSeries
+from .audit import AuditEvent
 
 __all__ = [
     "User",
@@ -29,4 +30,5 @@ __all__ = [
     "CompanyScoped",
     "NumberSeries",
     "NumberAllocation",
+    "AuditEvent",
 ]

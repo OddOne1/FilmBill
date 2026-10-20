@@ -22,7 +22,7 @@ import uuid
 from contextlib import contextmanager
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -49,7 +49,7 @@ from ..schemas.company import (
     MemberResponse,
     MemberUpdate,
 )
-from ..services import company_service, invite_service
+from ..services import audit, company_service, invite_service
 from ..services.auth_service import get_user_by_email
 from ..services.permissions import (
     active_memberships,
@@ -59,6 +59,61 @@ from ..services.permissions import (
 )
 
 router = APIRouter(tags=["companies"])
+
+# ─── What an audit row records, per entity ──────────────────────────────────
+#
+# Named field lists rather than "everything on the object", so that adding a
+# column does not silently start logging it — including, one day, a column
+# holding something that should not be logged at all. `services/audit.redact`
+# is the second line of defence; this is the first.
+
+#: The company fields worth a before/after. `logo_s3_key` is in because a
+#: changed logo changes every document; `created_at` and `archived_at` are
+#: not, because nothing edits them through this router.
+COMPANY_AUDITED = (
+    "legal_name",
+    "trading_name",
+    "legal_form",
+    "register_number",
+    "register_court",
+    "vat_id",
+    "tax_number",
+    "address_street",
+    "address_zip",
+    "address_city",
+    "address_country",
+    "email",
+    "phone",
+    "website",
+    "default_currency",
+    "default_language",
+    "fiscal_year_start_month",
+    "timezone",
+    "logo_s3_key",
+    "require_2fa_roles",
+    "tax_advisor_reports",
+    "bookkeeping_mode",
+    "vat_timing",
+    "kleinunternehmer",
+    "chart_of_accounts_template",
+    "export_format",
+    "archive_date_basis",
+    "month_approval_enabled",
+)
+
+#: `iban` is in, and `services/audit.redact` MASKS it to country code plus
+#: last four. It is in because "which account was added" is the audit-worthy
+#: fact, and it is masked because `audit.view` must not become a way round
+#: the `company.settings.edit` gate on reading a bank account.
+BANK_ACCOUNT_AUDITED = ("label", "iban", "bic", "bank_name", "is_default")
+
+#: A membership's own fields. `user_id` is in so a revocation says whose.
+MEMBERSHIP_AUDITED = ("user_id", "role", "expires_at", "revoked_at")
+
+#: Which company settings count as SECURITY settings, recorded under their
+#: own action so the audit screen can be filtered to them. The same PATCH
+#: carries both kinds, so the router splits them rather than the client.
+SECURITY_FIELDS = frozenset({"require_2fa_roles", "tax_advisor_reports"})
 
 
 def _member_response(record: CompanyMembership, user: User) -> MemberResponse:
@@ -184,6 +239,7 @@ def get_active_company(
 @router.patch("/company", response_model=CompanyResponse)
 def update_active_company(
     body: CompanyUpdate,
+    request: Request,
     db: Session = Depends(get_db),
     membership: Membership = Depends(require("company.settings.edit")),
 ):
@@ -193,6 +249,7 @@ def update_active_company(
     `trading_name: null` means "we do not have one", and that has to be
     distinguishable from not mentioning the field.
     """
+    before = audit.snapshot(membership.company, COMPANY_AUDITED)
     changes = body.model_dump(exclude_unset=True)
     if "require_2fa_roles" in changes and changes["require_2fa_roles"] is not None:
         # Stored as plain strings so the column stays readable JSON and does
@@ -204,6 +261,32 @@ def update_active_company(
         ]
     for field, value in changes.items():
         setattr(membership.company, field, value)
+
+    # Two actions out of one request, because they are two different things
+    # to go looking for: `company.security_changed` is "who may sign in and
+    # how", which is the first thing anybody asks after an incident, and
+    # `company.updated` is the address and the VAT ID. Recorded BEFORE the
+    # commit, in the same transaction, so a failed save leaves no event
+    # (services/audit.record).
+    actor = audit.actor_from(request, membership=membership)
+    after = audit.snapshot(membership.company, COMPANY_AUDITED)
+    security_touched = SECURITY_FIELDS & set(changes)
+    if security_touched:
+        audit.record(
+            db,
+            actor,
+            membership.company,
+            "company.security_changed",
+            before,
+            after,
+            fields=sorted(security_touched),
+        )
+    other = [name for name in COMPANY_AUDITED if name not in SECURITY_FIELDS]
+    if audit.diff(before, after, fields=other):
+        audit.record(
+            db, actor, membership.company, "company.updated", before, after,
+            fields=other,
+        )
 
     db.commit()
     db.refresh(membership.company)
@@ -254,6 +337,7 @@ def list_members(
 )
 def add_member(
     body: MemberCreate,
+    request: Request,
     db: Session = Depends(get_db),
     membership: Membership = Depends(require("company.members.manage")),
 ):
@@ -303,6 +387,15 @@ def add_member(
         role=body.role,
         granted_by=membership.user,
         expires_at=body.expires_at,
+    )
+    audit.record(
+        db,
+        audit.actor_from(request, membership=membership),
+        record,
+        "membership.granted",
+        None,
+        audit.snapshot(record, MEMBERSHIP_AUDITED),
+        fields=MEMBERSHIP_AUDITED,
     )
     db.commit()
     db.refresh(record)
@@ -364,6 +457,7 @@ def _refuse_last_owner(
 def update_member(
     membership_id: uuid.UUID,
     body: MemberUpdate,
+    request: Request,
     db: Session = Depends(get_db),
     membership: Membership = Depends(require("company.members.manage")),
 ):
@@ -386,6 +480,7 @@ def update_member(
         _refuse_last_owner(db, membership, record)
 
     set_expiry = "expires_at" in body.model_fields_set
+    before = audit.snapshot(record, MEMBERSHIP_AUDITED)
 
     company_service.update_membership_and_bump(
         db,
@@ -394,6 +489,15 @@ def update_member(
         role=body.role,
         expires_at=body.expires_at,
         set_expiry=set_expiry,
+    )
+    audit.record(
+        db,
+        audit.actor_from(request, membership=membership),
+        record,
+        "membership.updated",
+        before,
+        audit.snapshot(record, MEMBERSHIP_AUDITED),
+        fields=MEMBERSHIP_AUDITED,
     )
     db.commit()
     db.refresh(record)
@@ -404,6 +508,7 @@ def update_member(
 @router.delete("/company/members/{membership_id}", response_model=MemberResponse)
 def revoke_member(
     membership_id: uuid.UUID,
+    request: Request,
     db: Session = Depends(get_db),
     membership: Membership = Depends(require("company.members.manage")),
 ):
@@ -422,7 +527,17 @@ def revoke_member(
     _refuse_last_owner(db, membership, record)
     user = _target_user(db, record)
 
+    before = audit.snapshot(record, MEMBERSHIP_AUDITED)
     company_service.revoke_membership_and_bump(db, record=record, user=user)
+    audit.record(
+        db,
+        audit.actor_from(request, membership=membership),
+        record,
+        "membership.revoked",
+        before,
+        audit.snapshot(record, MEMBERSHIP_AUDITED),
+        fields=MEMBERSHIP_AUDITED,
+    )
     db.commit()
     db.refresh(record)
     db.refresh(user)
@@ -558,6 +673,7 @@ def list_bank_accounts(
 )
 def create_bank_account(
     body: BankAccountCreate,
+    request: Request,
     db: Session = Depends(get_db),
     membership: Membership = Depends(require("company.settings.edit")),
 ):
@@ -599,6 +715,15 @@ def create_bank_account(
             account=account,
             is_default=body.is_default or existing is None,
         )
+        audit.record(
+            db,
+            audit.actor_from(request, membership=membership),
+            account,
+            "bank_account.created",
+            None,
+            audit.snapshot(account, BANK_ACCOUNT_AUDITED),
+            fields=BANK_ACCOUNT_AUDITED,
+        )
         db.commit()
 
     db.refresh(account)
@@ -611,6 +736,7 @@ def create_bank_account(
 def update_bank_account(
     bank_account_id: uuid.UUID,
     body: BankAccountUpdate,
+    request: Request,
     db: Session = Depends(get_db),
     membership: Membership = Depends(require("company.settings.edit")),
 ):
@@ -640,6 +766,8 @@ def update_bank_account(
             ),
         )
 
+    before = audit.snapshot(account, BANK_ACCOUNT_AUDITED)
+
     with _duplicate_iban_as_409(db):
         for field, value in changes.items():
             setattr(account, field, value)
@@ -652,6 +780,22 @@ def update_bank_account(
                 is_default=True,
             )
 
+        # `bank_account.default_changed` is its own action: which account a
+        # document is paid into is the single most abusable setting in the
+        # system, and "when did the default change, and to what" should be
+        # one filter away rather than buried among label edits.
+        action = (
+            "bank_account.default_changed" if promote else "bank_account.updated"
+        )
+        audit.record(
+            db,
+            audit.actor_from(request, membership=membership),
+            account,
+            action,
+            before,
+            audit.snapshot(account, BANK_ACCOUNT_AUDITED),
+            fields=BANK_ACCOUNT_AUDITED,
+        )
         db.commit()
 
     db.refresh(account)
@@ -663,6 +807,7 @@ def update_bank_account(
 )
 def delete_bank_account(
     bank_account_id: uuid.UUID,
+    request: Request,
     db: Session = Depends(get_db),
     membership: Membership = Depends(require("company.settings.edit")),
 ):
@@ -688,6 +833,22 @@ def delete_bank_account(
             ),
         )
 
+    # Recorded BEFORE the delete, with the account's id and company carried
+    # explicitly: once the row is gone there is nothing to read them off, and
+    # an audit event for a deletion that cannot say what was deleted is not
+    # an audit event.
+    audit.record(
+        db,
+        audit.actor_from(request, membership=membership),
+        None,
+        "bank_account.deleted",
+        audit.snapshot(account, BANK_ACCOUNT_AUDITED),
+        None,
+        fields=BANK_ACCOUNT_AUDITED,
+        entity_type=CompanyBankAccount.__tablename__,
+        entity_id=account.id,
+        company_id=membership.company_id,
+    )
     db.delete(account)
     db.commit()
     return None

@@ -21,7 +21,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -36,10 +36,27 @@ from ..schemas.number_series import (
     NumberSeriesResponse,
     NumberSeriesUpdate,
 )
+from ..services import audit
 from ..services import number_series as engine
 from ..services.permissions import scoped
 
 router = APIRouter(tags=["number-series"])
+
+
+#: What an audit row records about a series. `reset` is in it because the
+#: mode switch is the change that most needs explaining afterwards — and the
+#: before/after pair is what says which direction it went, which decides
+#: whether the counter carried on or restarted.
+SERIES_AUDITED = (
+    "document_type",
+    "name",
+    "pattern",
+    "reset",
+    "next_value",
+    "current_period",
+    "padding",
+    "is_active",
+)
 
 
 @dataclass
@@ -280,6 +297,7 @@ def list_number_series(
 )
 def create_number_series(
     body: NumberSeriesCreate,
+    request: Request,
     db: Session = Depends(get_db),
     membership: Membership = Depends(require("number_series.manage")),
 ):
@@ -305,6 +323,16 @@ def create_number_series(
     )
     db.add(series)
     try:
+        db.flush()
+        audit.record(
+            db,
+            audit.actor_from(request, membership=membership),
+            series,
+            "number_series.created",
+            None,
+            audit.snapshot(series, SERIES_AUDITED),
+            fields=SERIES_AUDITED,
+        )
         db.commit()
     except IntegrityError:
         db.rollback()
@@ -328,6 +356,7 @@ def create_number_series(
 def update_number_series(
     series_id: uuid.UUID,
     body: NumberSeriesUpdate,
+    request: Request,
     db: Session = Depends(get_db),
     membership: Membership = Depends(require("number_series.manage")),
 ):
@@ -365,8 +394,28 @@ def update_number_series(
         next_value=next_value,
     )
 
+    before = audit.snapshot(series, SERIES_AUDITED)
     for field, value in changes.items():
         setattr(series, field, value)
+
+    # The mode switch gets its own action. It is the change somebody will go
+    # looking for when a year's numbering turns out not to be what they
+    # expected, and `number_series.mode_switched` with `reset: [yearly,
+    # never]` in `changes` is one filter away rather than buried among
+    # renames.
+    after = audit.snapshot(series, SERIES_AUDITED)
+    actor = audit.actor_from(request, membership=membership)
+    if before.get("reset") != after.get("reset"):
+        audit.record(
+            db, actor, series, "number_series.mode_switched", before, after,
+            fields=("reset", "next_value", "current_period"),
+        )
+    rest = [name for name in SERIES_AUDITED if name != "reset"]
+    if audit.diff(before, after, fields=rest):
+        audit.record(
+            db, actor, series, "number_series.updated", before, after,
+            fields=rest,
+        )
 
     try:
         db.commit()

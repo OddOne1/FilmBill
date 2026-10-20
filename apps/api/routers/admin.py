@@ -1,6 +1,6 @@
 """Admin endpoints for user and site management."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 import uuid
 from datetime import datetime, timezone
@@ -12,6 +12,7 @@ from ..models.activity import ActivityLog
 from ..schemas.auth import (
     UserResponse, UpdateUserRoleRequest, AdminUserResponse,
 )
+from ..services import audit
 from ..services.auth_service import bump_token_version
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -96,6 +97,7 @@ def reactivate_user(
 @router.patch("/users/{user_id}/disable-2fa", response_model=UserResponse)
 def admin_disable_two_factor(
     user_id: uuid.UUID,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -133,6 +135,8 @@ def admin_disable_two_factor(
         raise HTTPException(status_code=404, detail="User not found")
 
     had_2fa = bool(user.two_factor_enabled)
+    audited = ("two_factor_enabled", "two_factor_method", "token_version")
+    before = audit.snapshot(user, audited)
     # The same three fields the self-service path clears — a secret or a
     # stale code set left behind would outlive the enrolment it belonged to.
     user.two_factor_enabled = False
@@ -145,6 +149,28 @@ def admin_disable_two_factor(
     # account. Leaving those running would make the reset a formality. The
     # admin's own token_version is untouched, so their session is unaffected.
     bump_token_version(user)
+
+    # In `audit_events` as well as `ActivityLog`. The two are not duplicates:
+    # ActivityLog is the installation's activity feed, which is shown and is
+    # ordinary; `audit_events` is append-only at the database level and is
+    # where "who removed whose second factor, and when" has to survive. An
+    # unlogged way to remove someone else's second factor is indistinguishable
+    # after the fact from an attacker having done it — and a log that can be
+    # edited is only slightly better.
+    #
+    # Install-level: `company_id` NULL. An account's second factor belongs to
+    # the person and the installation, not to any one company.
+    audit.record(
+        db,
+        audit.actor_from(request, user=current_user),
+        user,
+        "two_factor.reset_by_admin",
+        before,
+        audit.snapshot(user, audited),
+        reason=f"Reset by {current_user.email}",
+        fields=audited,
+        company_id=None,
+    )
 
     db.add(
         ActivityLog(

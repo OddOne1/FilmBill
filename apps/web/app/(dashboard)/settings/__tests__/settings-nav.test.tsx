@@ -138,6 +138,26 @@ describe('the company group follows company permissions', () => {
     expect(order()).not.toContain('Number series')
   })
 
+  it('shows the Audit log only with audit.view', () => {
+    // The tax advisor's one extra entry here (Mathias, 2026-10-20). Gated on
+    // `audit.view` and not on `company.settings.edit`, which the advisor does
+    // not hold — an entry gated on the wrong key is a 404 with a menu item.
+    seedCompany(['company.view', 'company.settings.edit'])
+    renderNav()
+    expect(order()).not.toContain('Audit log')
+  })
+
+  it('shows the Audit log for a tax advisor, who holds nothing else here', () => {
+    seedCompany(['company.view', 'audit.view', 'archive.view'])
+    renderNav()
+
+    const entries = order()
+    expect(entries).toContain('Audit log')
+    expect(entries).not.toContain('Bank accounts')
+    expect(entries).not.toContain('Members')
+    expect(entries).not.toContain('Number series')
+  })
+
   it('shows it when the permission is held, between Accounting and Security', () => {
     seedCompany([
       'company.view',

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 from typing import Optional
 import uuid
@@ -43,7 +43,7 @@ from ..services.redis_service import (
     verify_backup_email_code, clear_backup_email_code,
     BACKUP_EMAIL_CODE_EXPIRY_SECONDS,
 )
-from ..services import totp_service
+from ..services import audit, totp_service
 from ..services.password_policy import (
     PasswordPolicyError, describe_policy, validate_password,
     validate_password_for_user,
@@ -1015,9 +1015,35 @@ def setup_two_factor(
     )
 
 
+#: What a 2FA audit row records. The secret and the backup codes are NOT in
+#: it — they are in `services/audit.SECRET_FIELDS`, so even naming them here
+#: would store `[redacted]` — and the three fields that are tell the whole
+#: story: whether it is on, by what method, and that the sessions were ended.
+TWO_FACTOR_AUDITED = ("two_factor_enabled", "two_factor_method", "token_version")
+
+#: These events are INSTALL-level: `company_id` is NULL, because an account's
+#: second factor belongs to the person and the installation, not to any one
+#: company. They are therefore not shown on a company's audit screen — see
+#: `routers/audit.py`. A company that requires 2FA for a role sees the state
+#: it cares about on the Members screen (`two_factor_enabled` per member),
+#: which is the question it is entitled to ask.
+def _record_two_factor(db, request, actor_user, subject, action, before, after):
+    audit.record(
+        db,
+        audit.actor_from(request, user=actor_user),
+        subject,
+        action,
+        before,
+        after,
+        fields=TWO_FACTOR_AUDITED,
+        company_id=None,
+    )
+
+
 @router.post("/2fa/confirm-setup", response_model=TwoFactorConfirmResponse)
 def confirm_two_factor_setup(
     body: TwoFactorConfirmRequest,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_optional_user),
 ):
@@ -1089,6 +1115,7 @@ def confirm_two_factor_setup(
         # still the one the account answers to.
         user.totp_secret_encrypted = staged["secret"]
 
+    before = audit.snapshot(user, TWO_FACTOR_AUDITED)
     codes = totp_service.generate_backup_codes()
     user.backup_codes_hashed = totp_service.hash_backup_codes(codes)
     user.two_factor_enabled = True
@@ -1098,6 +1125,15 @@ def confirm_two_factor_setup(
     # what a second factor means for this account from here on, so sessions
     # opened under the old arrangement should not survive it.
     bump_token_version(user)
+    _record_two_factor(
+        db,
+        request,
+        user,
+        user,
+        "two_factor.enabled",
+        before,
+        audit.snapshot(user, TWO_FACTOR_AUDITED),
+    )
     db.commit()
     # After the commit, not before: a staged setup dropped ahead of a write
     # that then failed would leave the user with nothing to confirm and no
@@ -1248,6 +1284,7 @@ def send_two_factor_reauth_code(
 @router.post("/2fa/disable", response_model=TwoFactorDisableResponse)
 def disable_two_factor(
     body: TwoFactorReauthRequest,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -1299,6 +1336,8 @@ def disable_two_factor(
     if not _second_factor_matches(db, current_user, body.code):
         raise HTTPException(status_code=401, detail="Invalid code")
 
+    before = audit.snapshot(current_user, TWO_FACTOR_AUDITED)
+
     # All three, not just the flag. A secret left behind would be re-enabled
     # by a later `two_factor_enabled = True` with the OLD authenticator still
     # paired — and stale backup codes would outlive the enrolment they were
@@ -1313,6 +1352,15 @@ def disable_two_factor(
     # removing the protection is exactly the moment other sessions
     # should stop being trusted, not a moment to leave them running.
     bump_token_version(current_user)
+    _record_two_factor(
+        db,
+        request,
+        current_user,
+        current_user,
+        "two_factor.disabled",
+        before,
+        audit.snapshot(current_user, TWO_FACTOR_AUDITED),
+    )
     db.commit()
     # both addresses. Turning 2FA off is the change an attacker who
     # has taken the login mailbox most wants to make quietly, and a notice

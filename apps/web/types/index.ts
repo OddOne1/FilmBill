@@ -142,6 +142,11 @@ export type NumberWarning = Schemas['NumberWarningResponse']
 /** How a series treats the turn of the year. `yearly` | `never`. */
 export type ResetMode = NumberSeries['reset']
 
+// ─── Audit log ──────────────────────────────────────────────────────────────
+
+export type AuditEvent = Schemas['AuditEventResponse']
+export type AuditEventPage = Schemas['AuditEventPage']
+
 /** The warning code a back-dated document carries.
  *
  *  Compared as a token, never as prose: the server's sentence is what gets

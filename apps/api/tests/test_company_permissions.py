@@ -122,12 +122,23 @@ def test_a_tax_advisor_still_sees_the_company_in_their_switcher(pg_client, pg_db
     assert body[0]["role"] == "tax_advisor"
 
 
-def test_a_tax_advisors_permissions_are_the_archive_and_the_company_itself(pg_client, pg_db):
+def test_a_tax_advisors_permissions_are_the_archive_the_audit_log_and_the_company(
+    pg_client, pg_db
+):
     """The list the web app gates its navigation on, asserted as served.
 
     Read off the API rather than off `permissions_for`, because the question
     is what a client is told — a correct table reached through a wrong
     serialisation is still a menu with the wrong entries in it.
+
+    `audit.view` joined this list on 2026-10-20 (Mathias's decision): an
+    external advisor reconstructing what happened to a document is exactly
+    what the audit log is for. It is READ-only and there is no write
+    permission for it to escalate into — the table refuses UPDATE and DELETE
+    at the database level. It is also why
+    `services/audit.py` masks IBANs: reading a bank account needs
+    `company.settings.edit`, which the advisor does not have, and the audit
+    log must not be a way round that.
     """
     make_superadmin(pg_db)
     company = make_company(pg_db, "Klientin OG")
@@ -139,6 +150,7 @@ def test_a_tax_advisors_permissions_are_the_archive_and_the_company_itself(pg_cl
     assert body[0]["permissions"] == [
         "archive.download",
         "archive.view",
+        "audit.view",
         "company.view",
     ]
 
@@ -157,6 +169,7 @@ def test_the_optional_grant_needs_the_company_to_say_yes(pg_db):
     assert granted == {
         "archive.download",
         "archive.view",
+        "audit.view",
         "company.view",
         "exports.download",
         "reports.view",

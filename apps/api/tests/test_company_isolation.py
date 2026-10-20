@@ -114,6 +114,13 @@ CASES: dict[str, object] = {
     "POST /company/number-series/preview": {
         "body": {"pattern": "AR-{YYYY}-{SEQ}", "reset": "yearly", "padding": 4}
     },
+    # P0b-3 part 5. Read-only, and the only endpoint on `audit_events` — the
+    # table has no write endpoint and cannot have one. `audit_events` is also
+    # the one business table without the `CompanyScoped` mixin, because
+    # `company_id` is nullable for install-level events, so the scoping is a
+    # named function (`services/audit.company_events`) rather than
+    # `scoped()`. That makes this case load-bearing rather than routine.
+    "GET /company/audit-events": {"body": None},
 }
 
 #: Placeholder -> the key in the `two_companies` fixture holding a row that

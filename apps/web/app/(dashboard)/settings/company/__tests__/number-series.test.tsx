@@ -1,10 +1,25 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 
+// The mocked `ApiError` carries `status` and `detail`, like the real one.
+// The usual one-line `class extends Error {}` does not, and the screen shows
+// `err.detail` — so a refusal built from that stub arrives with `detail`
+// undefined and the page renders its generic fallback instead of the
+// server's sentence. The two tests below assert the server's sentence, which
+// is the whole point of showing it verbatim.
 vi.mock('@/lib/api', () => ({
   api: { get: vi.fn(), patch: vi.fn(), post: vi.fn(), delete: vi.fn() },
   setActiveCompanyId: vi.fn(),
-  ApiError: class extends Error {},
+  ApiError: class ApiError extends Error {
+    status: number
+    detail: string
+    constructor(status: number, detail: string) {
+      super(detail)
+      this.name = 'ApiError'
+      this.status = status
+      this.detail = detail
+    }
+  },
 }))
 
 import { api } from '@/lib/api'
@@ -209,10 +224,12 @@ describe('the preview comes from the API', () => {
   it('shows the validation message instead of a number when the pattern cannot work', async () => {
     mockApi([makeSeries()])
     const { ApiError } = await import('@/lib/api')
-    const refusal = new ApiError('x') as Error & { detail: string }
-    refusal.detail =
-      'A series that restarts every year needs {YYYY} or {YY} in its pattern.'
-    vi.mocked(api.post).mockRejectedValue(refusal)
+    vi.mocked(api.post).mockRejectedValue(
+      new ApiError(
+        422,
+        'A series that restarts every year needs {YYYY} or {YY} in its pattern.',
+      ),
+    )
 
     render(<NumberSeriesPage />)
     fireEvent.click(await screen.findByText('Ausgangsrechnungen'))
@@ -312,10 +329,12 @@ describe('the save control is never dead and silent', () => {
   it('shows the server’s refusal verbatim when a save is rejected', async () => {
     mockApi([makeSeries({ allocated_count: 5, latest_number: 'AR-2026-0005' })])
     const { ApiError } = await import('@/lib/api')
-    const refusal = new ApiError('x') as Error & { detail: string }
-    refusal.detail =
-      'This series has already issued AR-2026-0003. Setting the next number to 3 would issue it again.'
-    vi.mocked(api.patch).mockRejectedValue(refusal)
+    vi.mocked(api.patch).mockRejectedValue(
+      new ApiError(
+        409,
+        'This series has already issued AR-2026-0003. Setting the next number to 3 would issue it again.',
+      ),
+    )
 
     render(<NumberSeriesPage />)
     fireEvent.click(await screen.findByText('Ausgangsrechnungen'))

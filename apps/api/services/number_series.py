@@ -391,6 +391,7 @@ def allocate_number(
     document_date: date,
     entity_type: Optional[str] = None,
     entity_id: Optional[uuid.UUID] = None,
+    actor=None,
 ) -> NumberPlan:
     """Take the next number for this document type. In the CALLER's transaction.
 
@@ -402,6 +403,13 @@ def allocate_number(
     Raises `NumberSeriesMissing` when nothing is configured — a 409-shaped
     condition, not a 500, and a company always has the eight seeded series
     unless someone deactivated one.
+
+    `actor` is who is doing it, for the audit event a back-dated allocation
+    writes. Optional, and the event is written either way: an out-of-order
+    document numbered by a Celery task or a CLI still has to leave a trace,
+    and `Actor.system()` is what that looks like. The event goes in the
+    CALLER's transaction, like the allocation — a number that was never
+    committed must not leave an audit row saying it was issued.
     """
     series = active_series(
         db, company_id=company_id, document_type=document_type, lock=True
@@ -448,23 +456,47 @@ def allocate_number(
     # caller's transaction. Two tests in test_number_series.py caught it.
     nested = db.begin_nested()
     try:
-        db.add(
-            NumberAllocation(
-                company_id=company_id,
-                series_id=series.id,
-                period=plan.period,
-                value=plan.value,
-                number=plan.number,
-                document_date=document_date,
-                entity_type=entity_type,
-                entity_id=entity_id,
-            )
+        allocation = NumberAllocation(
+            company_id=company_id,
+            series_id=series.id,
+            period=plan.period,
+            value=plan.value,
+            number=plan.number,
+            document_date=document_date,
+            entity_type=entity_type,
+            entity_id=entity_id,
         )
+        db.add(allocation)
         db.flush()
         nested.commit()
     except IntegrityError:
         nested.rollback()
         raise NumberCollision(plan.number) from None
+
+    # An out-of-order date is allowed (Mathias, 2026-10-20) and it is never
+    # SILENT. The warning tells the caller; this tells whoever reads the log
+    # next year and finds a January invoice numbered after a February one.
+    #
+    # Imported here rather than at module scope: `services/audit` is a leaf,
+    # but this module is imported by `company_service` during company
+    # creation and a top-level import would widen that chain for no reason.
+    if any(warning.code == OUT_OF_ORDER for warning in plan.warnings):
+        from . import audit as audit_service
+
+        warning = next(w for w in plan.warnings if w.code == OUT_OF_ORDER)
+        audit_service.record(
+            db,
+            actor or audit_service.Actor.system(company_id=company_id),
+            allocation,
+            "number.out_of_order",
+            {
+                "document_date": warning.latest_document_date,
+                "number": warning.latest_number,
+            },
+            {"document_date": document_date, "number": plan.number},
+            reason=warning.message,
+            fields=("document_date", "number"),
+        )
 
     return plan
 

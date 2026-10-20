@@ -15,6 +15,7 @@ import {
   Landmark,
   Calculator,
   Hash,
+  ScrollText,
   ShieldCheck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -115,6 +116,15 @@ const settingsNavGroups: SettingsNavItem[][] = [
       label: 'Members',
       icon: Users,
       permission: 'company.members.manage',
+    },
+    {
+      href: '/settings/company/audit-log',
+      label: 'Audit log',
+      icon: ScrollText,
+      // Owner, Admin and the tax advisor (Mathias, 2026-10-20). The advisor
+      // holds `audit.view` and `company.view` and nothing else here, so this
+      // is the only company entry they see besides the archive.
+      permission: 'audit.view',
     },
   ],
   [

@@ -92,9 +92,24 @@ PERMISSIONS: dict[str, set[CompanyRole]] = {
     #: a number series is the thing CLAUDE.md rule 5 makes gap-free, and
     #: re-pointing one is not an accounting task, it is a structural one.
     "number_series.manage": _OWNER_ADMIN,
-    #: P0b-2. The audit trail. Accountant included — reconstructing what
-    #: happened to a document is exactly their job.
-    "audit.view": _BOOKS,
+    #: The audit trail. **Owner, Admin and the tax advisor, read-only**
+    #: (Mathias, 2026-10-20). There is no write permission for it and there
+    #: cannot be: the table refuses UPDATE and DELETE at the database level
+    #: (see models/audit.py), and no endpoint writes an audit row directly —
+    #: rows appear only as a side effect of the change they describe.
+    #:
+    #: The seeded placeholder was `_BOOKS`, which included the accountant.
+    #: The decision narrows that and widens it in the other direction: the
+    #: TAX ADVISOR gets it, because reconstructing what happened to a
+    #: document is exactly what an external advisor is handed the archive to
+    #: do, and the accountant does not. If that reads oddly later, it is a
+    #: decision and not an oversight — see docs/SCOPE.md §16 (D43).
+    #:
+    #: The advisor reading this log is also why IBANs are MASKED in
+    #: `changes` (services/audit.py): bank accounts need
+    #: `company.settings.edit` to read, and `audit.view` must not be a way
+    #: round that gate.
+    "audit.view": _OWNER_ADMIN | {CompanyRole.tax_advisor},
     #: P5. The archive of finalized documents. The tax advisor's entire
     #: reason for existing in this system.
     "archive.view": _BOOKS | {CompanyRole.tax_advisor},

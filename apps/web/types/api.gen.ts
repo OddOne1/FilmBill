@@ -843,6 +843,26 @@ export interface paths {
         patch: operations["update_active_company_company_patch"];
         trace?: never;
     };
+    "/company/audit-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Audit Events
+         * @description This company's audit log, newest first, filterable and paged.
+         */
+        get: operations["list_audit_events_company_audit_events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/company/bank-accounts": {
         parameters: {
             query?: never;
@@ -1653,6 +1673,81 @@ export interface components {
              * @default false
              */
             two_factor_required: boolean;
+        };
+        /**
+         * AuditEventPage
+         * @description One page of events, newest first.
+         *
+         *     `total` as well as the rows, because "page 3 of 40" is the only paging
+         *     control that tells somebody whether the thing they are looking for is
+         *     plausibly in here at all. It costs one COUNT.
+         */
+        AuditEventPage: {
+            /**
+             * Actions
+             * @default []
+             */
+            actions: string[];
+            /**
+             * Entity Types
+             * @default []
+             */
+            entity_types: string[];
+            /** Events */
+            events: components["schemas"]["AuditEventResponse"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
+        };
+        /**
+         * AuditEventResponse
+         * @description One row, as the Audit log screen shows it.
+         *
+         *     The actor's name and email are joined in rather than left to the client
+         *     to resolve: the screen needs them on every row, and a request per row is
+         *     how a page of fifty becomes fifty requests. They are the user's CURRENT
+         *     name — the row records who, not what they were called — and the user may
+         *     since have been deleted, in which case `user_id` survives (the FK is
+         *     `SET NULL`… on the user's side it is not, see models/audit.py) and the
+         *     name is None.
+         */
+        AuditEventResponse: {
+            /** Action */
+            action: string;
+            /**
+             * Changes
+             * @default {}
+             */
+            changes: {
+                [key: string]: unknown;
+            };
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Entity Id */
+            entity_id?: string | null;
+            /** Entity Type */
+            entity_type: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Ip */
+            ip?: string | null;
+            /** Reason */
+            reason?: string | null;
+            /** User Email */
+            user_email?: string | null;
+            /** User Id */
+            user_id?: string | null;
+            /** User Name */
+            user_name?: string | null;
         };
         /**
          * BackupEmailRequest
@@ -3898,6 +3993,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CompanyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_audit_events_company_audit_events_get: {
+        parameters: {
+            query?: {
+                entity_type?: string | null;
+                entity_id?: string | null;
+                action?: string | null;
+                user_id?: string | null;
+                from?: string | null;
+                to?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditEventPage"];
                 };
             };
             /** @description Validation Error */

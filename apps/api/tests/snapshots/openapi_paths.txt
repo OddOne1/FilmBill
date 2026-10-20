@@ -10,6 +10,7 @@ GET /auth/me
 GET /auth/password-policy
 GET /companies
 GET /company
+GET /company/audit-events
 GET /company/bank-accounts
 GET /company/members
 GET /company/number-series

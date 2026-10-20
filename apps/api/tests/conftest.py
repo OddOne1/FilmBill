@@ -473,6 +473,7 @@ def pg_db(pg_engine):
     switch the guard off for every test that follows, including the ones that
     are meant to meet it.
     """
+    from sqlalchemy import text
     from sqlalchemy.orm import sessionmaker
 
     import apps.api.database as database
@@ -492,9 +493,27 @@ def pg_db(pg_engine):
     finally:
         session.close()
         # Truncate in reverse dependency order so foreign keys never block it.
+        #
+        # `audit_events` refuses DELETE: migration 0009 puts a trigger on it,
+        # and the model attaches the same DDL to `after_create` so this
+        # scratch schema has it too. Clearing the table between tests
+        # therefore has to switch the triggers off — which is EXACTLY the hole
+        # `models/audit.py` names: the table's owner can disable its own
+        # triggers, so the claim is tamper-evidence against the application,
+        # not tamper-proofing. Doing it here, in the open, is honest about
+        # that; `test_audit_events.py` asserts the triggers are on and that
+        # they fire, through the same role the application uses.
         with pg_engine.begin() as conn:
-            for table in reversed(Base.metadata.sorted_tables):
-                conn.execute(table.delete())
+            conn.execute(
+                text("ALTER TABLE audit_events DISABLE TRIGGER USER")
+            )
+            try:
+                for table in reversed(Base.metadata.sorted_tables):
+                    conn.execute(table.delete())
+            finally:
+                conn.execute(
+                    text("ALTER TABLE audit_events ENABLE TRIGGER USER")
+                )
         database.engine, database.SessionLocal, setup_guard._setup_complete = previous
 
 

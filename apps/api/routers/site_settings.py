@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
@@ -13,7 +13,7 @@ from ..schemas.site_settings import (
     SiteSettingsResponse,
     SiteSettingsUpdate,
 )
-from ..services import s3_service
+from ..services import audit, s3_service
 from ..services.schedule_window import is_valid_timezone
 from .files import proxy_url_for
 
@@ -159,9 +159,30 @@ def get_site_logo_image(db: Session = Depends(get_db)):
     )
 
 
+#: The install-level settings an audit row records.
+#:
+#: `require_2fa` is the one that matters here — it is the instance-wide
+#: second-factor switch, and "who turned that off and when" is the first
+#: question after an incident. The brand-image S3 keys are in because a
+#: changed logo changes every document; `theme_colors` is in because it is
+#: the other thing a stranger with an admin session would alter to make a
+#: phishing page convincing.
+SITE_SETTINGS_AUDITED = (
+    "org_name",
+    "require_2fa",
+    "timezone",
+    "theme_colors",
+    "logo_dark_s3_key",
+    "logo_light_s3_key",
+    "logo_login_s3_key",
+    "favicon_s3_key",
+)
+
+
 @router.patch("/site-settings", response_model=SiteSettingsResponse)
 def update_site_settings(
     body: SiteSettingsUpdate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -172,6 +193,7 @@ def update_site_settings(
         )
 
     site_settings = _get_or_create_settings(db)
+    before = audit.snapshot(site_settings, SITE_SETTINGS_AUDITED)
     update_data = body.model_dump(exclude_unset=True)
 
     # rejected rather than coerced. An unknown zone would make every
@@ -194,6 +216,24 @@ def update_site_settings(
             if getattr(site_settings, field) is not None:
                 continue
         setattr(site_settings, field, value)
+
+    # Install-level: `company_id` NULL, so this does NOT appear on any
+    # company's audit screen. A company owner has no business reading what
+    # the installation administrator does — and on a single-company install
+    # the same person sees it through the admin screens instead.
+    after = audit.snapshot(site_settings, SITE_SETTINGS_AUDITED)
+    if audit.diff(before, after, fields=SITE_SETTINGS_AUDITED):
+        audit.record(
+            db,
+            audit.actor_from(request, user=current_user),
+            site_settings,
+            "site_settings.updated",
+            before,
+            after,
+            fields=SITE_SETTINGS_AUDITED,
+            company_id=None,
+        )
+
     db.commit()
     db.refresh(site_settings)
     return _to_response(site_settings)
