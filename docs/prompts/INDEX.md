@@ -18,6 +18,7 @@ from them. `docs/SCOPE.md` is where the product is decided.
 | server-test | A LAN-only test instance on the TrueNAS server | [`17-server-test-instance.md`](17-server-test-instance.md) | `eb9f4dd` | done — see notes |
 | minio-fork | Replace the withdrawn MinIO images; weekly image-reference guard | [`18-minio-fork-and-image-guard.md`](18-minio-fork-and-image-guard.md) | `45dacb5` | done — see notes |
 | P0b-3 | Healthcheck, IBAN uniqueness, CI real-DB guard, number series, audit events, backup modes, rule consolidation | [`19-filmbill-P0b-3.md`](19-filmbill-P0b-3.md) | `b8e10b3`…`0c186df` | done — see notes |
+| restore-sudo | The printed restore command could not read its own dump | [`20-backup-restore-needs-sudo-gunzip.md`](20-backup-restore-needs-sudo-gunzip.md) | `af9bbc7` | done — see notes |
 | P0b | Foundations: companies, roles, number series, audit, money, codegen | [`03-filmbill-P0b-foundations.md`](03-filmbill-P0b-foundations.md) | — | superseded — split into P0b-0, P0b-1, P0b-2 |
 
 ---
@@ -931,6 +932,9 @@ change leaves no event.
 **Part 6 — backup modes and the restore line (`76420d0`).** Dumps 600,
 directory 700, `sudo` on every printed compose line, and Step 9 of the deploy
 doc is now a drill that proves a restore with a row you can recognise.
+**Incomplete — see `restore-sudo` below:** tightening the dump to 0600
+root-owned broke the printed restore one stage earlier than this part looked,
+and the test for it asserted the printed text contained the word `sudo`.
 
 **Part 7 — documentation (`0c186df`, this commit).** CLAUDE.md 17b–17e
 consolidated into one rule; fifteen instances moved to
@@ -946,3 +950,63 @@ one endpoint's status code was not a call to make unasked. The security
 property is identical — no access, and the menu entry is gated on the same
 permission. Changing it is one dependency, in one file, if Mathias prefers
 403.
+
+---
+
+## restore-sudo — the printed restore command could not read its own dump
+
+One commit. Prompt: [`20-backup-restore-needs-sudo-gunzip.md`](20-backup-restore-needs-sudo-gunzip.md).
+
+**What was wrong.** P0b-3 Part 6 made the dump `0600` inside a `0700`
+root-owned directory — correct, it holds every bcrypt hash and every IBAN in
+the clear — and put `sudo` on every *compose* line it printed. The stage
+before those is `gunzip -c <file>`, which reads the file, and it had no
+`sudo`. Observed on the TrueNAS host on 2026-10-20:
+`gunzip -c <file> | head -3` → `Permission denied`;
+`sudo gunzip -c <file> | head -3` → SQL. So the restore command the script
+printed failed in its first stage for the very user it was printed for.
+
+The nastier half: a pipeline's exit status is its **last** command's, so
+`gunzip` refusing and `psql` succeeding on an empty stream is a restore that
+looks like it worked and delivered nothing.
+
+**Why the Part 6 test did not catch it (CLAUDE.md 17b).**
+`test_every_printed_compose_line_has_sudo` asserted the printed text contained
+`sudo`. It did. Nothing ever ran the printed pipeline, and certainly not under
+the condition that makes it fail — a dump the invoking user cannot read. A
+word existed; a command did not work. Instance 16 in
+`docs/engineering/test-harness-traps.md`.
+
+**The fix.** `scripts/server-test-backup.sh` prints `sudo gunzip -c <file>`.
+In `docs/deploy/server-test.md` Step 9, every command that reads, lists or
+globs inside `backups/` is root's: `sudo sh -c 'chmod 600 …/*.sql.gz'`,
+`sudo ls -l …`, and the drill's probe check became
+`sudo sh -c 'zcat "$(ls -1t …/*.sql.gz | head -1)"' | grep -c BACKUP-PROBE`.
+A bare `sudo chmod 600 …/backups/*.sql.gz` is the line Mathias actually ran
+and it fails with *"no matches found"*, having changed no file, because **his**
+shell expands the glob before `sudo` exists. Step 9's invocation line also
+gained `sudo` — the script needs the Docker socket and writes into a
+root-owned `DATA_DIR`, so it could only ever have worked as root, and the doc
+said otherwise.
+
+**The test executes the printed command.**
+`test_the_printed_restore_command_reads_the_dump_and_delivers_it` extracts the
+pipeline from the script's own stdout, runs it with `bash -c` against a stub
+`PATH` holding a fake `sudo` (sets a flag, execs its arguments) and a `gunzip`
+wrapper that refuses with `gzip: <file>: Permission denied` unless that flag
+is set, and compares what reached the stub `psql` with what the stub
+`pg_dump` wrote — byte for byte, not "something arrived".
+`test_without_sudo_the_gunzip_stage_is_refused` runs the same pipeline with
+the `sudo` stripped and asserts the refusal really happens, so the double
+cannot pass by being kinder than the server. It also pins the silent-success
+shape: `returncode == 0` with an empty stream.
+
+Four mutations, each a real FAIL line, each reverted: the printed `sudo`
+removed (→ `gzip: …: Permission denied`, the server's own message); the
+`gunzip` wrapper made permissive (→ the refusal test fails, as it must); the
+doc's `chmod` line un-`sudo`ed; and the doc's `chmod` line given `sudo` but a
+bare glob — the exact line that failed on the server.
+
+**No rebuild on the server.** The script and the doc are plain files read from
+the clone at `/mnt/HDDs/.../filmbill-v2-src`; nothing here is copied into an
+image. `git pull` is the whole deployment.
