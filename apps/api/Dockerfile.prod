@@ -22,8 +22,14 @@ RUN adduser --disabled-password --gecos "" appuser
 
 WORKDIR /workspace
 
+# 127.0.0.1, never `localhost`. Inside this image /etc/hosts maps
+# `localhost` to both 127.0.0.1 and ::1; the server binds IPv4 only, so a
+# `localhost` probe can resolve to the IPv6 address and never succeed. The
+# compose files override this HEALTHCHECK today, which is the only reason the
+# wrong form here has never broken anything — and exactly why it is a trap
+# for the next service that forgets to override it.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD curl -f http://127.0.0.1:8000/health || exit 1
 
 USER appuser
 

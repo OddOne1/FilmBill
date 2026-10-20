@@ -15,6 +15,13 @@
 # SSL: Set DOMAIN and ACME_EMAIL in .env.prod for automatic
 #      Let's Encrypt certificates. Without a domain, it runs
 #      on HTTP only (port 80).
+#
+# Healthchecks address 127.0.0.1, never `localhost`. Inside these images
+# /etc/hosts maps `localhost` to both 127.0.0.1 and ::1, BusyBox wget tries
+# the IPv6 address first, and the servers bind IPv4 only — so a `localhost`
+# probe never succeeds and the container sits `(unhealthy)` for ever while
+# working fine. That cost filmbill_web a FailingStreak of 213 before anyone
+# looked (docs/prompts/16-dev-mail-smtp-none.md).
 # ============================================================
 
 name: filmbill
@@ -88,7 +95,7 @@ services:
       - "--chromium-disable-javascript=false"
       - "--api-timeout=60s"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:3000/health"]
       interval: 30s
       timeout: 5s
       start_period: 15s
@@ -120,7 +127,7 @@ services:
       --timeout 120
       --graceful-timeout 30"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/health"]
       interval: 30s
       timeout: 5s
       start_period: 30s
@@ -156,7 +163,7 @@ services:
         condition: service_healthy
     command: sh -c "celery -A apps.api.tasks.celery_app worker -Q documents -c $${DOCUMENT_CONCURRENCY:-2} --loglevel=warning"
     # Override the image's HEALTHCHECK, which is the API's
-    # `curl localhost:8000/health`. A Celery worker serves no HTTP, so that
+    # `curl 127.0.0.1:8000/health`. A Celery worker serves no HTTP, so that
     # probe can never pass: in FreeFrame all four Celery services were
     # permanently `(unhealthy)` from the day they were added, which is why
     # nobody noticed one of them actually being gone.
@@ -248,7 +255,9 @@ services:
     depends_on:
       - api
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3000"]
+      # `/login`, not `/`: it answers 200 directly rather than depending on
+      # wget following the redirect `/` serves (see the file header).
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3000/login"]
       interval: 30s
       timeout: 5s
       start_period: 15s
