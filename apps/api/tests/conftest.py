@@ -336,6 +336,74 @@ def auth_headers(client, mock_db, test_user):
 #: cannot poison the next one.
 _SCRATCH_DB = "filmbill_pytest_scratch"
 
+#: The marker every test that needs a real database carries.
+#:
+#: Applied automatically in `pytest_collection_modifyitems` below, from the
+#: fixtures a test actually requests, rather than written on each test by
+#: hand. A marker somebody has to remember is a marker that is missing from
+#: the next test, and the thing it exists to count would then be undercounted
+#: in exactly the direction that hides a problem.
+REAL_DB_MARKER = "realdb"
+
+#: The fixtures that mean "this test talks to Postgres".
+_REAL_DB_FIXTURES = frozenset({"pg_engine", "pg_db", "pg_client"})
+
+
+def pytest_collection_modifyitems(items):
+    """Mark every test that requests a real-database fixture.
+
+    So that `pytest -m realdb` is an honest count of the checks that only a
+    real database can perform, which is what CI asserts did not silently
+    turn into skips.
+    """
+    for item in items:
+        if _REAL_DB_FIXTURES & set(getattr(item, "fixturenames", ())):
+            item.add_marker(REAL_DB_MARKER)
+
+
+def _no_postgres(reason: str) -> None:
+    """Skip locally, FAIL in CI. A skip in CI is not a green.
+
+    This is the guard CLAUDE.md's harness rule asks for, stated for the one
+    resource the suite cannot fake. Three separate times a FilmBill or
+    FreeFrame check reported green because it had not run:
+
+      * the rate limiter failing open where Redis was unreachable;
+      * `SetupGuardMiddleware`'s result depending on the ambient database,
+        where the all-green configuration was the one in which the middleware
+        never ran;
+      * `test_smtp_security_modes` passing because no environment it ran in
+        set the variable it was about.
+
+    Locally a skip is right: somebody running the web tests on a laptop with
+    no stack up should not be told their change is broken. In CI it is not:
+    CI is the one place that is configured on purpose, a missing service
+    there is a misconfiguration rather than a circumstance, and a company-
+    scoping test that skipped is a cross-company leak nobody checked for.
+
+    `CI` is the variable GitHub Actions sets on every runner, and every other
+    CI system sets as well.
+    """
+    if os.environ.get("CI"):
+        pytest.fail(
+            "This test needs a real PostgreSQL database and there is none. "
+            f"{reason}\n"
+            "In CI that is a misconfiguration, not a circumstance — a "
+            "company-scoping or uniqueness test that SKIPS is a check nobody "
+            "performed, so it fails here instead (CLAUDE.md, the harness "
+            "rule). Give the job a `postgres` service and point "
+            "DATABASE_URL at it; `.github/workflows/ci.yml` does, and is the "
+            "example to copy.",
+            pytrace=False,
+        )
+    pytest.skip(
+        "no PostgreSQL for the real-database suite, so these checks did NOT "
+        f"run: {reason}. Start the dev stack and run the suite against it "
+        "— `docker compose -f docker-compose.dev.yml up -d postgres redis` "
+        "— or let CI do it, where an absent database fails instead of "
+        "skipping."
+    )
+
 
 def _with_database(url: str, name: str) -> str:
     from urllib.parse import urlsplit, urlunsplit
@@ -361,7 +429,7 @@ def pg_engine():
             conn.execute(text(f'CREATE DATABASE "{_SCRATCH_DB}"'))
     except Exception as exc:  # pragma: no cover - environment-dependent
         admin.dispose()
-        pytest.skip(f"no Postgres available for the real-database suite: {exc}")
+        _no_postgres(f"{base_url.rsplit('@', 1)[-1]} did not answer: {exc}")
 
     from apps.api.database import Base
     import apps.api.models  # noqa: F401  — registers every table on Base

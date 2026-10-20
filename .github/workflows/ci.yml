@@ -87,8 +87,12 @@ jobs:
       - name: pip check
         run: pip check
 
+      # `-rs` so every skip and its reason is IN THE LOG. A skip nobody can
+      # see is the shape that has cost this project three green runs that had
+      # not run — see the real-database guard two steps down, and
+      # docs/engineering/test-harness-traps.md.
       - name: Run tests
-        run: python -m pytest apps/api/tests/ -q --tb=short | tee test-output.txt
+        run: python -m pytest apps/api/tests/ -q --tb=short -rs | tee test-output.txt
 
       # The suite is the guard against the API surface widening, media code
       # coming back, and Celery tasks landing on a queue nobody consumes.
@@ -99,8 +103,32 @@ jobs:
         run: |
           PASSED=$(grep -oE '[0-9]+ passed' test-output.txt | grep -oE '[0-9]+' | head -1)
           echo "Tests passed: ${PASSED:-0}"
-          if [ -z "$PASSED" ] || [ "$PASSED" -lt 250 ]; then
-            echo "::error::Expected at least 250 passing tests, got ${PASSED:-0}."
+          # Raised from 250 with P0b-3: the suite is at 814 and a floor of
+          # 250 would no longer notice two thirds of it disappearing.
+          if [ -z "$PASSED" ] || [ "$PASSED" -lt 750 ]; then
+            echo "::error::Expected at least 750 passing tests, got ${PASSED:-0}."
+            exit 1
+          fi
+
+      # The checks a MagicMock session cannot perform: a unique constraint,
+      # a real `WHERE company_id = ...`, a trigger, `SELECT … FOR UPDATE`.
+      # They SKIP where there is no database, which is right on a laptop and
+      # wrong here — so `tests/conftest._no_postgres` fails instead when `CI`
+      # is set, and this step asserts the result is a pass count rather than
+      # a skip count. Without it, deleting the `postgres` service below would
+      # turn 130 checks into 130 skips and the job would stay green.
+      - name: Real-database tests ran, not skipped
+        run: |
+          python -m pytest apps/api/tests/ -m realdb -q --tb=short -rs             | tee realdb-output.txt
+          PASSED=$(grep -oE '[0-9]+ passed' realdb-output.txt | grep -oE '[0-9]+' | head -1)
+          SKIPPED=$(grep -oE '[0-9]+ skipped' realdb-output.txt | grep -oE '[0-9]+' | head -1)
+          echo "Real-database tests passed: ${PASSED:-0}, skipped: ${SKIPPED:-0}"
+          if [ -z "$PASSED" ] || [ "$PASSED" -lt 120 ]; then
+            echo "::error::Expected at least 120 passing real-database tests, got ${PASSED:-0}. A real-database check that does not RUN is not a check."
+            exit 1
+          fi
+          if [ -n "$SKIPPED" ] && [ "$SKIPPED" -gt 0 ]; then
+            echo "::error::${SKIPPED} real-database test(s) SKIPPED in CI. A skip in CI is not a green."
             exit 1
           fi
 
