@@ -19,7 +19,7 @@ from them. `docs/SCOPE.md` is where the product is decided.
 | minio-fork | Replace the withdrawn MinIO images; weekly image-reference guard | [`18-minio-fork-and-image-guard.md`](18-minio-fork-and-image-guard.md) | `45dacb5` | done — see notes |
 | P0b-3 | Healthcheck, IBAN uniqueness, CI real-DB guard, number series, audit events, backup modes, rule consolidation | [`19-filmbill-P0b-3.md`](19-filmbill-P0b-3.md) | `b8e10b3`…`0c186df` | done — see notes |
 | restore-sudo | The printed restore command could not read its own dump | [`20-backup-restore-needs-sudo-gunzip.md`](20-backup-restore-needs-sudo-gunzip.md) | `af9bbc7` | done — see notes |
-| P1a | Tax: data model, region packs, the proposal engine, API, screens | [`21-filmbill-P1a-tax.md`](21-filmbill-P1a-tax.md) | `57d9b5a`…`PENDING` | done — see notes |
+| P1a | Tax: data model, region packs, the proposal engine, API, screens | [`21-filmbill-P1a-tax.md`](21-filmbill-P1a-tax.md) | `57d9b5a`…`154160c` | done — see notes |
 | P0b | Foundations: companies, roles, number series, audit, money, codegen | [`03-filmbill-P0b-foundations.md`](03-filmbill-P0b-foundations.md) | — | superseded — split into P0b-0, P0b-1, P0b-2 |
 
 ---
@@ -1073,7 +1073,7 @@ computes the rate locally fails. Nav entry gated on `company.view` so an
 accountant or advisor can read the table, with editing gated separately and a
 sentence instead of a dead button (17c).
 
-**Part 6 — documentation (`PENDING`, this commit).** SCOPE §16 gains D47–D50
+**Part 6 — documentation (`154160c`).** SCOPE §16 gains D47–D50
 and §17 gains question 9 for the Steuerberater, in German and English:
 the AT/DE rates, the legal-note wording, and the two [Guessing] decisions
 (override precedence, and unverified EU B2B VAT IDs).
