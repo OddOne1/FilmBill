@@ -46,11 +46,37 @@ STDLIB = {
     "zoneinfo",
 }
 
-# Local packages, reached without a relative import in scripts and tests.
-LOCAL = {
-    "apps", "packages", "alembic", "config", "conftest", "database", "main",
-    "middleware", "models", "routers", "schemas", "services", "tasks", "utils",
-}
+# Local packages, reached without a relative import in scripts, tests and
+# alembic (which runs with `apps/api` on sys.path, so every module there is
+# importable by its bare name).
+#
+# The ones under `apps/api` are DERIVED rather than listed. The hand-written
+# list was fine until `models/tax.py` added an alembic-path fallback
+# `from core.money import QtyColumn`, at which point this file reported
+# `core` as an undeclared PyPI package — a false positive that costs an edit
+# here every time the API grows a package. Deriving it means adding
+# `billing/` is adding a directory.
+LOCAL = {"apps", "packages", "conftest", "utils"}
+
+
+def _api_packages() -> set:
+    import pathlib
+
+    api = pathlib.Path(__file__).resolve().parents[1]
+    names = {
+        path.name
+        for path in api.iterdir()
+        if path.is_dir() and not path.name.startswith(("_", "."))
+    }
+    names |= {
+        path.stem
+        for path in api.glob("*.py")
+        if not path.stem.startswith("_")
+    }
+    return names
+
+
+LOCAL |= _api_packages()
 
 
 def _repo_scripts() -> set:

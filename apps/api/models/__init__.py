@@ -15,6 +15,7 @@ from .company import (
 )
 from .number_series import NumberAllocation, NumberSeries
 from .audit import AuditEvent
+from .tax import TaxClass, TaxCode, TaxRule
 
 __all__ = [
     "User",
@@ -31,4 +32,7 @@ __all__ = [
     "NumberSeries",
     "NumberAllocation",
     "AuditEvent",
+    "TaxCode",
+    "TaxClass",
+    "TaxRule",
 ]
