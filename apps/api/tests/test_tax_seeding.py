@@ -23,9 +23,25 @@ differently and each of the three exists in the world:
 
 import json
 import uuid
+from decimal import Decimal
 
 import pytest
 from sqlalchemy import create_engine, text
+
+from apps.api.models.company import CompanyRole
+from apps.api.models.number_series import NumberSeries
+from apps.api.models.site_settings import SiteSettings
+from apps.api.models.tax import TaxClass, TaxCode, TaxRule
+from apps.api.services import tax_service
+from apps.api.services.company_service import create_company
+
+from .company_factories import (
+    auth_headers,
+    grant,
+    make_company,
+    make_superadmin,
+    make_user,
+)
 
 
 # ─── Scratch databases and alembic ──────────────────────────────────────────
@@ -380,3 +396,319 @@ def test_the_tables_survive_a_downgrade_and_a_second_upgrade(at_revision_0009):
 
     result = _alembic(url, "upgrade", "head")
     assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
+
+
+# ─── The service, which is what runs twice ──────────────────────────────────
+#
+# The migration cannot be re-run (see above). The SERVICE can and does: once
+# at company creation, and again the moment a country is set on a company that
+# had none. So the no-overwrite promise is asserted here, on edited rows.
+
+def _codes_of(db, company) -> dict:
+    return {
+        row.code: row
+        for row in db.query(TaxCode).filter(TaxCode.company_id == company.id).all()
+    }
+
+
+def _class_codes_of(db, company) -> dict:
+    rows = (
+        db.query(TaxClass, TaxCode)
+        .join(TaxCode, TaxCode.id == TaxClass.code_id)
+        .filter(TaxClass.company_id == company.id)
+        .all()
+    )
+    return {tax_class.key: code.code for tax_class, code in rows}
+
+
+def test_creating_a_company_with_a_country_seeds_its_pack(pg_db):
+    """Through `create_company`, which is what `POST /companies` calls."""
+    owner = make_user(pg_db, "seed-owner@example.com")
+    company = create_company(
+        pg_db, owner=owner, legal_name="Wien Film OG", address_country="AT"
+    )
+    pg_db.commit()
+
+    codes = _codes_of(pg_db, company)
+    assert codes["AT-20"].rate == Decimal("20.0000")
+    assert codes["AT-20"].origin_pack == "at"
+    assert codes["EU-AE"].origin_pack == "eu_generic"
+    assert codes["EU-STD"].is_active is False
+    assert _class_codes_of(pg_db, company) == {
+        "standard": "AT-20",
+        "reduced": "AT-10",
+        "reduced_2": "AT-13",
+        "zero": "AT-0",
+    }
+    assert (
+        pg_db.query(TaxRule).filter(TaxRule.company_id == company.id).count() == 8
+    )
+    # And the number series are still seeded beside it: two seeders in one
+    # create, and the second must not have replaced the first.
+    assert (
+        pg_db.query(NumberSeries)
+        .filter(NumberSeries.company_id == company.id)
+        .count()
+        == 8
+    )
+
+
+def test_creating_a_company_without_a_country_seeds_no_tax_configuration(pg_db):
+    """The state of the dev database and the LAN server-test instance."""
+    owner = make_user(pg_db, "no-country@example.com")
+    company = create_company(pg_db, owner=owner, legal_name="FilmBill")
+    pg_db.commit()
+
+    assert _codes_of(pg_db, company) == {}
+    assert _class_codes_of(pg_db, company) == {}
+    assert (
+        pg_db.query(TaxRule).filter(TaxRule.company_id == company.id).count() == 0
+    )
+
+
+def test_a_company_in_a_country_with_no_pack_gets_an_inactive_standard_rate(pg_db):
+    owner = make_user(pg_db, "paris@example.com")
+    company = create_company(
+        pg_db, owner=owner, legal_name="Paris SARL", address_country="FR"
+    )
+    pg_db.commit()
+
+    codes = _codes_of(pg_db, company)
+    assert codes["EU-STD"].is_active is False
+    assert codes["EU-STD"].rate == Decimal("0.0000")
+    assert _class_codes_of(pg_db, company)["standard"] == "EU-STD"
+    assert not any(code.startswith(("AT-", "DE-")) for code in codes)
+
+
+def test_seeding_twice_adds_nothing_the_second_time(pg_db):
+    company = make_company(pg_db, "Twice OG", address_country="AT")
+
+    first = tax_service.seed_tax_configuration(pg_db, company=company)
+    pg_db.commit()
+    second = tax_service.seed_tax_configuration(pg_db, company=company)
+    pg_db.commit()
+
+    assert first.codes > 0 and first.classes > 0 and first.rules == 8
+    assert (second.codes, second.classes, second.rules) == (0, 0, 0)
+    assert not second.seeded_anything
+    codes = _codes_of(pg_db, company)
+    assert len(codes) == len(set(codes))
+    assert (
+        pg_db.query(TaxRule).filter(TaxRule.company_id == company.id).count() == 8
+    )
+
+
+def test_seeding_never_overwrites_an_edited_code(pg_db):
+    """The promise, on an edited row.
+
+    A company whose advisor said 21 % must not find 20 % back because a
+    second seeding ran. Every rate, note and rule FilmBill ships is a
+    starting point somebody else's advisor may contradict (SCOPE D19).
+    """
+    company = make_company(pg_db, "Edited OG", address_country="AT")
+    tax_service.seed_tax_configuration(pg_db, company=company)
+    pg_db.commit()
+
+    edited = _codes_of(pg_db, company)["AT-20"]
+    edited.rate = Decimal("21")
+    edited.name = "21 % (our advisor says so)"
+    edited.notes_reviewed = True
+    pg_db.commit()
+
+    result = tax_service.seed_tax_configuration(pg_db, company=company)
+    pg_db.commit()
+
+    assert result.codes == 0
+    after = _codes_of(pg_db, company)["AT-20"]
+    assert after.rate == Decimal("21.0000")
+    assert after.name == "21 % (our advisor says so)"
+    assert after.notes_reviewed is True
+
+
+def test_seeding_does_not_re_add_a_rule_the_company_deleted(pg_db):
+    """Rules are seeded only when there are none.
+
+    Anything cleverer eventually re-adds a rule somebody deleted on purpose —
+    and a reverse-charge rule reappearing in a company that removed it is a
+    wrong invoice, not an inconvenience.
+    """
+    company = make_company(pg_db, "Pruned OG", address_country="AT")
+    tax_service.seed_tax_configuration(pg_db, company=company)
+    pg_db.commit()
+
+    reverse_charge = (
+        pg_db.query(TaxRule)
+        .filter(TaxRule.company_id == company.id, TaxRule.position == 30)
+        .one()
+    )
+    pg_db.delete(reverse_charge)
+    pg_db.commit()
+
+    tax_service.seed_tax_configuration(pg_db, company=company)
+    pg_db.commit()
+
+    positions = [
+        row.position
+        for row in pg_db.query(TaxRule).filter(TaxRule.company_id == company.id)
+    ]
+    assert sorted(positions) == [10, 20, 40, 50, 60, 70, 80]
+
+
+def test_seeding_fills_a_gap_in_the_codes_without_touching_the_rest(pg_db):
+    """Codes ARE compared by key, unlike rules.
+
+    A company that is missing `EU-AE` cannot reverse-charge at all, and the
+    code is referenced by a shipped rule rather than chosen by the user — so
+    adding a missing one back is a repair, not a surprise.
+    """
+    company = make_company(pg_db, "Gap OG", address_country="AT")
+    tax_service.seed_tax_configuration(pg_db, company=company)
+    pg_db.commit()
+
+    codes = _codes_of(pg_db, company)
+    codes["AT-20"].rate = Decimal("21")
+    pg_db.delete(codes["EU-AE"])
+    pg_db.commit()
+
+    result = tax_service.seed_tax_configuration(pg_db, company=company)
+    pg_db.commit()
+
+    assert result.codes == 1
+    after = _codes_of(pg_db, company)
+    assert "EU-AE" in after
+    assert after["AT-20"].rate == Decimal("21.0000"), "the edit was overwritten"
+
+
+def test_has_tax_configuration_answers_on_codes(pg_db):
+    company = make_company(pg_db, "Probe OG", address_country="AT")
+    assert tax_service.has_tax_configuration(pg_db, company_id=company.id) is False
+
+    tax_service.seed_tax_configuration(pg_db, company=company)
+    pg_db.commit()
+    assert tax_service.has_tax_configuration(pg_db, company_id=company.id) is True
+
+
+def test_an_explicit_pack_name_overrides_the_country(pg_db):
+    """The seam a future "re-seed from pack X" action uses. No UI in P1a."""
+    company = make_company(pg_db, "Override OG", address_country="AT")
+    tax_service.seed_tax_configuration(pg_db, company=company, pack_name="de")
+    pg_db.commit()
+
+    codes = _codes_of(pg_db, company)
+    assert "DE-19" in codes
+    assert "AT-20" not in codes
+
+
+# ─── Through the API: the country arriving for the first time ───────────────
+
+
+@pytest.fixture
+def country_less_company(pg_db):
+    """A company in exactly the state `POST /setup/create-superadmin` leaves
+    one in (D42): a name, an owner, and no country."""
+    pg_db.add(SiteSettings(org_name="FilmBill", require_2fa=False))
+    make_superadmin(pg_db)
+    company = make_company(pg_db, "FilmBill")
+    owner = make_user(pg_db, "first-owner@example.com")
+    grant(pg_db, company, owner, CompanyRole.owner)
+    pg_db.commit()
+    return {"company": company, "owner": owner}
+
+
+def test_setting_the_country_for_the_first_time_seeds_the_pack(
+    pg_client, pg_db, country_less_company
+):
+    """End to end, because this is the ONLY path by which the installation's
+    own first company is ever seeded."""
+    company = country_less_company["company"]
+    headers = auth_headers(country_less_company["owner"], company)
+    assert _codes_of(pg_db, company) == {}
+
+    response = pg_client.patch(
+        "/company", headers=headers, json={"address_country": "at"}
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["address_country"] == "AT"
+    pg_db.expire_all()
+    codes = _codes_of(pg_db, company)
+    assert codes["AT-20"].rate == Decimal("20.0000")
+    assert _class_codes_of(pg_db, company)["standard"] == "AT-20"
+    assert (
+        pg_db.query(TaxRule).filter(TaxRule.company_id == company.id).count() == 8
+    )
+
+
+def test_a_later_country_change_does_not_add_a_second_countrys_rates(
+    pg_client, pg_db, country_less_company
+):
+    """AT → DE is not a re-seed.
+
+    Quietly adding Germany's rates to a configured Austrian company is not
+    something a settings save should do, and seeding never overwrites what is
+    there — so the result would be a company holding both. Re-pointing a
+    company at another pack is a deliberate act and has no UI in P1a.
+    """
+    company = country_less_company["company"]
+    headers = auth_headers(country_less_company["owner"], company)
+
+    assert (
+        pg_client.patch(
+            "/company", headers=headers, json={"address_country": "AT"}
+        ).status_code
+        == 200
+    )
+    assert (
+        pg_client.patch(
+            "/company", headers=headers, json={"address_country": "DE"}
+        ).status_code
+        == 200
+    )
+
+    pg_db.expire_all()
+    codes = _codes_of(pg_db, company)
+    assert "AT-20" in codes
+    assert "DE-19" not in codes, (
+        "the company now holds two countries' rates, and which one an item "
+        "gets would depend on its class pointing at the right one"
+    )
+
+
+def test_a_patch_that_does_not_mention_the_country_seeds_nothing(
+    pg_client, pg_db, country_less_company
+):
+    """The guard on the transition check: every other settings save must not
+    trip it."""
+    company = country_less_company["company"]
+    headers = auth_headers(country_less_company["owner"], company)
+
+    response = pg_client.patch(
+        "/company", headers=headers, json={"trading_name": "FilmBill"}
+    )
+
+    assert response.status_code == 200, response.text
+    pg_db.expire_all()
+    assert _codes_of(pg_db, company) == {}
+
+
+def test_a_failed_save_leaves_no_tax_configuration_behind(
+    pg_client, pg_db, country_less_company
+):
+    """One transaction. The seeding does not commit on its own.
+
+    Driven through a request the API refuses: a three-letter country fails
+    Pydantic validation, so nothing is written — and the point is that the
+    seeder cannot have written anything either, because it is inside the
+    same transaction as the field it reacts to.
+    """
+    company = country_less_company["company"]
+    headers = auth_headers(country_less_company["owner"], company)
+
+    response = pg_client.patch(
+        "/company", headers=headers, json={"address_country": "AUT"}
+    )
+
+    assert response.status_code == 422, response.text
+    pg_db.expire_all()
+    assert _codes_of(pg_db, company) == {}
+    assert pg_db.query(TaxCode).count() == 0

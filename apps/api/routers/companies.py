@@ -49,7 +49,7 @@ from ..schemas.company import (
     MemberResponse,
     MemberUpdate,
 )
-from ..services import audit, company_service, invite_service
+from ..services import audit, company_service, invite_service, tax_service
 from ..services.auth_service import get_user_by_email
 from ..services.permissions import (
     active_memberships,
@@ -250,6 +250,7 @@ def update_active_company(
     distinguishable from not mentioning the field.
     """
     before = audit.snapshot(membership.company, COMPANY_AUDITED)
+    had_country = bool(membership.company.address_country)
     changes = body.model_dump(exclude_unset=True)
     if "require_2fa_roles" in changes and changes["require_2fa_roles"] is not None:
         # Stored as plain strings so the column stays readable JSON and does
@@ -287,6 +288,21 @@ def update_active_company(
             db, actor, membership.company, "company.updated", before, after,
             fields=other,
         )
+
+    # A country arriving for the first time is when the tax configuration can
+    # finally be chosen. Companies created by `POST /setup/create-superadmin`
+    # have no country (D42), so for the installation's own first company this
+    # is the ONLY moment it happens — and it is here rather than in a
+    # background job so that the country and the codes land in one
+    # transaction, and a failed save leaves neither.
+    #
+    # Only on the transition from nothing to something. Changing AT to DE does
+    # NOT re-seed: the company already has codes, seeding never overwrites
+    # them, and quietly adding a second country's rates to a configured
+    # company is not a thing a settings save should do. Re-pointing a company
+    # at another pack is a deliberate act, and it has no UI in P1a.
+    if not had_country and membership.company.address_country:
+        tax_service.seed_tax_configuration(db, company=membership.company)
 
     db.commit()
     db.refresh(membership.company)

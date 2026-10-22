@@ -79,6 +79,14 @@ def create_company(
     from .number_series import seed_number_series
 
     seed_number_series(db, company_id=company.id)
+
+    # And the tax configuration from the region pack for its country. Nothing
+    # happens when the company has no country yet — it is seeded the moment
+    # one is set (routers/companies.py), because seeding never overwrites and
+    # a generically-seeded company would never receive its real pack.
+    from .tax_service import seed_tax_configuration
+
+    seed_tax_configuration(db, company=company)
     return company
 
 

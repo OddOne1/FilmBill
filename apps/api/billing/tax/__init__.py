@@ -13,6 +13,18 @@ never guess. A missing home country or an inactive code is `blocking`, not a
 plausible-looking 20 %.
 """
 
+from .packs import (
+    GENERIC_PACK,
+    PACK_DIRECTORY,
+    PackClass,
+    PackCode,
+    PackRule,
+    RegionPack,
+    available_packs,
+    load_pack,
+    pack_for_country,
+    pack_name_for_country,
+)
 from .regions import EU_MEMBER_STATES, region_of
 from .treatments import TREATMENT_LABELS, TREATMENTS, treatment_label
 from .vocabulary import (
@@ -32,6 +44,16 @@ from .vocabulary import (
 
 __all__ = [
     "BUYER_REGIONS",
+    "GENERIC_PACK",
+    "PACK_DIRECTORY",
+    "PackClass",
+    "PackCode",
+    "PackRule",
+    "RegionPack",
+    "available_packs",
+    "load_pack",
+    "pack_for_country",
+    "pack_name_for_country",
     "BUYER_TYPES",
     "CATEGORIES",
     "CONDITION_KEYS",

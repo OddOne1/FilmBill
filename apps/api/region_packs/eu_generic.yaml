@@ -1,0 +1,196 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Generic EU pack — the treatment codes and the shipped rules.
+#
+# CLAUDE.md rule 7 and SCOPE D19: FilmBill ships only the generic,
+# uncontroversial rules. Anything that depends on a country's interpretation
+# or an advisor's opinion is user configuration, never code and never a rule
+# in here.
+#
+# NOT REVIEWED BY ANYBODY QUALIFIED. Every legal note below is generic
+# wording written by a developer, and every code lands in a company's tables
+# with `notes_reviewed: false` so the screen can say so. No statute numbers
+# appear anywhere in this file on purpose: a paragraph reference nobody has
+# checked is worse on an invoice than no sentence at all, because it reads as
+# authority. The wording and the rates are question 9 for the Steuerberater
+# (docs/SCOPE.md §17).
+#
+# `EU-STD` ships at 0 % and INACTIVE. It is the standard rate for a company
+# in a country FilmBill has no pack for, and an inactive code cannot be
+# proposed — the engine answers `blocking` with "set your rate" instead of
+# inventing one. A plausible-looking 20 % for a country nobody checked is the
+# single worst thing this file could do.
+#
+# Rates are written as STRINGS. `rate: 2.5` is a YAML float and a float is
+# how a rate stops being exact (rule 1); the loader refuses one.
+# ─────────────────────────────────────────────────────────────────────────────
+pack: eu_generic
+name: Generic EU
+# No country claims this pack. It is the fallback, and every other pack
+# extends it.
+countries: []
+
+codes:
+  - code: EU-STD
+    name: Standard rate (set your rate)
+    rate: "0"
+    category: S
+    active: false
+
+  - code: EU-AE
+    name: Reverse charge
+    rate: "0"
+    category: AE
+    legal_notes:
+      en: "Reverse charge: VAT to be accounted for by the recipient."
+      de: "Steuerschuld geht auf den Leistungsempfänger über."
+
+  - code: EU-K
+    name: Intra-community supply
+    rate: "0"
+    category: K
+    legal_notes:
+      en: "Intra-community supply, exempt from VAT."
+      de: "Innergemeinschaftliche Lieferung, steuerfrei."
+
+  - code: EU-G
+    name: Export
+    rate: "0"
+    category: G
+    legal_notes:
+      en: "Export delivery, exempt from VAT."
+      de: "Ausfuhrlieferung, steuerfrei."
+
+  - code: EU-O
+    name: Not taxable in this country
+    rate: "0"
+    category: O
+    legal_notes:
+      en: "Not taxable in the country of the supplier; the place of supply is abroad."
+      de: "Nicht im Inland steuerbar; der Leistungsort liegt im Ausland."
+
+  - code: EU-E
+    name: Exempt
+    rate: "0"
+    category: E
+    legal_notes:
+      en: "Exempt from VAT."
+      de: "Steuerfrei."
+
+  - code: EU-Z
+    name: Zero rate
+    rate: "0"
+    category: Z
+
+  - code: EU-KU
+    name: Small business exemption
+    rate: "0"
+    category: E
+    legal_notes:
+      en: "Small business exemption: no VAT is charged."
+      de: "Steuerfrei aufgrund der Kleinunternehmerregelung."
+
+# A country pack replaces these by declaring the same keys.
+classes:
+  - key: standard
+    label: Standard rate
+    code: EU-STD
+    position: 10
+  - key: zero
+    label: Zero rate
+    code: EU-Z
+    position: 40
+
+# ─── The shipped rules, in order ─────────────────────────────────────────────
+#
+# Evaluated top to bottom; the first whose conditions all hold wins. Positions
+# are spaced by ten so a user can insert one between two of these without
+# renumbering the list.
+#
+# `{class: "@item"}` means the item's OWN tax class — "domestic rate of the
+# item's tax class" (SCOPE §6.3) cannot be written as a fixed class key,
+# because which class it is depends on the line.
+rules:
+  # Before everything: a Kleinunternehmer charges no VAT to anybody, anywhere.
+  - position: 10
+    name: "Small business: no VAT on anything"
+    conditions:
+      seller_is_kleinunternehmer: true
+    outcome:
+      treatment: small_business_exemption
+      code: { code: EU-KU }
+
+  - position: 20
+    name: "Same country: domestic rate of the item's tax class"
+    conditions:
+      buyer_region: same_country
+    outcome:
+      treatment: domestic
+      code: { class: "@item" }
+
+  - position: 30
+    name: "EU business, VAT ID verified, services: reverse charge"
+    conditions:
+      buyer_region: eu_other
+      buyer_type: business
+      buyer_vat_verified: true
+      supply_kind: services
+    outcome:
+      treatment: eu_reverse_charge
+      code: { code: EU-AE }
+
+  - position: 40
+    name: "EU business, VAT ID verified, goods: intra-community supply"
+    conditions:
+      buyer_region: eu_other
+      buyer_type: business
+      buyer_vat_verified: true
+      supply_kind: goods
+    outcome:
+      treatment: intra_community_supply
+      code: { code: EU-K }
+
+  # [Guessing — question 9 for the Steuerberater.] Without a verified VAT ID
+  # FilmBill does not propose a reverse charge: an unverified ID that turns
+  # out to be wrong leaves the seller owing the tax. Domestic rate plus a
+  # warning that says exactly why, rather than a silent reverse charge.
+  - position: 50
+    name: "EU business without a verified VAT ID: domestic rate"
+    conditions:
+      buyer_region: eu_other
+      buyer_type: business
+      buyer_vat_verified: false
+    outcome:
+      treatment: domestic
+      code: { class: "@item" }
+      warning: buyer_vat_id_not_verified
+
+  # Private buyers abroad. Distance selling and OSS are out of scope for v1
+  # (SCOPE §6.3), so this is the domestic rate and nothing cleverer. A company
+  # that crosses an OSS threshold needs more than this pack.
+  - position: 60
+    name: "Private buyer abroad: domestic rate"
+    conditions:
+      buyer_type: private
+    outcome:
+      treatment: domestic
+      code: { class: "@item" }
+
+  - position: 70
+    name: "Non-EU business, services: not taxable in this country"
+    conditions:
+      buyer_region: non_eu
+      buyer_type: business
+      supply_kind: services
+    outcome:
+      treatment: not_taxable_in_country
+      code: { code: EU-O }
+
+  - position: 80
+    name: "Non-EU business, goods: export"
+    conditions:
+      buyer_region: non_eu
+      buyer_type: business
+      supply_kind: goods
+    outcome:
+      treatment: export
+      code: { code: EU-G }

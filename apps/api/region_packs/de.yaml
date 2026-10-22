@@ -1,0 +1,47 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Germany.
+#
+# NOT TAX ADVICE AND NOT REVIEWED. [Likely] — 19 % and 7 % are the rates in
+# ordinary public use; they are question 9 for the Steuerberater
+# (docs/SCOPE.md §17) and a user can edit them.
+#
+# Germany has two positive rates where Austria has three, so there is no
+# `reduced_2` class here. The class list is the PACK's business, not the
+# schema's — which is why `tax_classes.key` is a string and not an enum.
+#
+# Extends eu_generic for the treatment codes and the eight rules.
+# ─────────────────────────────────────────────────────────────────────────────
+pack: de
+name: Deutschland
+extends: eu_generic
+countries: [DE]
+
+codes:
+  - code: DE-19
+    name: 19 % USt (Regelsteuersatz)
+    rate: "19"
+    category: S
+
+  - code: DE-7
+    name: 7 % USt (ermäßigt)
+    rate: "7"
+    category: S
+
+  - code: DE-0
+    name: 0 % USt
+    rate: "0"
+    category: Z
+
+classes:
+  - key: standard
+    label: Regelsteuersatz (19 %)
+    code: DE-19
+    position: 10
+  - key: reduced
+    label: Ermäßigt (7 %)
+    code: DE-7
+    position: 20
+  - key: zero
+    label: Steuersatz 0 %
+    code: DE-0
+    position: 40
