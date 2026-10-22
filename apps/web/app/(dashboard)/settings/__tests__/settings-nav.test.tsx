@@ -176,6 +176,47 @@ describe('the company group follows company permissions', () => {
     )
   })
 
+  it('shows Tax to any member, including one who cannot edit settings', () => {
+    // P1a. Gated on `company.view` and not on `company.settings.edit`: a rate
+    // is printed on every document the company sends, and an accountant or
+    // tax advisor who cannot see the tax table cannot check an invoice
+    // against it. The screen gates its own EDITING and says so, rather than
+    // offering a Save button that 404s (rule 17c).
+    seedCompany(['company.view'])
+    renderNav()
+
+    const entries = order()
+    expect(entries).toContain('Tax')
+    // And nothing that needs the settings permission came with it.
+    expect(entries).not.toContain('Bank accounts')
+    expect(entries).not.toContain('Accounting')
+  })
+
+  it('puts Tax between Number series and Security', () => {
+    seedCompany([
+      'company.view',
+      'company.settings.edit',
+      'number_series.manage',
+    ])
+    renderNav()
+
+    const entries = order()
+    expect(entries.indexOf('Tax')).toBeGreaterThan(
+      entries.indexOf('Number series'),
+    )
+    expect(entries.indexOf('Tax')).toBeLessThan(entries.indexOf('Security'))
+  })
+
+  it('shows Tax to a tax advisor, whose only other company entry is the log', () => {
+    seedCompany(['company.view', 'audit.view', 'archive.view'])
+    renderNav()
+
+    const entries = order()
+    expect(entries).toContain('Tax')
+    expect(entries).toContain('Audit log')
+    expect(entries).not.toContain('Members')
+  })
+
   it('hides the whole company group while the company list has not answered', () => {
     // Hidden rather than shown-and-withdrawn, and asserted against a state
     // where `can()` would say yes if it were consulted — so this cannot pass

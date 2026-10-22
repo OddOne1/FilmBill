@@ -15,6 +15,7 @@ import {
   Landmark,
   Calculator,
   Hash,
+  Percent,
   ScrollText,
   ShieldCheck,
 } from 'lucide-react'
@@ -104,6 +105,17 @@ const settingsNavGroups: SettingsNavItem[][] = [
       // number series is a structural act — rule 5's gap-free promise is what
       // is at stake — and the endpoints enforce the narrower key.
       permission: 'number_series.manage',
+    },
+    {
+      href: '/settings/company/tax',
+      label: 'Tax',
+      icon: Percent,
+      // `company.view`, not `company.settings.edit`: a rate is printed on
+      // every document the company sends, and an accountant or tax advisor
+      // who cannot see the tax table cannot check an invoice against it. The
+      // screen gates its own EDITING on `company.settings.edit` and says so,
+      // rather than offering a button that 404s (rule 17c).
+      permission: 'company.view',
     },
     {
       href: '/settings/company/security',
