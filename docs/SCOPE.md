@@ -625,16 +625,30 @@ Compliance sources: [Brandauer – E-Rechnung AT 2026](https://brandauer-rechtsa
 | D44 | **The audit log is tamper-EVIDENT, not tamper-proof.** Triggers refuse UPDATE and DELETE (row-level) and TRUNCATE (statement-level), so no code path in FilmBill — and no bug or compromised handler — can rewrite or remove an audit row. What that does **not** stop: the table's owner running `ALTER TABLE audit_events DISABLE TRIGGER USER`, a superuser doing anything at all, and anybody holding a backup or the data directory reading the rows outside the database. Real tamper-proofing needs append-only storage outside this database (a WORM bucket, a hash chain anchored elsewhere) and is **not in v1**. The weaker claim is recorded deliberately: the stronger one is the more dangerous error. | 2026-10-20 |
 | D45 | **Out-of-order document dates are allowed with a warning**, not refused (Mathias; Claude recommended refusing). A document dated before the latest date already allocated in its series goes through and carries the warning `document_date_before_latest` with that date and its number. On a `yearly` series a date in an earlier period draws from **that period's own counter** (its highest allocated value + 1) and the current period's counter is untouched — the only reading under which both years stay gap-free. **P2's finalize flow must show the warning and require an explicit confirmation.** The rule is **not tax-advised** and awaits the Steuerberater's confirmation (see §17). | 2026-10-20 |
 | D46 | **Continuous numbering is a real option, chosen per series.** `reset = never` means the counter never restarts, and a year token is allowed with it (it prints the year without restarting the count). Seeded defaults stay yearly. Yearly → continuous keeps the counter exactly where it is; continuous → yearly takes effect at the **next period boundary**, not immediately. Both switches are audited with the old and new mode, and neither may re-issue an allocated number — `unique (series_id, number)` decides, and a collision is a 409 naming the number rather than a duplicate or a gap. | 2026-10-20 |
+| D47 | **P1 is delivered in full as scoped, in four prompts, each ending in something clickable** (Mathias, 2026-10-20): **P1a tax** · **P1b parties** · **P1c catalog** · **P1d resource and reservation tables (no UI)**. Tax is first because the other three point at it — a party carries a default tax treatment and an item carries a tax class and an override, and both are references into P1a's tables. The first visible invoice is still P2; nothing in P1 creates a document. | 2026-10-20 |
+| D48 | **Override precedence is item > party > rules.** [Guessing — §17 question 9(c) asks the Steuerberater, and Mathias has not confirmed it either.] The item is the more specific statement, and §6.3's own example is a studio whose advisor says "Austrian VAT whatever the customer" — which has to hold for a customer who also carries an override. An override that does not apply to a sale (the "domestic rate for foreign business buyers" one, on a domestic sale) falls through to the party override and then to the rules rather than blocking; an override that does not apply is not an error. Whenever an override changes the answer, the proposal carries `would_have_applied` — the treatment, code, rate, note and the rule it replaced — which is what P2's yellow warning (S8) shows. Manual per-document and per-line overrides sit on top of all of this, in P2. | 2026-10-22 |
+| D49 | **An EU business buyer whose VAT ID is not verified gets the domestic rate and a warning, never a silent reverse charge.** [Guessing — §17 question 9(c).] An unverified ID that turns out to be wrong leaves the seller owing the tax, so FilmBill proposes the safe answer and says why: warning `buyer_vat_id_not_verified`, with the sentence "verify it to propose a reverse charge". The reverse-charge rule is reached only by a VERIFIED id — which has a consequence worth writing down: a company that deactivates that rule leaves verified EU B2B services matching NO rule, and the engine then answers `blocking` rather than falling back to a domestic rate nobody configured. VIES verification itself is §6.4 and not in P1a; the flag is set by hand until then. | 2026-10-22 |
+| D50 | **Every rate and every legal note FilmBill ships is unreviewed, and says so.** Region packs are developer-written starting points, not advice: each pack header states in capitals that it is not tax advice, every code lands with `notes_reviewed = false`, the screen shows "note not reviewed" until somebody in the company confirms it, and the proposal raises `legal_note_not_reviewed` as a warning. The notes carry **generic wording and no statute numbers** — a paragraph reference nobody qualified has checked is worse on an invoice than no sentence at all, because it reads as authority (a test asserts no shipped note contains a digit). The generic EU pack's standard rate ships at **0 % and inactive** so that a company in a country FilmBill has no pack for cannot be handed a plausible-looking rate; the engine refuses to propose from it and the screen says "set your rate". Seeding never overwrites an edited row, so a company that corrects a rate keeps the correction. | 2026-10-22 |
 
 ## 17. Questions for the Steuerberater
 
-**Status 2026-10-20 — one new question, from D45.** Out-of-order document
-dates: FilmBill now allows a document dated before the latest one already
-numbered in its series, with a warning, and on a yearly series it takes the
-number from that earlier year's own counter. **Q8 below asks whether that is
-acceptable in Austria.** Until it is answered the behaviour is a decision by
-Mathias and not an advised one, and P2's finalize flow must make somebody
-confirm it per document.
+**Status 2026-10-22 — two open questions, Q8 and Q9.**
+
+Q8, from D45: out-of-order document dates. FilmBill now allows a document
+dated before the latest one already numbered in its series, with a warning,
+and on a yearly series it takes the number from that earlier year's own
+counter. Until it is answered the behaviour is a decision by Mathias and not
+an advised one, and P2's finalize flow must make somebody confirm it per
+document.
+
+Q9, from P1a (D48, D49, D50): the tax engine now ships rates, legal-note
+wording and eight determination rules as **region-pack data**, every piece of
+it marked unreviewed. Q9 asks the four things that cannot be settled from the
+inside: the rates themselves, the wording, and the two [Guessing] decisions
+about overrides and unverified VAT IDs. **Nothing in the engine changes when
+the answers arrive** — they go into the YAML packs, and a company that has
+already been seeded edits its own rows. That is the whole point of §6.3's
+"rules are data".
 
 **8. Back-dated invoices:** may we issue an invoice dated earlier than one we
 have already issued in the same number series — for instance entering
@@ -650,6 +664,60 @@ Nummer aus der fortlaufenden Nummerierung des November kommt? Die Serie bleibt
 lückenlos und keine Nummer wird zweimal vergeben, die Nummern sind dann aber
 nicht in Datumsreihenfolge. Falls das nicht zulässig ist: ablehnen, oder pro
 Periode eine eigene Serie?
+
+**9. Steuersätze, Rechtshinweise und zwei Regeln im Steuer-Vorschlag.** Die
+Software schlägt die Umsatzsteuer vor; entschieden wird von uns. Alles
+Folgende ist als Ausgangspunkt eingebaut und von uns änderbar — bitte um
+Bestätigung oder Korrektur:
+
+(a) **Steuersätze.** Österreich: 20 % Normalsteuersatz, 10 % und 13 %
+ermäßigt, 0 %. Dabei ist die Steuerklasse `ermäßigt` dem **10-%-Satz**
+zugeordnet und `ermäßigt 2` dem 13-%-Satz. Deutschland (für Kundenprojekte):
+19 % und 7 %. Richtig so?
+
+(b) **Rechtshinweise.** Wir drucken bewusst **keine Paragrafen**, sondern nur
+allgemeine Sätze, und zwar: Reverse Charge → "Steuerschuld geht auf den
+Leistungsempfänger über."; innergemeinschaftliche Lieferung → "Innergemein‑
+schaftliche Lieferung, steuerfrei."; Ausfuhr → "Ausfuhrlieferung,
+steuerfrei."; nicht im Inland steuerbar → "Nicht im Inland steuerbar; der
+Leistungsort liegt im Ausland."; Kleinunternehmer → "Steuerfrei aufgrund der
+Kleinunternehmerregelung." Reichen diese Formulierungen, oder sollen
+Paragrafenangaben dazukommen — und wenn ja, welche genau?
+
+(c) **EU-Geschäftskunde ohne geprüfte UID.** Wenn die UID des Kunden nicht
+bestätigt ist, schlagen wir **den Inlandssatz plus Warnung** vor und *nicht*
+Reverse Charge. Ist das die richtige Vorgangsweise? (Hintergrund: eine falsche
+UID lässt die Steuerschuld bei uns.)
+
+(d) **Vorrang von Ausnahmen.** Eine Ausnahme am **Artikel** ("Studiomiete
+immer mit österreichischer USt") geht einer Ausnahme am **Kunden** vor, und
+beide gehen den allgemeinen Regeln vor. Ist diese Reihenfolge sinnvoll?
+
+**9. Tax rates, legal notes and two rules in the tax proposal.** The software
+*proposes* the VAT and we decide. Everything below is built in as a starting
+point and is editable by us — please confirm or correct:
+
+(a) **Rates.** Austria: 20 % standard, 10 % and 13 % reduced, 0 %. The tax
+class `reduced` is mapped to the **10 %** rate and `reduced_2` to 13 %.
+Germany (for client projects): 19 % and 7 %. Is that right?
+
+(b) **Legal notes.** We deliberately print **no statute references**, only
+generic sentences: reverse charge → "Reverse charge: VAT to be accounted for
+by the recipient."; intra-community supply → "Intra-community supply, exempt
+from VAT."; export → "Export delivery, exempt from VAT."; not taxable here →
+"Not taxable in the country of the supplier; the place of supply is abroad.";
+small business → "Small business exemption: no VAT is charged." Is that
+wording sufficient, or should paragraph references be added — and if so,
+exactly which?
+
+(c) **EU business customer without a verified VAT ID.** When the customer's
+VAT ID is not confirmed we propose **the domestic rate plus a warning**, not
+a reverse charge. Is that the correct approach? (Our reasoning: a wrong VAT
+ID leaves the tax owing from us.)
+
+(d) **Precedence of exceptions.** An exception on the **item** ("studio
+rental always carries Austrian VAT") beats an exception on the **customer**,
+and both beat the general rules. Is that order sensible?
 
 ---
 

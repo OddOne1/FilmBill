@@ -19,6 +19,7 @@ from them. `docs/SCOPE.md` is where the product is decided.
 | minio-fork | Replace the withdrawn MinIO images; weekly image-reference guard | [`18-minio-fork-and-image-guard.md`](18-minio-fork-and-image-guard.md) | `45dacb5` | done — see notes |
 | P0b-3 | Healthcheck, IBAN uniqueness, CI real-DB guard, number series, audit events, backup modes, rule consolidation | [`19-filmbill-P0b-3.md`](19-filmbill-P0b-3.md) | `b8e10b3`…`0c186df` | done — see notes |
 | restore-sudo | The printed restore command could not read its own dump | [`20-backup-restore-needs-sudo-gunzip.md`](20-backup-restore-needs-sudo-gunzip.md) | `af9bbc7` | done — see notes |
+| P1a | Tax: data model, region packs, the proposal engine, API, screens | [`21-filmbill-P1a-tax.md`](21-filmbill-P1a-tax.md) | `57d9b5a`…`PENDING` | done — see notes |
 | P0b | Foundations: companies, roles, number series, audit, money, codegen | [`03-filmbill-P0b-foundations.md`](03-filmbill-P0b-foundations.md) | — | superseded — split into P0b-0, P0b-1, P0b-2 |
 
 ---
@@ -1010,3 +1011,82 @@ bare glob — the exact line that failed on the server.
 **No rebuild on the server.** The script and the doc are plain files read from
 the clone at `/mnt/HDDs/.../filmbill-v2-src`; nothing here is copied into an
 image. `git pull` is the whole deployment.
+
+---
+
+## P1a — tax data, region packs and the proposal engine
+
+Six commits, each green on its own, in the prompt's order. Prompt:
+[`21-filmbill-P1a-tax.md`](21-filmbill-P1a-tax.md).
+
+P1 is delivered in four prompts, each ending in something Mathias can click
+(D47): **P1a tax**, then P1b parties, P1c catalog, P1d resource tables. Tax
+is first because a party's default treatment and an item's tax class are both
+references into these tables.
+
+**Part 1 — the data model (`57d9b5a`).** `tax_codes`, `tax_classes`,
+`tax_rules`, all company-scoped, plus migration 0010 with a backfill. The
+rate is a NUMERIC(18,4) **percent** (20.0000, not 0.2) — it is the number on
+the invoice, in the pack and in the UVA, and storing the factor would mean
+every screen multiplied by 100 and one of them eventually would not. `code`
+and `category` are immutable after creation because a document line
+snapshots them (rule 3). Three CHECK constraints, the load-bearing one being
+`category NOT IN ('Z','E','AE','K','G','O') OR rate = 0`: "exempt at 20 %" is
+a contradiction, not a configuration, and the application is not the only
+thing that writes to this database. `apps/api/billing/` starts here as pure
+Python, enforced by a subprocess that imports the package in a fresh
+interpreter and asserts SQLAlchemy, FastAPI, Starlette and alembic are not in
+`sys.modules`.
+
+**Part 2 — region packs (`14af813`).** `at.yaml` (20/13/10/0), `de.yaml`
+(19/7/0) and `eu_generic.yaml`, with both country packs `extends:
+eu_generic` so the eight shipped rules and the treatment codes exist in one
+place. The loader validates on load, because the failure mode of "rules are
+data" is not a crash — it is a pack that loads, looks right, and holds a rule
+that is merely never true. Seeding never overwrites, asserted on an edited
+row; a company with **no country gets nothing**, and `PATCH /company` seeds it
+the moment a country is first set, in the same transaction.
+
+**Part 3 — the proposal engine (`bbf9260`).** `propose_tax` is pure: the
+caller passes the tables in, so a tax decision is a table of inputs and
+expected answers. 36 golden fixtures with every expectation written out as a
+literal, built from the real packs. It never guesses — no country, no
+matching rule, or an inactive resolved code gives `blocking: true` and
+`rate: None`. Two things the tests found rather than confirmed: the shipped
+rule set is **complete** (the vocabulary is closed, so all 48 combinations
+per pack are enumerable and none blocks), and deactivating the reverse-charge
+rule **blocks rather than charging VAT**. Five mutations, each a real FAIL
+line.
+
+**Part 4 — API and audit (`62e6b61`).** Five endpoints, 71 real-database
+tests, **no new permission keys**: reads take `company.view`, writes
+`company.settings.edit`. `tax_code.updated` wired with old and new values in
+the caller's transaction. The propose endpoint is compared to the pure
+function case by case, which is the only test that would notice the pack path
+and the row path drifting — and it found one: the row path's NUMERIC(18,4)
+made a reason read "applies at 20.0000 %" where the pack path said "20 %".
+
+**Part 5 — the screens (`69aef12`).** Settings → Company → Tax, a Codes tab
+and a Test-a-case tab. The screen decides no tax; the tests feed it a code
+and a rate no client-side evaluator could have produced, and a mutation that
+computes the rate locally fails. Nav entry gated on `company.view` so an
+accountant or advisor can read the table, with editing gated separately and a
+sentence instead of a dead button (17c).
+
+**Part 6 — documentation (`PENDING`, this commit).** SCOPE §16 gains D47–D50
+and §17 gains question 9 for the Steuerberater, in German and English:
+the AT/DE rates, the legal-note wording, and the two [Guessing] decisions
+(override precedence, and unverified EU B2B VAT IDs).
+
+**Two things flagged rather than decided.**
+
+1. **The prompt contradicted itself on the Austrian reduced rate.** Its pack
+   description said "reduced 13, reduced_2 10"; its golden fixtures said
+   "class reduced → `AT-10`". The pack follows the fixtures and ordinary
+   Austrian usage — `reduced` is 10 %, `reduced_2` is 13 % — and both codes
+   exist either way, so a company whose advisor disagrees re-points one class
+   and changes nothing else. §17 question 9(a) asks.
+2. **`active` was spelled `is_active`.** The prompt named the column `active`
+   on two tables; `CompanyBankAccount` and `NumberSeries` both use
+   `is_active`, and four tables in one schema disagreeing is worse than a
+   one-word deviation. Say the word and it is a migration and a rename.
