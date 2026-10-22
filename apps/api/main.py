@@ -16,6 +16,7 @@ from .routers import (
     number_series,
     setup,
     site_settings,
+    tax,
     users,
 )
 from .services.s3_service import ensure_bucket_exists
@@ -83,6 +84,7 @@ app.include_router(users.router)
 app.include_router(setup.router)
 app.include_router(companies.router)
 app.include_router(number_series.router)
+app.include_router(tax.router)
 app.include_router(audit.router)
 app.include_router(admin.router)
 app.include_router(notifications.router)

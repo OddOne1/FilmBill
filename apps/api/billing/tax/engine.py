@@ -517,6 +517,20 @@ def _from_override(
     )
 
 
+def _rate_text(rate: Decimal) -> str:
+    """A rate as a human writes it: `20`, `8.1667`, `0`.
+
+    Normalised, because the same rate arrives with two different scales
+    depending on where it came from: a region pack says `Decimal("20")` and a
+    `NUMERIC(18,4)` column says `Decimal("20.0000")`. Both are 20 %, and a
+    sentence that read "applies at 20.0000 %" in one path and "at 20 %" in
+    the other is a difference a reader would try to interpret. `format(…,
+    "f")` after `normalize()` because `normalize` alone turns 20 into the
+    scientific `2E+1`.
+    """
+    return format(rate.normalize(), "f")
+
+
 def _note(code: Optional[TaxCodeData], lang: str) -> Optional[str]:
     """The legal note in `lang`, or none.
 
@@ -561,7 +575,7 @@ def _combine(
         warnings.append(_warning("legal_note_not_reviewed"))
 
     reasons.append(
-        f"Tax code “{code.code}” applies at {code.rate} %."
+        f"Tax code “{code.code}” applies at {_rate_text(code.rate)} %."
     )
 
     would: Optional[WouldHaveApplied] = None

@@ -187,3 +187,109 @@ def seed_tax_configuration(
     if result.seeded_anything:
         db.flush()
     return result
+
+
+# ─── Reading: rows → the engine's plain data ────────────────────────────────
+
+
+def engine_tables(db: Session, *, company_id: uuid.UUID):
+    """This company's three tables, as the dataclasses `propose_tax` takes.
+
+    The translation layer, and the only one. `propose_tax` never sees a
+    `Session` — which is what lets a tax decision be a table test — so
+    something has to turn rows into plain data, and it is better that it be
+    one named function than a dict comprehension in a router.
+
+    Classes are resolved to a code STRING here rather than passed as an id,
+    because the engine answers in terms of the code a human reads. A class
+    whose code is missing is dropped: the engine would refuse it anyway, and
+    with a worse message than the one it gives for an unknown class.
+    """
+    from ..billing.tax import TaxClassData, TaxCodeData, TaxRuleData
+
+    code_rows = db.query(TaxCode).filter(TaxCode.company_id == company_id).all()
+    codes = [
+        TaxCodeData(
+            code=row.code,
+            name=row.name,
+            rate=row.rate,
+            category=row.category,
+            legal_notes=dict(row.legal_notes or {}),
+            notes_reviewed=bool(row.notes_reviewed),
+            is_active=bool(row.is_active),
+        )
+        for row in code_rows
+    ]
+    by_id = {row.id: row.code for row in code_rows}
+
+    class_rows = (
+        db.query(TaxClass)
+        .filter(TaxClass.company_id == company_id)
+        .order_by(TaxClass.position, TaxClass.key)
+        .all()
+    )
+    classes = [
+        TaxClassData(key=row.key, label=row.label, code=by_id[row.code_id])
+        for row in class_rows
+        if row.code_id in by_id
+    ]
+
+    rule_rows = (
+        db.query(TaxRule)
+        .filter(TaxRule.company_id == company_id)
+        .order_by(TaxRule.position, TaxRule.name)
+        .all()
+    )
+    rules = [
+        TaxRuleData(
+            position=row.position,
+            name=row.name,
+            conditions=dict(row.conditions or {}),
+            outcome=dict(row.outcome or {}),
+            is_active=bool(row.is_active),
+        )
+        for row in rule_rows
+    ]
+    return codes, classes, rules
+
+
+def propose(
+    db: Session,
+    *,
+    company: Company,
+    buyer_country: Optional[str],
+    buyer_type: str = "business",
+    buyer_vat_verified: bool = False,
+    supply_kind: str = "services",
+    item_class: str = "standard",
+    item_override=None,
+    party_override=None,
+    lang: str = "en",
+):
+    """Propose the tax for one sale in `company`. Reads; changes nothing.
+
+    The seller's country and small-business status come from the COMPANY and
+    cannot be passed in. A caller that could ask "what would this be if we
+    were Austrian" would get a rate for a company that does not exist, and
+    somebody would eventually put it on an invoice.
+    """
+    from ..billing.tax import TaxInputs, propose_tax
+
+    codes, classes, rules = engine_tables(db, company_id=company.id)
+    return propose_tax(
+        TaxInputs(
+            seller_country=company.address_country,
+            buyer_country=buyer_country,
+            buyer_type=buyer_type,
+            buyer_vat_verified=buyer_vat_verified,
+            supply_kind=supply_kind,
+            item_class=item_class,
+            item_override=item_override,
+            party_override=party_override,
+            seller_is_kleinunternehmer=bool(company.kleinunternehmer),
+        ),
+        codes,
+        classes,
+        rules,
+        lang,
+    )

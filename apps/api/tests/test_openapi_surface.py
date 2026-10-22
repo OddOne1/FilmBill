@@ -68,6 +68,13 @@ EXPECTED_TAGS = {
     #: the `/company/...` PATH rather than on the tag, so a new tag under that
     #: path cannot escape it (see tests/test_company_isolation.py).
     "number-series",
+    #: P1a. Settings → Company → Tax: codes, classes, read-only rules and the
+    #: proposal preview. Its own tag because the tax engine is one subject
+    #: that P2 (document and line tax), P5 (the advisor's archive) and P6
+    #: (the UVA/UStVA mapping) all add to, and because "what can change a
+    #: rate" should be answerable from one tag. The isolation suite selects on
+    #: the `/company/...` PATH, not the tag, so these cannot escape it.
+    "tax",
     "setup",
     "site-settings",
     "users",

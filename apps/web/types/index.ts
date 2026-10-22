@@ -155,6 +155,39 @@ export type AuditEventPage = Schemas['AuditEventPage']
  *  `ACCOUNT_SETUP_REQUIRED` below. */
 export const DOCUMENT_DATE_BEFORE_LATEST = 'document_date_before_latest'
 
+// ─── Tax (P1a) ──────────────────────────────────────────────────────────────
+//
+// The screen shows a rate; it never works one out. Every rate and every
+// proposal on Settings → Company → Tax comes from the API, because the rule
+// evaluator is one engine (CLAUDE.md rule 2) and a second one in TypeScript
+// would be the one nobody tested against a real pack.
+//
+// `rate` is a STRING in every one of these, and that is rule 1 arriving at
+// the type level: a `number` here would be a float, and the whole chain from
+// `NUMERIC(18,4)` through `Decimal` exists to keep it out.
+
+export type TaxCode = Schemas['TaxCodeResponse']
+export type TaxCodeUpdate = Schemas['TaxCodeUpdate']
+export type TaxClass = Schemas['TaxClassResponse']
+export type TaxRule = Schemas['TaxRuleResponse']
+export type TaxProposal = Schemas['TaxProposalResponse']
+export type TaxProposeRequest = Schemas['TaxProposeRequest']
+export type TaxWarning = Schemas['TaxWarningResponse']
+export type TaxOverrideRequest = Schemas['TaxOverrideRequest']
+
+/** What an override does. `code` pins one code; `domestic_for_foreign_business`
+ *  is SCOPE §6.3's "use the domestic rate for foreign business buyers". */
+export type TaxOverrideKind = TaxOverrideRequest['kind']
+
+/** Branched on, never matched as prose — same reasoning as
+ *  `DOCUMENT_DATE_BEFORE_LATEST`. The server owns the sentence; these are the
+ *  tokens, and `billing/tax/vocabulary.py::WARNING_CODES` is the list. */
+export const TAX_WARNING_VAT_ID_NOT_VERIFIED = 'buyer_vat_id_not_verified'
+export const TAX_WARNING_NOTE_NOT_REVIEWED = 'legal_note_not_reviewed'
+export const TAX_WARNING_CODE_INACTIVE = 'code_inactive'
+export const TAX_WARNING_HOME_COUNTRY_MISSING = 'home_country_missing'
+export const TAX_WARNING_BUYER_COUNTRY_MISSING = 'buyer_country_missing'
+
 // ════════════════════════════════════════════════════════════════════════════
 // Hand-written, deliberately
 //

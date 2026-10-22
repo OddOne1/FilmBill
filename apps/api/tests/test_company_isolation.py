@@ -36,6 +36,7 @@ from .company_factories import (
     make_company,
     make_number_series,
     make_superadmin,
+    make_tax_code,
     make_user,
     unrelated_company_id,
 )
@@ -121,6 +122,19 @@ CASES: dict[str, object] = {
     # named function (`services/audit.company_events`) rather than
     # `scoped()`. That makes this case load-bearing rather than routine.
     "GET /company/audit-events": {"body": None},
+    # P1a. The tax configuration. `PATCH` carries another company's code id
+    # in its PATH, so it is the half of this file that catches a missing
+    # `company_id` filter rather than a missing dependency — a code id looked
+    # up without one is FOUND, and answering anything but 404 confirms it
+    # exists.
+    "GET /company/tax/codes": {"body": None},
+    "PATCH /company/tax/codes/{tax_code_id}": {"body": {"name": "Stolen"}},
+    "GET /company/tax/classes": {"body": None},
+    "GET /company/tax/rules": {"body": None},
+    # Reads nothing of B's by id, but it DOES read B's whole tax table when
+    # the header says B — which is the first of the two checks below, and the
+    # one that would leak a competitor's rates.
+    "POST /company/tax/propose": {"body": {"buyer_country": "DE"}},
 }
 
 #: Placeholder -> the key in the `two_companies` fixture holding a row that
@@ -129,6 +143,7 @@ OTHER_COMPANY_ROWS = {
     "{membership_id}": "membership_in_b",
     "{bank_account_id}": "bank_account_in_b",
     "{series_id}": "series_in_b",
+    "{tax_code_id}": "tax_code_in_b",
 }
 
 
@@ -198,6 +213,9 @@ def two_companies(pg_db):
     # {series_id}` looked up without a `company_id` filter FINDS this row, and
     # answering anything but 404 for it confirms it exists.
     series_in_b = make_number_series(pg_db, company_b, document_type="invoice")
+    # And a tax code of B's: `PATCH /company/tax/codes/{id}` looked up without
+    # a `company_id` filter would find it and rename it.
+    tax_code_in_b = make_tax_code(pg_db, company_b, code="AT-20")
     return {
         "ada": ada,
         "bo": bo,
@@ -206,6 +224,7 @@ def two_companies(pg_db):
         "membership_in_b": bo_in_b,
         "bank_account_in_b": bank_in_b,
         "series_in_b": series_in_b,
+        "tax_code_in_b": tax_code_in_b,
     }
 
 

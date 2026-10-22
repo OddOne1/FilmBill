@@ -230,3 +230,78 @@ def make_number_series(
     db.commit()
     db.refresh(series)
     return series
+
+
+def make_tax_code(
+    db,
+    company: Company,
+    *,
+    code: str = "AT-20",
+    name: str = "20 % USt",
+    rate: str = "20",
+    category: str = "S",
+    legal_notes: Optional[dict] = None,
+    notes_reviewed: bool = False,
+    is_active: bool = True,
+    origin_pack: Optional[str] = "at",
+):
+    """One tax code, written directly.
+
+    Directly rather than through the region-pack seeder, for the same reason
+    `grant` does not use the members endpoint: a test about scoping must not
+    be able to pass because the seeder happened to put the right rows in the
+    right company.
+
+    `rate` is a string and converted here, because a test that writes
+    `rate=20.5` would be writing a float into a NUMERIC column and quietly
+    testing rule 1 in reverse.
+    """
+    from decimal import Decimal
+
+    from apps.api.models.tax import TaxCode
+
+    row = TaxCode(
+        company_id=company.id,
+        code=code,
+        name=name,
+        rate=Decimal(rate),
+        category=category,
+        legal_notes=legal_notes or {},
+        notes_reviewed=notes_reviewed,
+        reporting_mapping={},
+        is_active=is_active,
+        origin_pack=origin_pack,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def make_tax_class(
+    db,
+    company: Company,
+    *,
+    key: str = "standard",
+    label: str = "Normalsteuersatz",
+    code=None,
+    position: int = 10,
+    origin_pack: Optional[str] = "at",
+):
+    """One tax class, pointing at `code` (created if not given)."""
+    from apps.api.models.tax import TaxClass
+
+    if code is None:
+        code = make_tax_code(db, company)
+    row = TaxClass(
+        company_id=company.id,
+        key=key,
+        label=label,
+        code_id=code.id,
+        position=position,
+        origin_pack=origin_pack,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row

@@ -1095,6 +1095,136 @@ export interface paths {
         patch: operations["update_number_series_company_number_series__series_id__patch"];
         trace?: never;
     };
+    "/company/tax/classes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Tax Classes
+         * @description The classes an item can point at, each with its code and rate resolved.
+         *
+         *     Resolved here rather than by the client joining two lists: the web never
+         *     works out a rate (rule 2), and "standard means 20 %" is a fact about this
+         *     company that the server owns.
+         */
+        get: operations["list_tax_classes_company_tax_classes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/company/tax/codes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Tax Codes
+         * @description This company's tax codes.
+         *
+         *     Inactive ones are included BY DEFAULT, unlike the number-series list.
+         *     The generic pack's standard code ships inactive at 0 % and the whole
+         *     point of the screen is that somebody finds it and sets a rate; hiding it
+         *     would hide the one row that needs attention.
+         */
+        get: operations["list_tax_codes_company_tax_codes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/company/tax/codes/{tax_code_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Tax Code
+         * @description Change a tax code's rate, name, notes, reviewed flag or active flag.
+         *
+         *     `code` and `category` are not in `TaxCodeUpdate` at all and `extra` is
+         *     forbidden, so sending either is a 422 naming the field rather than a
+         *     silent no-op. A document line snapshots the code it used (rule 3), and
+         *     renaming `AT-20` would restate invoices that are already issued.
+         *
+         *     The rate/category rule is checked here with the same function the pack
+         *     loader uses, so the message a user sees and the message a broken pack
+         *     produces are the same sentence. The database's CHECK constraint is the
+         *     floor under both.
+         */
+        patch: operations["update_tax_code_company_tax_codes__tax_code_id__patch"];
+        trace?: never;
+    };
+    "/company/tax/propose": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Propose Tax For A Case
+         * @description What tax this sale would carry. Reads; writes nothing.
+         *
+         *     `company.view` and not `company.settings.edit`: this is the question an
+         *     accountant asks about an invoice they are checking, and it changes
+         *     nothing. It is also a POST rather than a GET despite being a read — the
+         *     input has nested overrides, and a query string of nested objects is a
+         *     thing every client encodes slightly differently.
+         */
+        post: operations["propose_tax_for_a_case_company_tax_propose_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/company/tax/rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Tax Rules
+         * @description The ordered rule list, read-only in P1a.
+         *
+         *     Served even though nothing can edit it yet, because "which rule decided
+         *     this" is unreadable without it: the proposal names a rule by position and
+         *     name, and a screen that cannot show the list cannot show what else was
+         *     considered.
+         */
+        get: operations["list_tax_rules_company_tax_rules_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/email-settings": {
         parameters: {
             query?: never;
@@ -2740,6 +2870,299 @@ export interface components {
             } | null;
             /** Timezone */
             timezone?: string | null;
+        };
+        /**
+         * TaxClassResponse
+         * @description A class, with its code resolved for display.
+         *
+         *     `code` and `rate` are served alongside `code_id` so the picker can read
+         *     "Standard rate — AT-20, 20 %" from one request. The web never works out a
+         *     rate from a class (rule 2); it is told.
+         */
+        TaxClassResponse: {
+            /** Category */
+            category: string;
+            /** Code */
+            code: string;
+            /**
+             * Code Id
+             * Format: uuid
+             */
+            code_id: string;
+            /** Code Is Active */
+            code_is_active: boolean;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Origin Pack */
+            origin_pack?: string | null;
+            /**
+             * Position
+             * @default 0
+             */
+            position: number;
+            /**
+             * Rate
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @example 1.5000
+             */
+            rate: string;
+        };
+        /** TaxCodeResponse */
+        TaxCodeResponse: {
+            /** Category */
+            category: string;
+            /** Code */
+            code: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /**
+             * Legal Notes
+             * @default {}
+             */
+            legal_notes: {
+                [key: string]: string;
+            };
+            /** Name */
+            name: string;
+            /**
+             * Notes Reviewed
+             * @default false
+             */
+            notes_reviewed: boolean;
+            /** Origin Pack */
+            origin_pack?: string | null;
+            /**
+             * Rate
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @example 1.5000
+             */
+            rate: string;
+            /**
+             * Reporting Mapping
+             * @default {}
+             */
+            reporting_mapping: {
+                [key: string]: unknown;
+            };
+            /** Revenue Account */
+            revenue_account?: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * TaxCodeUpdate
+         * @description What may be changed. `code` and `category` are absent on purpose.
+         */
+        TaxCodeUpdate: {
+            /** Is Active */
+            is_active?: boolean | null;
+            /** Legal Notes */
+            legal_notes?: {
+                [key: string]: string;
+            } | null;
+            /** Name */
+            name?: string | null;
+            /** Notes Reviewed */
+            notes_reviewed?: boolean | null;
+            /** Rate */
+            rate?: string | null;
+            /** Revenue Account */
+            revenue_account?: string | null;
+        };
+        /**
+         * TaxOverrideRequest
+         * @description An item or party override, as the screen offers it.
+         *
+         *     `code` is required for `kind="code"` and meaningless otherwise, which the
+         *     validator enforces — an override with no code would otherwise be accepted
+         *     and then refused by the engine as "names a code this company does not
+         *     have", which is a confusing way to say "you left the field empty".
+         */
+        TaxOverrideRequest: {
+            /** Code */
+            code?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "code" | "domestic_for_foreign_business";
+        };
+        /**
+         * TaxProposalResponse
+         * @description The proposal. `blocking` means "do not use this", not "a guess".
+         */
+        TaxProposalResponse: {
+            /** Applied Rule */
+            applied_rule?: string | null;
+            /** Applied Rule Position */
+            applied_rule_position?: number | null;
+            /**
+             * Blocking
+             * @default false
+             */
+            blocking: boolean;
+            /** Code */
+            code?: string | null;
+            /** Legal Note */
+            legal_note?: string | null;
+            /** Rate */
+            rate?: string | null;
+            /**
+             * Reasons
+             * @default []
+             */
+            reasons: string[];
+            /** Seller Country */
+            seller_country?: string | null;
+            /** Treatment */
+            treatment?: string | null;
+            /** Treatment Label */
+            treatment_label?: string | null;
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: components["schemas"]["TaxWarningResponse"][];
+            would_have_applied?: components["schemas"]["TaxWouldHaveAppliedResponse"] | null;
+        };
+        /**
+         * TaxProposeRequest
+         * @description Ask what tax a sale would carry. Changes nothing.
+         *
+         *     The SELLER is not in here. The country and the small-business flag come
+         *     from the active company, so a client cannot ask "what would this be if we
+         *     were Austrian" — the answer would be a rate for a company that does not
+         *     exist, and somebody would put it on an invoice.
+         */
+        TaxProposeRequest: {
+            /** Buyer Country */
+            buyer_country?: string | null;
+            /**
+             * Buyer Type
+             * @default business
+             * @enum {string}
+             */
+            buyer_type: "business" | "private";
+            /**
+             * Buyer Vat Verified
+             * @default false
+             */
+            buyer_vat_verified: boolean;
+            /**
+             * Item Class
+             * @default standard
+             */
+            item_class: string;
+            item_override?: components["schemas"]["TaxOverrideRequest"] | null;
+            /**
+             * Lang
+             * @default en
+             */
+            lang: string;
+            party_override?: components["schemas"]["TaxOverrideRequest"] | null;
+            /**
+             * Supply Kind
+             * @default services
+             * @enum {string}
+             */
+            supply_kind: "goods" | "services";
+        };
+        /**
+         * TaxRuleResponse
+         * @description Read-only in P1a. Editing rules is a later step (SCOPE §6.3).
+         */
+        TaxRuleResponse: {
+            /**
+             * Conditions
+             * @default {}
+             */
+            conditions: {
+                [key: string]: unknown;
+            };
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /** Name */
+            name: string;
+            /** Origin Pack */
+            origin_pack?: string | null;
+            /**
+             * Outcome
+             * @default {}
+             */
+            outcome: {
+                [key: string]: unknown;
+            };
+            /** Position */
+            position: number;
+        };
+        /**
+         * TaxWarningResponse
+         * @description A code to branch on and a sentence to show.
+         *
+         *     Both, so the web renders the explanation without owning a copy of it. A
+         *     warning whose text lived only in the frontend would be invisible to every
+         *     other consumer of this API.
+         */
+        TaxWarningResponse: {
+            /** Code */
+            code: string;
+            /** Text */
+            text: string;
+        };
+        /**
+         * TaxWouldHaveAppliedResponse
+         * @description What the rules alone would have produced, when an override changed it.
+         *
+         *     Null unless an override actually changed the answer — an override that
+         *     picks the same code the rules did is not a change, and P2 must not warn
+         *     about it.
+         */
+        TaxWouldHaveAppliedResponse: {
+            /** Applied Rule */
+            applied_rule?: string | null;
+            /** Applied Rule Position */
+            applied_rule_position?: number | null;
+            /** Code */
+            code?: string | null;
+            /** Legal Note */
+            legal_note?: string | null;
+            /** Rate */
+            rate?: string | null;
+            /** Treatment */
+            treatment?: string | null;
+            /** Treatment Label */
+            treatment_label?: string | null;
         };
         /** TestEmailRequest */
         TestEmailRequest: {
@@ -4445,6 +4868,173 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NumberSeriesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_tax_classes_company_tax_classes_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxClassResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_tax_codes_company_tax_codes_get: {
+        parameters: {
+            query?: {
+                include_inactive?: boolean;
+            };
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxCodeResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_tax_code_company_tax_codes__tax_code_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                tax_code_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaxCodeUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxCodeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    propose_tax_for_a_case_company_tax_propose_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaxProposeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxProposalResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_tax_rules_company_tax_rules_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxRuleResponse"][];
                 };
             };
             /** @description Validation Error */
