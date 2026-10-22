@@ -13,6 +13,21 @@ never guess. A missing home country or an inactive code is `blocking`, not a
 plausible-looking 20 %.
 """
 
+from .engine import (
+    OVERRIDE_DOMESTIC_FOR_FOREIGN_BUSINESS,
+    OVERRIDE_FIXED_CODE,
+    OVERRIDE_KINDS,
+    Override,
+    Proposal,
+    TaxClassData,
+    TaxCodeData,
+    TaxInputs,
+    TaxRuleData,
+    TaxWarning,
+    WouldHaveApplied,
+    propose_tax,
+    warning_text,
+)
 from .packs import (
     GENERIC_PACK,
     PACK_DIRECTORY,
@@ -44,6 +59,19 @@ from .vocabulary import (
 
 __all__ = [
     "BUYER_REGIONS",
+    "OVERRIDE_DOMESTIC_FOR_FOREIGN_BUSINESS",
+    "OVERRIDE_FIXED_CODE",
+    "OVERRIDE_KINDS",
+    "Override",
+    "Proposal",
+    "TaxClassData",
+    "TaxCodeData",
+    "TaxInputs",
+    "TaxRuleData",
+    "TaxWarning",
+    "WouldHaveApplied",
+    "propose_tax",
+    "warning_text",
     "GENERIC_PACK",
     "PACK_DIRECTORY",
     "PackClass",

@@ -85,6 +85,10 @@ WARNING_CODES: tuple[str, ...] = (
     "code_inactive",
     #: The company has no country, so no rule can be evaluated at all.
     "home_country_missing",
+    #: The BUYER has no country, so there is no way to tell a domestic sale
+    #: from an export. Separate from the one above because the fix is in a
+    #: different place and the person who can make it is a different person.
+    "buyer_country_missing",
 )
 
 

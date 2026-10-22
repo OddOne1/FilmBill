@@ -540,3 +540,47 @@ def pack_for_country(
     if name is None:
         return None
     return load_pack(name, directory=directory)
+
+
+# ─── For the engine ─────────────────────────────────────────────────────────
+
+
+def engine_tables(pack: RegionPack):
+    """A pack as the three lists `propose_tax` takes.
+
+    Here rather than in the engine, because "a pack, ready to be proposed
+    from" is a fact about packs; the engine knows nothing about YAML and
+    should go on knowing nothing. The service layer has the equivalent for
+    rows (`services/tax_service.py`), and the two must agree — which is what
+    `test_the_propose_endpoint_matches_the_pure_function` checks end to end.
+    """
+    from .engine import TaxClassData, TaxCodeData, TaxRuleData
+
+    codes = [
+        TaxCodeData(
+            code=entry.code,
+            name=entry.name,
+            rate=entry.rate,
+            category=entry.category,
+            legal_notes=dict(entry.legal_notes),
+            # Nothing a pack ships is reviewed. A company's own row may be.
+            notes_reviewed=False,
+            is_active=entry.is_active,
+        )
+        for entry in pack.codes
+    ]
+    classes = [
+        TaxClassData(key=entry.key, label=entry.label, code=entry.code)
+        for entry in pack.classes
+    ]
+    rules = [
+        TaxRuleData(
+            position=entry.position,
+            name=entry.name,
+            conditions=dict(entry.conditions),
+            outcome=dict(entry.outcome),
+            is_active=entry.is_active,
+        )
+        for entry in pack.rules
+    ]
+    return codes, classes, rules

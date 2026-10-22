@@ -315,13 +315,27 @@ def test_the_member_list_can_be_overridden_without_changing_a_caller():
     )
 
 
-def test_the_warning_codes_are_closed_and_cover_the_four_scope_cases():
+def test_the_warning_codes_are_closed_and_every_one_has_a_sentence():
+    """Five: the prompt's four, plus the buyer having no country.
+
+    A proposal cannot tell a domestic sale from an export without the buyer's
+    country, and that is a different fix by a different person than the
+    company's own missing country — so it is its own code rather than a
+    reused one.
+    """
+    from apps.api.billing.tax import warning_text
+
     assert set(WARNING_CODES) == {
         "buyer_vat_id_not_verified",
         "legal_note_not_reviewed",
         "code_inactive",
         "home_country_missing",
+        "buyer_country_missing",
     }
+    for code in WARNING_CODES:
+        text = warning_text(code)
+        assert text != code, f"{code} has no sentence"
+        assert text.endswith("."), f"{code}'s text is not a sentence: {text!r}"
 
 
 def test_the_value_lists_are_tuples_so_nothing_can_append_to_them():
