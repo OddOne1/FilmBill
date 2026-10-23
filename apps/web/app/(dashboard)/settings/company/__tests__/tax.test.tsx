@@ -24,7 +24,13 @@ vi.mock('@/lib/api', () => ({
 import { api, ApiError } from '@/lib/api'
 import TaxPage from '../tax/page'
 import { useCompanyStore } from '@/stores/company-store'
-import type { TaxClass, TaxCode, TaxProposal, TaxRule } from '@/types'
+import type {
+  NoTaxCategoryOption,
+  TaxClass,
+  TaxCode,
+  TaxProposal,
+  TaxRule,
+} from '@/types'
 
 /**
  * Settings → Company → Tax.
@@ -162,6 +168,77 @@ function makeProposal(overrides: Partial<TaxProposal> = {}): TaxProposal {
   }
 }
 
+/** The six kinds, as `GET /company/tax/no-tax-categories` serves them. */
+const CATEGORIES: NoTaxCategoryOption[] = [
+  {
+    category: 'Z',
+    labels: {
+      en: 'Zero-rated — taxable, but the rate is 0 %.',
+      de: 'Nullsatz — steuerbar, aber mit 0 % besteuert.',
+    },
+  },
+  {
+    category: 'E',
+    labels: {
+      en: 'Exempt — outside the tax for a reason in the law, with no input-tax deduction.',
+      de: 'Steuerfrei — gesetzlich befreit, ohne Vorsteuerabzug.',
+    },
+  },
+  {
+    category: 'AE',
+    labels: {
+      en: 'Reverse charge — the recipient accounts for the tax.',
+      de: 'Reverse Charge — die Steuerschuld geht auf den Empfänger über.',
+    },
+  },
+  {
+    category: 'K',
+    labels: {
+      en: 'Intra-community supply — goods to a VAT-registered buyer in another EU country.',
+      de: 'Innergemeinschaftliche Lieferung.',
+    },
+  },
+  {
+    category: 'G',
+    labels: {
+      en: 'Export — goods leaving the EU.',
+      de: 'Ausfuhr — Waren verlassen die EU.',
+    },
+  },
+  {
+    category: 'O',
+    labels: {
+      en: 'Not subject to tax — the place of supply is outside this country.',
+      de: 'Nicht steuerbar.',
+    },
+  },
+]
+
+/** A rate the company added itself, with its generated class key. */
+const CUSTOM_CODE = makeCode({
+  id: 'code-45',
+  code: 'AT-4.5',
+  name: 'Super-reduced',
+  rate: '4.5000',
+  category: 'S',
+  origin_pack: null,
+})
+
+const CUSTOM_CLASS: TaxClass = {
+  id: 'class-custom',
+  key: 'custom_1',
+  label: 'Super-reduced',
+  code_id: 'code-45',
+  code: 'AT-4.5',
+  rate: '4.5000',
+  category: 'S',
+  code_is_active: true,
+  is_active: true,
+  position: 50,
+  origin_pack: null,
+  is_custom: true,
+}
+
 function seedCompany(permissions = ['company.view', 'company.settings.edit']) {
   useCompanyStore.setState({
     companies: [
@@ -186,20 +263,26 @@ function mockApi({
   codes = [makeCode(), REVERSE_CHARGE],
   classes = CLASSES,
   rules = RULES,
+  categories = CATEGORIES,
   proposal = makeProposal(),
 }: {
   codes?: TaxCode[]
   classes?: TaxClass[]
   rules?: TaxRule[]
+  categories?: NoTaxCategoryOption[]
   proposal?: TaxProposal
 } = {}) {
   vi.mocked(api.get).mockImplementation(async (path: string) => {
     if (path === '/company/tax/codes') return codes as never
     if (path === '/company/tax/classes') return classes as never
     if (path === '/company/tax/rules') return rules as never
+    if (path === '/company/tax/no-tax-categories') return categories as never
     throw new Error(`unexpected GET ${path}`)
   })
-  vi.mocked(api.post).mockImplementation(async () => proposal as never)
+  vi.mocked(api.post).mockImplementation(async (path: string) => {
+    if (path === '/company/tax/propose') return proposal as never
+    return makeCode() as never
+  })
   vi.mocked(api.patch).mockImplementation(async () => makeCode() as never)
 }
 
@@ -215,52 +298,80 @@ beforeEach(() => {
   seedCompany()
 })
 
-// ─── Codes ──────────────────────────────────────────────────────────────────
+// ─── Codes: two sections ────────────────────────────────────────────────────
 
-describe('the Codes tab shows what the API sent', () => {
-  it('lists each code with its rate, category and note state', async () => {
+describe('the Codes tab separates rates from no-tax cases', () => {
+  it('lists each rate from its class, with the code and rate the API sent', async () => {
+    mockApi({ codes: [makeCode(), REVERSE_CHARGE, CUSTOM_CODE], classes: [...CLASSES, CUSTOM_CLASS] })
+    render(<TaxPage />)
+
+    // Gates on a fetched value — a rate string, which no chrome contains.
+    expect(await screen.findByText('20.0000 %')).toBeInTheDocument()
+    expect(screen.getByText('AT-20')).toBeInTheDocument()
+    expect(screen.getByText('4.5000 %')).toBeInTheDocument()
+    // A rate the company added says so, because "FilmBill put this here" and
+    // "we added this" are different things to somebody reviewing a tax table.
+    expect(screen.getByText('added here')).toBeInTheDocument()
+  })
+
+  it('puts a code no class points at in the no-tax section, with its kind', async () => {
     mockApi()
     render(<TaxPage />)
 
-    // Gates on a fetched value — the rate string, which no part of the
-    // chrome contains.
-    expect(await screen.findByText('20.0000 %')).toBeInTheDocument()
-    expect(screen.getByText('AT-20')).toBeInTheDocument()
+    await screen.findByText('20.0000 %')
+    // `EU-AE` has no class, so it is a no-tax case — and its kind is the
+    // sentence the API served, not a code.
     expect(screen.getByText('EU-AE')).toBeInTheDocument()
-    // `AT-20` ships without a legal note, `EU-AE` with an unreviewed one.
-    expect(screen.getByText('No legal note')).toBeInTheDocument()
+    expect(
+      screen.getByText('Reverse charge — the recipient accounts for the tax.'),
+    ).toBeInTheDocument()
     expect(screen.getByText('Note not reviewed')).toBeInTheDocument()
   })
 
   it('shows a reviewed note as reviewed', async () => {
-    mockApi({ codes: [{ ...REVERSE_CHARGE, notes_reviewed: true }] })
+    mockApi({ codes: [makeCode(), { ...REVERSE_CHARGE, notes_reviewed: true }] })
     render(<TaxPage />)
 
     expect(await screen.findByText('Note reviewed')).toBeInTheDocument()
     expect(screen.queryByText('Note not reviewed')).not.toBeInTheDocument()
   })
 
-  it('tells the user to set a rate on the generic pack’s inactive standard code', async () => {
-    mockApi({ codes: [UNSET_STANDARD] })
+  it('says “set your rate” on an unset rate, whatever its code is called', async () => {
+    // The generalised condition: category S, 0 %, inactive. The generic pack
+    // now ships two of these, and the hint must not depend on the name.
+    mockApi({
+      codes: [UNSET_STANDARD, { ...UNSET_STANDARD, id: 'code-red', code: 'EU-RED', name: 'Reduced rate (set your rate)' }],
+      classes: [
+        { ...CLASSES[0], code_id: 'code-std', code: 'EU-STD', rate: '0.0000', code_is_active: false },
+        { ...CLASSES[1], code_id: 'code-red', code: 'EU-RED', rate: '0.0000', code_is_active: false },
+      ],
+    })
     render(<TaxPage />)
 
-    const hint = await screen.findByTestId('tax-code-needs-rate-EU-STD')
-    expect(hint).toHaveTextContent('Set your rate')
-    expect(hint).toHaveTextContent('nothing can be proposed from it')
+    for (const code of ['EU-STD', 'EU-RED']) {
+      const hint = await screen.findByTestId(`tax-code-needs-rate-${code}`)
+      expect(hint).toHaveTextContent('Set your rate')
+      expect(hint).toHaveTextContent('nothing can be proposed')
+    }
   })
 
-  it('does not show that hint on an active code', async () => {
-    mockApi({ codes: [makeCode()] })
+  it('does not show that hint on a rate that has a number in it', async () => {
+    // Austria's 4.9 % foodstuffs rate is inactive WITH a real rate, so the
+    // hint would send somebody looking for a field already filled in.
+    mockApi({
+      codes: [{ ...CUSTOM_CODE, is_active: false }],
+      classes: [{ ...CUSTOM_CLASS, is_active: false, code_is_active: false }],
+    })
     render(<TaxPage />)
 
-    await screen.findByText('20.0000 %')
+    await screen.findByText('4.5000 %')
     expect(
-      screen.queryByTestId('tax-code-needs-rate-AT-20'),
+      screen.queryByTestId('tax-code-needs-rate-AT-4.5'),
     ).not.toBeInTheDocument()
   })
 
   it('says what to do when the company has no tax codes at all', async () => {
-    mockApi({ codes: [] })
+    mockApi({ codes: [], classes: [] })
     render(<TaxPage />)
 
     const empty = await screen.findByTestId('tax-codes-empty')
@@ -269,98 +380,284 @@ describe('the Codes tab shows what the API sent', () => {
   })
 })
 
-describe('editing a code', () => {
-  it('sends only the editable fields, and never the code or the category', async () => {
+describe('adding a rate', () => {
+  it('offers the button to an editor and posts what was typed', async () => {
     mockApi()
     render(<TaxPage />)
-    fireEvent.click(await screen.findByText('AT-20'))
 
-    const rate = await screen.findByLabelText(/Rate \(%\)/)
-    fireEvent.change(rate, { target: { value: '21' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
-
-    await waitFor(() => expect(api.patch).toHaveBeenCalled())
-    const [path, body] = vi.mocked(api.patch).mock.calls[0]
-    expect(path).toBe('/company/tax/codes/code-20')
-    expect(body).toMatchObject({ rate: '21' })
-    // Immutable on the server; not even offered here. A screen that sent
-    // them would get a 422 naming the field.
-    expect(body).not.toHaveProperty('code')
-    expect(body).not.toHaveProperty('category')
-  })
-
-  it('says the code and the category cannot be changed, and why', async () => {
-    mockApi()
-    render(<TaxPage />)
-    fireEvent.click(await screen.findByText('AT-20'))
-
-    const drawer = await screen.findByLabelText(/Rate \(%\)/)
-    expect(drawer).toBeInTheDocument()
-    expect(
-      screen.getByText(/cannot\s+be changed/),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByText(/renaming it would restate invoices/),
-    ).toBeInTheDocument()
-  })
-
-  it('offers a note field per language and drops a language that is emptied', async () => {
-    mockApi({ codes: [REVERSE_CHARGE] })
-    render(<TaxPage />)
-    fireEvent.click(await screen.findByText('EU-AE'))
-
-    const german = await screen.findByLabelText('DE')
-    expect(german).toHaveValue(
-      'Steuerschuld geht auf den Leistungsempfänger über.',
-    )
-    fireEvent.change(german, { target: { value: '' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
-
-    await waitFor(() => expect(api.patch).toHaveBeenCalled())
-    const [, body] = vi.mocked(api.patch).mock.calls[0]
-    expect((body as { legal_notes: Record<string, string> }).legal_notes).toEqual({
-      en: 'Reverse charge: VAT to be accounted for by the recipient.',
+    fireEvent.click(await screen.findByTestId('tax-add-rate'))
+    fireEvent.change(screen.getByLabelText(/^Name/), {
+      target: { value: 'Super-reduced' },
     })
+    fireEvent.change(screen.getByLabelText(/Rate \(%\)/), {
+      target: { value: '4.5' },
+    })
+    fireEvent.click(screen.getByTestId('tax-add-rate-submit'))
+
+    await waitFor(() =>
+      expect(vi.mocked(api.post)).toHaveBeenCalledWith('/company/tax/rates', {
+        label: 'Super-reduced',
+        rate: '4.5',
+        // Empty means "you name it": the server builds it from the country
+        // and the rate.
+        code: null,
+      }),
+    )
   })
 
-  it('shows the server’s own sentence when a save is refused', async () => {
+  it('sends a code the user typed, upper-cased', async () => {
     mockApi()
-    vi.mocked(api.patch).mockRejectedValue(
+    render(<TaxPage />)
+
+    fireEvent.click(await screen.findByTestId('tax-add-rate'))
+    fireEvent.change(screen.getByLabelText(/^Name/), {
+      target: { value: 'House' },
+    })
+    fireEvent.change(screen.getByLabelText(/Rate \(%\)/), {
+      target: { value: '7' },
+    })
+    fireEvent.change(screen.getByLabelText(/Code \(optional\)/), {
+      target: { value: 'haus-7' },
+    })
+    fireEvent.click(screen.getByTestId('tax-add-rate-submit'))
+
+    await waitFor(() =>
+      expect(vi.mocked(api.post).mock.calls.at(-1)?.[1]).toMatchObject({
+        code: 'HAUS-7',
+      }),
+    )
+  })
+
+  it('cannot be submitted without a name and a rate', async () => {
+    mockApi()
+    render(<TaxPage />)
+
+    fireEvent.click(await screen.findByTestId('tax-add-rate'))
+    // Rule 17c: disabled, and the two fields it is waiting for are the two
+    // visibly empty ones rather than a hidden condition.
+    expect(screen.getByTestId('tax-add-rate-submit')).toBeDisabled()
+
+    fireEvent.change(screen.getByLabelText(/^Name/), {
+      target: { value: 'Only a name' },
+    })
+    expect(screen.getByTestId('tax-add-rate-submit')).toBeDisabled()
+
+    fireEvent.change(screen.getByLabelText(/Rate \(%\)/), {
+      target: { value: '4.5' },
+    })
+    expect(screen.getByTestId('tax-add-rate-submit')).toBeEnabled()
+  })
+
+  it('shows the server’s own sentence when the rate is refused', async () => {
+    mockApi()
+    vi.mocked(api.post).mockRejectedValue(
       new ApiError(
         422,
-        'Tax code \'EU-AE\': category \'AE\' is a zero-rate category, so its rate must be 0 and not 20.',
+        'A rate of 140 % is not usable. Give a percentage above 0 and below 100 — 20 means 20 %.',
       ),
     )
     render(<TaxPage />)
-    fireEvent.click(await screen.findByText('AT-20'))
-    fireEvent.change(await screen.findByLabelText(/Rate \(%\)/), {
-      target: { value: '20' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
-    // Verbatim. The server owns this explanation, and a generic "could not
-    // save" would hide the only sentence that says what to do.
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'zero-rate category',
+    fireEvent.click(await screen.findByTestId('tax-add-rate'))
+    fireEvent.change(screen.getByLabelText(/^Name/), {
+      target: { value: 'Nonsense' },
+    })
+    fireEvent.change(screen.getByLabelText(/Rate \(%\)/), {
+      target: { value: '140' },
+    })
+    fireEvent.click(screen.getByTestId('tax-add-rate-submit'))
+
+    expect(await screen.findByTestId('tax-add-rate-error')).toHaveTextContent(
+      'above 0 and below 100',
+    )
+  })
+})
+
+describe('adding a no-tax case', () => {
+  it('offers the six kinds the API served, with their own sentences', async () => {
+    mockApi()
+    render(<TaxPage />)
+
+    fireEvent.click(await screen.findByTestId('tax-add-no-tax-case'))
+    const kinds = screen.getByLabelText('Kind')
+    // The list comes from the API, so the dialog cannot offer a seventh.
+    expect(kinds).toHaveTextContent('Zero-rated')
+    expect(kinds).toHaveTextContent('Exempt')
+    expect(kinds).toHaveTextContent('Reverse charge')
+    expect(kinds).not.toHaveTextContent('Standard')
+  })
+
+  it('shows the chosen kind’s explanation in both languages', async () => {
+    mockApi()
+    render(<TaxPage />)
+
+    fireEvent.click(await screen.findByTestId('tax-add-no-tax-case'))
+    fireEvent.change(screen.getByLabelText('Kind'), { target: { value: 'E' } })
+
+    const help = await screen.findByTestId('tax-no-tax-kind-help')
+    expect(help).toHaveTextContent('outside the tax for a reason in the law')
+    expect(help).toHaveTextContent('gesetzlich befreit')
+  })
+
+  it('says the wording is the user’s responsibility', async () => {
+    mockApi()
+    render(<TaxPage />)
+
+    fireEvent.click(await screen.findByTestId('tax-add-no-tax-case'))
+
+    const warning = await screen.findByTestId('tax-no-tax-responsibility')
+    expect(warning).toHaveTextContent('yours to be right about')
+    expect(warning).toHaveTextContent('tax advisor')
+  })
+
+  it('posts the kind, the name and the notes per language', async () => {
+    mockApi()
+    render(<TaxPage />)
+
+    fireEvent.click(await screen.findByTestId('tax-add-no-tax-case'))
+    fireEvent.change(screen.getByLabelText('Kind'), { target: { value: 'E' } })
+    fireEvent.change(screen.getByLabelText(/^Name/), {
+      target: { value: 'Exempt – training' },
+    })
+    fireEvent.change(screen.getByLabelText('DE'), {
+      target: { value: 'Steuerfrei: Bildungsleistung.' },
+    })
+    fireEvent.click(screen.getByTestId('tax-add-no-tax-submit'))
+
+    await waitFor(() =>
+      expect(vi.mocked(api.post)).toHaveBeenCalledWith(
+        '/company/tax/no-tax-cases',
+        {
+          label: 'Exempt – training',
+          category: 'E',
+          code: null,
+          legal_notes: { de: 'Steuerfrei: Bildungsleistung.' },
+        },
+      ),
     )
   })
 
-  it('says “No changes” rather than being inert when nothing was edited', async () => {
+  it('cannot be submitted without a kind', async () => {
     mockApi()
     render(<TaxPage />)
-    fireEvent.click(await screen.findByText('AT-20'))
 
-    // Rule 17c: a disabled control must say why, and this one says it in its
-    // own label rather than being dead and silent.
-    const button = await screen.findByRole('button', { name: 'No changes' })
-    expect(button).toBeDisabled()
+    fireEvent.click(await screen.findByTestId('tax-add-no-tax-case'))
+    fireEvent.change(screen.getByLabelText(/^Name/), {
+      target: { value: 'Nameless kind' },
+    })
+    expect(screen.getByTestId('tax-add-no-tax-submit')).toBeDisabled()
+
+    fireEvent.change(screen.getByLabelText('Kind'), { target: { value: 'G' } })
+    expect(screen.getByTestId('tax-add-no-tax-submit')).toBeEnabled()
+  })
+})
+
+describe('editing and retiring from the row', () => {
+  it('renames through the class and changes the rate through the code', async () => {
+    mockApi({ codes: [CUSTOM_CODE], classes: [CUSTOM_CLASS] })
+    render(<TaxPage />)
+
+    await screen.findByText('4.5000 %')
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    fireEvent.change(screen.getByLabelText(/^Name/), {
+      target: { value: 'Super-reduced (checked)' },
+    })
+    fireEvent.change(screen.getByLabelText(/Rate \(%\)/), {
+      target: { value: '4.9' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(api.patch).toHaveBeenCalledTimes(2))
+    const calls = vi.mocked(api.patch).mock.calls
+    // The label belongs to the class, the percentage to the code. The class
+    // goes first, so a refused rate does not lose the rename too.
+    expect(calls[0]).toEqual([
+      '/company/tax/classes/class-custom',
+      { label: 'Super-reduced (checked)' },
+    ])
+    expect(calls[1]).toEqual(['/company/tax/codes/code-45', { rate: '4.9' }])
+  })
+
+  it('shows the server’s notice about what a rate change means', async () => {
+    const notice =
+      'This rate applies to documents created from now on. Documents that have already been issued keep the rate they were issued with.'
+    mockApi({ codes: [CUSTOM_CODE], classes: [CUSTOM_CLASS] })
+    vi.mocked(api.patch).mockResolvedValue({
+      ...CUSTOM_CODE,
+      rate: '4.9000',
+      notices: [notice],
+    } as never)
+    render(<TaxPage />)
+
+    await screen.findByText('4.5000 %')
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    fireEvent.change(screen.getByLabelText(/Rate \(%\)/), {
+      target: { value: '4.9' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    // Verbatim, from the response — the screen does not own this wording.
+    expect(
+      await screen.findByTestId('tax-rate-notice-AT-4.5'),
+    ).toHaveTextContent('already been issued')
+  })
+
+  it('retires a rate through the class endpoint', async () => {
+    mockApi({ codes: [CUSTOM_CODE], classes: [CUSTOM_CLASS] })
+    render(<TaxPage />)
+
+    await screen.findByText('4.5000 %')
+    fireEvent.click(screen.getByTestId('tax-rate-toggle-AT-4.5'))
+
+    await waitFor(() =>
+      expect(api.patch).toHaveBeenCalledWith(
+        '/company/tax/classes/class-custom',
+        { is_active: false },
+      ),
+    )
+  })
+
+  it('shows the 409 sentence naming the referrer when a retire is refused', async () => {
+    mockApi()
+    vi.mocked(api.patch).mockRejectedValue(
+      new ApiError(
+        409,
+        'EU-AE cannot be deactivated: it is used by rule “EU business, VAT ID verified, services: reverse charge”. Change or deactivate that first.',
+      ),
+    )
+    render(<TaxPage />)
+
+    await screen.findByText('EU-AE')
+    fireEvent.click(screen.getByTestId('tax-case-toggle-EU-AE'))
+
+    // The referrer's NAME, not a generic failure — the whole point of the
+    // 409 is that it says where to go.
+    const error = await screen.findByTestId('tax-case-error-EU-AE')
+    expect(error).toHaveTextContent('used by rule')
+    expect(error).toHaveTextContent('reverse charge')
+  })
+
+  it('reactivates an inactive case', async () => {
+    mockApi({
+      codes: [makeCode(), { ...REVERSE_CHARGE, is_active: false }],
+    })
+    render(<TaxPage />)
+
+    await screen.findByText('EU-AE')
+    fireEvent.click(screen.getByTestId('tax-case-toggle-EU-AE'))
+
+    await waitFor(() =>
+      expect(api.patch).toHaveBeenCalledWith('/company/tax/codes/code-ae', {
+        is_active: true,
+      }),
+    )
   })
 })
 
 describe('a member who may read but not edit', () => {
-  it('sees the rows, a sentence saying why, and no edit drawer', async () => {
+  it('sees the rows and no way to change anything, and is told why', async () => {
     seedCompany(['company.view'])
-    mockApi()
+    mockApi({ codes: [makeCode(), REVERSE_CHARGE, CUSTOM_CODE], classes: [...CLASSES, CUSTOM_CLASS] })
     render(<TaxPage />)
 
     expect(await screen.findByText('20.0000 %')).toBeInTheDocument()
@@ -368,11 +665,15 @@ describe('a member who may read but not edit', () => {
       screen.getByText(/read these but not change them/),
     ).toBeInTheDocument()
 
-    fireEvent.click(screen.getByText('AT-20'))
-    // No drawer, and — rule 17c — no dead Save button either.
-    expect(screen.queryByLabelText(/Rate \(%\)/)).not.toBeInTheDocument()
+    // No plus buttons, no Edit, no Deactivate — and rule 17c: absent rather
+    // than present and dead, with a sentence saying why.
+    expect(screen.queryByTestId('tax-add-rate')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('tax-add-no-tax-case')).not.toBeInTheDocument()
     expect(
-      screen.queryByRole('button', { name: /^(Save|No changes)$/ }),
+      screen.queryByRole('button', { name: 'Edit' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /Deactivate|Activate/ }),
     ).not.toBeInTheDocument()
   })
 })
@@ -625,5 +926,80 @@ describe('the Test a case tab asks the server for everything', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'unexpected value',
     )
+  })
+})
+
+// ─── Test a case: the selectors follow what is usable ───────────────────────
+
+describe('the Test-a-case selectors offer only what can be proposed', () => {
+  it('lists a class the company added, alongside the pack’s own', async () => {
+    mockApi({
+      codes: [makeCode(), REVERSE_CHARGE, CUSTOM_CODE],
+      classes: [...CLASSES, CUSTOM_CLASS],
+    })
+    render(<TaxPage />)
+    await openTestTab()
+
+    const select = screen.getByLabelText('Item tax class')
+    expect(select).toHaveTextContent('Normalsteuersatz (20 %) — AT-20, 20.0000 %')
+    expect(select).toHaveTextContent('Super-reduced — AT-4.5, 4.5000 %')
+  })
+
+  it('omits a retired rate, because its only possible answer is “blocked”', async () => {
+    mockApi({
+      codes: [makeCode(), { ...CUSTOM_CODE, is_active: false }],
+      classes: [
+        CLASSES[0],
+        { ...CUSTOM_CLASS, is_active: false, code_is_active: false },
+      ],
+    })
+    render(<TaxPage />)
+    await openTestTab()
+
+    const select = screen.getByLabelText('Item tax class')
+    expect(select).toHaveTextContent('Normalsteuersatz')
+    expect(select).not.toHaveTextContent('Super-reduced')
+  })
+
+  it('offers an active custom no-tax case as an override', async () => {
+    const exempt = makeCode({
+      id: 'code-exempt',
+      code: 'AT-E',
+      name: 'Exempt – training',
+      rate: '0.0000',
+      category: 'E',
+      origin_pack: null,
+    })
+    mockApi({ codes: [makeCode(), exempt] })
+    render(<TaxPage />)
+    await openTestTab()
+
+    fireEvent.change(screen.getByLabelText('Item override'), {
+      target: { value: 'code' },
+    })
+    const picker = await screen.findByLabelText('Item override — tax code')
+    expect(picker).toHaveTextContent('AT-E — Exempt – training')
+  })
+
+  it('omits a retired no-tax case from the override picker', async () => {
+    const exempt = makeCode({
+      id: 'code-exempt',
+      code: 'AT-E',
+      name: 'Exempt – training',
+      rate: '0.0000',
+      category: 'E',
+      is_active: false,
+      origin_pack: null,
+    })
+    mockApi({ codes: [makeCode(), exempt] })
+    render(<TaxPage />)
+    await openTestTab()
+
+    fireEvent.change(screen.getByLabelText('Party override'), {
+      target: { value: 'code' },
+    })
+    const picker = await screen.findByLabelText('Party override — tax code')
+    expect(picker).toHaveTextContent('AT-20')
+    expect(picker).not.toHaveTextContent('AT-E')
   })
 })
