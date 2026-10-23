@@ -141,7 +141,7 @@ PERMISSIONS: dict[str, set[CompanyRole]] = {
     #:
     #: [Guessing] — the matrix is the prompt's proposal with the accountant
     #: kept on view, and it is recorded as a decision rather than a
-    #: certainty (SCOPE D60).
+    #: certainty (SCOPE D58).
     "parties.view": _PRODUCTION,
     "parties.edit": _PARTY_EDIT,
     #: P5. The archive of finalized documents. The tax advisor's entire
