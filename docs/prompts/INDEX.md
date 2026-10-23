@@ -20,7 +20,7 @@ from them. `docs/SCOPE.md` is where the product is decided.
 | P0b-3 | Healthcheck, IBAN uniqueness, CI real-DB guard, number series, audit events, backup modes, rule consolidation | [`19-filmbill-P0b-3.md`](19-filmbill-P0b-3.md) | `b8e10b3`…`0c186df` | done — see notes |
 | restore-sudo | The printed restore command could not read its own dump | [`20-backup-restore-needs-sudo-gunzip.md`](20-backup-restore-needs-sudo-gunzip.md) | `af9bbc7` | done — see notes |
 | P1a | Tax: data model, region packs, the proposal engine, API, screens | [`21-filmbill-P1a-tax.md`](21-filmbill-P1a-tax.md) | `57d9b5a`…`154160c` | done — see notes |
-| P1a-2 | A company adds its own rates and no-tax cases | [`22-filmbill-P1a-2-user-rates.md`](22-filmbill-P1a-2-user-rates.md) | `f84ca55`…`PENDING` | done — see notes |
+| P1a-2 | A company adds its own rates and no-tax cases | [`22-filmbill-P1a-2-user-rates.md`](22-filmbill-P1a-2-user-rates.md) | `f84ca55`…`6c7a37f` | done — see notes |
 | P0b | Foundations: companies, roles, number series, audit, money, codegen | [`03-filmbill-P0b-foundations.md`](03-filmbill-P0b-foundations.md) | — | superseded — split into P0b-0, P0b-1, P0b-2 |
 
 ---
@@ -1151,7 +1151,7 @@ and selectors that offer only what can actually be proposed. One real bug
 fixed: a refresh after a save unmounted the section and ate the server's own
 notice.
 
-**Part 6 — documentation (`PENDING`, this commit).** SCOPE §16 D51 and D52,
+**Part 6 — documentation (`6c7a37f`).** SCOPE §16 D51 and D52,
 and §17 question 9(a) extended to ask about the 4.9 % rate.
 
 **Flagged.** Two decisions are marked `[Guessing]` in D51 and are Claude's,
