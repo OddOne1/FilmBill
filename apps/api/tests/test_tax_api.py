@@ -107,13 +107,17 @@ def test_inactive_codes_are_listed_by_default(pg_client, austrian_company):
     response = pg_client.get("/company/tax/codes", headers=_headers(austrian_company))
 
     body = {row["code"]: row for row in response.json()}
-    assert body["EU-STD"]["is_active"] is False
+    # Austria's 4.9 % foodstuffs rate: shipped off, and listed so somebody
+    # can find it. The generic pack's unset placeholders are not here at all —
+    # Austria has its own rates (`drop_codes` in at.yaml).
+    assert body["AT-4.9"]["is_active"] is False
+    assert "EU-STD" not in body
 
     only_active = pg_client.get(
         "/company/tax/codes?include_inactive=false",
         headers=_headers(austrian_company),
     )
-    assert "EU-STD" not in {row["code"] for row in only_active.json()}
+    assert "AT-4.9" not in {row["code"] for row in only_active.json()}
 
 
 def test_the_classes_list_resolves_each_code_and_rate(pg_client, austrian_company):
@@ -129,6 +133,7 @@ def test_the_classes_list_resolves_each_code_and_rate(pg_client, austrian_compan
         "standard",
         "reduced",
         "reduced_2",
+        "reduced_3",
         "zero",
     ], "classes must come back in display order, not alphabetically"
     by_key = {row["key"]: row for row in rows}

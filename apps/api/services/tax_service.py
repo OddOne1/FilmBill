@@ -159,6 +159,10 @@ def seed_tax_configuration(
                 label=entry.label,
                 code_id=code_row.id,
                 position=entry.position,
+                # From the pack, so Austria's 4.9 % foodstuffs rate arrives
+                # switched off with its code rather than as an option in
+                # every picker.
+                is_active=entry.is_active,
                 origin_pack=entry.origin_pack,
             )
         )

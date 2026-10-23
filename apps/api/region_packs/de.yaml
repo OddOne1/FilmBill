@@ -16,6 +16,9 @@ name: Deutschland
 extends: eu_generic
 countries: [DE]
 
+# Germany has its own rates — see the note in at.yaml.
+drop_codes: [EU-STD, EU-RED]
+
 codes:
   - code: DE-19
     name: 19 % USt (Regelsteuersatz)

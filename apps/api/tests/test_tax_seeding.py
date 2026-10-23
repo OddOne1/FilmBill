@@ -212,12 +212,16 @@ def test_the_migration_backfills_an_austrian_company(at_revision_0009):
         assert codes[code]["rate"] == "0.0000"
         assert codes[code]["origin_pack"] == "eu_generic"
 
-    # The generic standard code is inactive even for Austria, where AT-20 is
-    # the real one. Harmless, and it keeps every company's pack the same shape.
+    # Migration 0010 carries its OWN copy of the seed data, frozen on
+    # 2026-10-22 — so it still has the generic pack's unset standard code and
+    # still has four classes, while the live pack has five and drops the
+    # placeholders. That is the point of the inlining and not a drift to fix:
+    # a migration is a record of what happened to a database on a day, and no
+    # company in existence has Austrian tax rows for it to have happened to
+    # (both the dev database and the LAN instance still have no country).
+    # `test_tax_seeding`'s service tests above assert TODAY's pack.
     assert codes["EU-STD"]["is_active"] is False
 
-    # SCOPE §6.3's classes, and `reduced` is the 10 % one — see the pack
-    # header and §17's question for the Steuerberater.
     assert classes == {
         "standard": "AT-20",
         "reduced": "AT-10",
@@ -433,13 +437,24 @@ def test_creating_a_company_with_a_country_seeds_its_pack(pg_db):
     assert codes["AT-20"].rate == Decimal("20.0000")
     assert codes["AT-20"].origin_pack == "at"
     assert codes["EU-AE"].origin_pack == "eu_generic"
-    assert codes["EU-STD"].is_active is False
     assert _class_codes_of(pg_db, company) == {
         "standard": "AT-20",
         "reduced": "AT-10",
         "reduced_2": "AT-13",
+        "reduced_3": "AT-4.9",
         "zero": "AT-0",
     }
+    # The 4.9 % foodstuffs rate arrives switched off, class and code together.
+    inactive = (
+        pg_db.query(TaxClass)
+        .filter(TaxClass.company_id == company.id, TaxClass.is_active.is_(False))
+        .all()
+    )
+    assert [row.key for row in inactive] == ["reduced_3"]
+    assert codes["AT-4.9"].is_active is False
+    # And the generic pack's two unset placeholders are not here: Austria has
+    # its own rates, so they would be permanently-empty rows.
+    assert "EU-STD" not in codes and "EU-RED" not in codes
     assert (
         pg_db.query(TaxRule).filter(TaxRule.company_id == company.id).count() == 8
     )
@@ -474,9 +489,20 @@ def test_a_company_in_a_country_with_no_pack_gets_an_inactive_standard_rate(pg_d
     pg_db.commit()
 
     codes = _codes_of(pg_db, company)
-    assert codes["EU-STD"].is_active is False
-    assert codes["EU-STD"].rate == Decimal("0.0000")
-    assert _class_codes_of(pg_db, company)["standard"] == "EU-STD"
+    # Exactly two rates, both unset (Mathias, 2026-10-23).
+    assert _class_codes_of(pg_db, company) == {
+        "standard": "EU-STD",
+        "reduced": "EU-RED",
+    }
+    for code in ("EU-STD", "EU-RED"):
+        assert codes[code].is_active is False
+        assert codes[code].rate == Decimal("0.0000")
+        assert codes[code].category == "S"
+    # The EU no-tax set comes with them, and nothing else.
+    assert {code for code in codes if code.startswith("EU-")} == {
+        "EU-STD", "EU-RED", "EU-AE", "EU-K", "EU-G", "EU-O", "EU-E", "EU-Z",
+        "EU-KU",
+    }
     assert not any(code.startswith(("AT-", "DE-")) for code in codes)
 
 

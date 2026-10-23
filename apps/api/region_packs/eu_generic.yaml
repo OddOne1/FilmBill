@@ -36,6 +36,12 @@ codes:
     category: S
     active: false
 
+  - code: EU-RED
+    name: Reduced rate (set your rate)
+    rate: "0"
+    category: S
+    active: false
+
   - code: EU-AE
     name: Reverse charge
     rate: "0"
@@ -89,16 +95,24 @@ codes:
       en: "Small business exemption: no VAT is charged."
       de: "Steuerfrei aufgrund der Kleinunternehmerregelung."
 
-# A country pack replaces these by declaring the same keys.
+# **Exactly two rates, both unset** (Mathias, 2026-10-23): a company in a
+# country FilmBill has no pack for starts with Standard and Reduced at 0 % and
+# inactive, and adds whatever else it needs with the + button. One reduced
+# rate is the common case across Europe; a company with three says so itself.
+#
+# `EU-Z` deliberately has NO class. A tax class is what an ITEM is labelled
+# with, and "zero-rated" is a property of a situation rather than of an item —
+# so it is a no-tax case, chosen as an override. A country pack that wants a
+# zero class (Austria and Germany both do, for historical rates) declares one.
 classes:
   - key: standard
     label: Standard rate
     code: EU-STD
     position: 10
-  - key: zero
-    label: Zero rate
-    code: EU-Z
-    position: 40
+  - key: reduced
+    label: Reduced rate
+    code: EU-RED
+    position: 20
 
 # ─── The shipped rules, in order ─────────────────────────────────────────────
 #

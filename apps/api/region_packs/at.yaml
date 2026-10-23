@@ -29,6 +29,12 @@ name: Österreich
 extends: eu_generic
 countries: [AT]
 
+# Austria has its own rates, so the generic pack's two "set your rate"
+# placeholders would be two permanently-empty rows on the screen belonging to
+# no section. Dropped rather than left inactive: a code nothing points at and
+# nobody will ever set is noise in a table somebody has to review.
+drop_codes: [EU-STD, EU-RED]
+
 codes:
   - code: AT-20
     name: 20 % USt (Normalsteuersatz)
@@ -44,6 +50,20 @@ codes:
     name: 10 % USt (ermäßigt)
     rate: "10"
     category: S
+
+  - code: AT-4.9
+    name: 4,9 % USt (ermäßigt)
+    rate: "4.9"
+    category: S
+    # INACTIVE by default. Source: WKO, "ermäßigte Umsatzsteuersätze", Stand
+    # 24.06.2026 — it applies to basic foodstuffs, which a production company
+    # bills roughly never. Shipped so that a company which DOES rebill such
+    # items can switch it on instead of working out the number, and switched
+    # off so that it is not an option in a picker for the other 99 %.
+    active: false
+    legal_notes:
+      en: "Basic foodstuffs only. Switch this on if you rebill such items."
+      de: "Nur für Grundnahrungsmittel. Aktivieren, wenn solche Posten weiterverrechnet werden."
 
   - code: AT-0
     name: 0 % USt
@@ -63,6 +83,13 @@ classes:
     label: Ermäßigt (13 %)
     code: AT-13
     position: 30
+  - key: reduced_3
+    label: Ermäßigt (4,9 %)
+    code: AT-4.9
+    position: 35
+    # Inactive with its code: a rate is a 1:1 pair and one of the two
+    # switched off is a state nothing on the screen can explain.
+    active: false
   - key: zero
     label: Steuersatz 0 %
     code: AT-0

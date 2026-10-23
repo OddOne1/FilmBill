@@ -75,6 +75,10 @@ class PackClass:
     label: str
     code: str
     position: int = 0
+    #: Shipped switched off, for a rate that exists in law and almost nobody
+    #: bills — Austria's 4.9 % foodstuffs rate. A class and its code carry
+    #: this together: one of the two off is a state nothing can explain.
+    is_active: bool = True
     origin_pack: str = GENERIC_PACK
 
 
@@ -254,11 +258,13 @@ def _classes_of(raw: Mapping[str, Any], pack: str, where: str) -> list[PackClass
         label = f"{where}, classes[{index}]"
         if not isinstance(entry, Mapping):
             raise PackError(f"{label}: must be a mapping.")
-        unknown = sorted(set(entry) - {"key", "label", "code", "position"})
+        unknown = sorted(
+            set(entry) - {"key", "label", "code", "position", "active"}
+        )
         if unknown:
             raise PackError(
                 f"{label}: unknown key(s) {', '.join(unknown)}. Allowed: "
-                "key, label, code, position."
+                "key, label, code, position, active."
             )
         key = entry.get("key")
         if not isinstance(key, str) or not key:
@@ -278,6 +284,12 @@ def _classes_of(raw: Mapping[str, Any], pack: str, where: str) -> list[PackClass
         position = entry.get("position", 0)
         if not isinstance(position, int) or isinstance(position, bool):
             raise PackError(f"{label} ({key}): `position` must be an integer.")
+        active = entry.get("active", True)
+        if not isinstance(active, bool):
+            raise PackError(
+                f"{label} ({key}): `active` must be true or false, got "
+                f"{active!r}."
+            )
 
         classes.append(
             PackClass(
@@ -285,6 +297,7 @@ def _classes_of(raw: Mapping[str, Any], pack: str, where: str) -> list[PackClass
                 label=text,
                 code=code,
                 position=position,
+                is_active=active,
                 origin_pack=pack,
             )
         )
@@ -348,15 +361,60 @@ def _rules_of(raw: Mapping[str, Any], pack: str, where: str) -> list[PackRule]:
 # ─── Merging and checking ───────────────────────────────────────────────────
 
 
+def _dropped(raw: Mapping[str, Any], where: str) -> list[str]:
+    """`drop_codes`: inherited codes this pack does not want.
+
+    Austria and Germany have their own rates, so the generic pack's two "set
+    your rate" placeholders would be two permanently-empty rows belonging to
+    no section of the screen. Dropping is better than inheriting-and-ignoring
+    for the same reason deleting is worse than deactivating elsewhere: a row
+    nothing points at and nobody will ever set is noise in a table somebody
+    has to review, and here there is no history to preserve — the code never
+    reached a company at all.
+
+    Validated against the parent in `_merge`, and against the surviving
+    classes and rules in `_check`, so a pack cannot drop a code it still
+    needs.
+    """
+    entries = raw.get("drop_codes")
+    if entries is None:
+        return []
+    if not isinstance(entries, list) or not all(
+        isinstance(entry, str) and entry for entry in entries
+    ):
+        raise PackError(
+            f"{where}: `drop_codes` must be a list of tax code strings."
+        )
+    return list(entries)
+
+
 def _merge(base: RegionPack, raw: Mapping[str, Any], pack: str, where: str) -> tuple:
     """Child declarations replace the parent's by key; the rest is inherited."""
     codes = {entry.code: entry for entry in base.codes}
     for entry in _codes_of(raw, pack, where):
         codes[entry.code] = entry
 
+    for code in _dropped(raw, where):
+        if code not in codes:
+            raise PackError(
+                f"{where}: `drop_codes` names {code!r}, which neither this "
+                f"pack nor {base.pack!r} defines. Allowed: "
+                f"{', '.join(sorted(codes))}."
+            )
+        del codes[code]
+
     classes = {entry.key: entry for entry in base.classes}
     for entry in _classes_of(raw, pack, where):
         classes[entry.key] = entry
+
+    # A class the parent declared, pointing at a code this pack dropped, goes
+    # with it. That is the whole mechanism: Austria declares its own
+    # `standard` and `reduced`, so the generic ones are replaced above and
+    # nothing is left pointing at EU-STD; a pack that dropped a code and
+    # forgot to replace its class is caught by `_check` instead.
+    for key, entry in list(classes.items()):
+        if entry.code not in codes and entry.origin_pack != pack:
+            del classes[key]
 
     own_rules = _rules_of(raw, pack, where)
     # A child that declares any rules replaces the inherited set wholesale

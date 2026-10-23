@@ -60,20 +60,35 @@ def test_the_austrian_pack_has_the_rates_and_classes_scope_names():
     assert rates["AT-10"] == Decimal("10")
     assert rates["AT-0"] == Decimal("0")
 
+    assert rates["AT-4.9"] == Decimal("4.9")
     assert {entry.key: entry.code for entry in pack.classes} == {
         "standard": "AT-20",
         "reduced": "AT-10",
         "reduced_2": "AT-13",
+        "reduced_3": "AT-4.9",
         "zero": "AT-0",
     }
-    # Display order, so the picker reads standard → reduced → reduced_2 → zero
-    # rather than alphabetically.
+    # Display order, so the picker reads standard → reduced → … → zero rather
+    # than alphabetically.
     assert [entry.key for entry in pack.classes] == [
         "standard",
         "reduced",
         "reduced_2",
+        "reduced_3",
         "zero",
     ]
+    # The 4.9 % foodstuffs rate ships SWITCHED OFF, with its code — a
+    # production company bills it roughly never, and an option in every
+    # picker that nobody wants is worse than a switch somebody has to find.
+    by_key = {entry.key: entry for entry in pack.classes}
+    assert by_key["reduced_3"].is_active is False
+    assert pack.code("AT-4.9").is_active is False
+    assert all(
+        by_key[key].is_active for key in ("standard", "reduced", "reduced_2", "zero")
+    )
+    # And Austria does NOT carry the generic pack's two unset placeholders.
+    assert pack.code("EU-STD") is None
+    assert pack.code("EU-RED") is None
     assert pack.countries == ("AT",)
 
 
@@ -89,6 +104,8 @@ def test_the_german_pack_has_two_positive_rates_and_no_second_reduced_class():
         "zero": "DE-0",
     }
     assert pack.tax_class("reduced_2") is None
+    assert pack.code("EU-STD") is None, "Germany has its own standard rate"
+    assert pack.code("EU-RED") is None
     assert pack.countries == ("DE",)
     # It must not carry Austria's rates: `extends` inherits the generic pack,
     # not a sibling.
@@ -104,20 +121,40 @@ def test_every_rate_is_an_exact_decimal_and_never_a_float():
             assert isinstance(entry.rate, Decimal), f"{name}/{entry.code}"
 
 
-def test_the_generic_standard_code_is_zero_and_inactive():
+def test_the_generic_pack_is_exactly_two_unset_rates():
     """The single most important property of the generic pack.
 
     A company in a country FilmBill has no pack for must not be handed a
-    plausible-looking 20 %. An inactive code at 0 % is a configuration the
-    user has to finish, and the engine refuses to propose from it.
+    plausible-looking 20 %. Two rates, both 0 % and inactive, and the engine
+    refuses to propose from either — the screen says "set your rate" and the
+    + button is how a third one arrives (Mathias, 2026-10-23).
     """
     pack = load_pack(GENERIC_PACK)
-    standard = pack.code("EU-STD")
 
-    assert standard is not None
-    assert standard.rate == Decimal("0")
-    assert standard.is_active is False
-    assert pack.tax_class("standard").code == "EU-STD"
+    assert [entry.key for entry in pack.classes] == ["standard", "reduced"]
+    for key, code in (("standard", "EU-STD"), ("reduced", "EU-RED")):
+        entry = pack.tax_class(key)
+        assert entry.code == code
+        assert entry.is_active is True, "the class is usable; its rate is unset"
+        rate_code = pack.code(code)
+        assert rate_code.rate == Decimal("0")
+        assert rate_code.category == "S"
+        assert rate_code.is_active is False
+
+
+def test_the_generic_pack_gives_zero_rating_no_class():
+    """`EU-Z` exists as a code and nothing points at it.
+
+    A tax class is what an ITEM is labelled with, and "zero-rated" is a
+    property of a situation rather than of an item — so it is a no-tax case,
+    chosen as an override. Austria and Germany both declare a `zero` class of
+    their own, for rates that exist in their law.
+    """
+    pack = load_pack(GENERIC_PACK)
+
+    assert pack.code("EU-Z") is not None
+    assert pack.tax_class("zero") is None
+    assert load_pack("at").tax_class("zero").code == "AT-0"
 
 
 def test_every_treatment_code_in_the_generic_pack_is_zero_rated():
@@ -187,7 +224,11 @@ def test_the_country_packs_inherit_the_rules_rather_than_repeating_them():
 
 
 def test_a_country_pack_carries_the_generic_treatment_codes_too():
-    """An Austrian company needs `EU-AE`: its rules point at it."""
+    """An Austrian company needs `EU-AE`: its rules point at it.
+
+    The treatment codes are inherited; the two unset RATE placeholders are
+    dropped. That is the distinction `drop_codes` exists for.
+    """
     pack = load_pack("at")
     codes = {entry.code: entry for entry in pack.codes}
     assert "EU-AE" in codes
@@ -502,6 +543,149 @@ def test_a_child_pack_replaces_a_parents_code_and_class_by_key(tmp_path):
     # Inherited, untouched.
     assert pack.code("EU-AE").origin_pack == "eu_generic"
     assert [entry.name for entry in pack.rules] == ["Same country"]
+
+
+def test_drop_codes_removes_an_inherited_code_and_its_orphaned_class(tmp_path):
+    """What `drop_codes` is for, proven on a temporary pack.
+
+    The parent's `standard` class points at `EU-STD`. A child that drops
+    `EU-STD` and declares its own `standard` keeps a usable pack; the
+    parent's class is replaced rather than left dangling.
+    """
+    _write_minimal_generic(tmp_path)
+    _pack(
+        tmp_path,
+        'pack: probe\nextends: eu_generic\ncountries: [XX]\n'
+        "drop_codes: [EU-STD]\n"
+        'codes:\n  - code: XX-20\n    name: 20 %\n    rate: "20"\n'
+        "    category: S\n"
+        "classes:\n  - key: standard\n    label: 20 %\n    code: XX-20\n",
+    )
+
+    pack = load_pack("probe", directory=tmp_path)
+
+    assert pack.code("EU-STD") is None
+    assert pack.tax_class("standard").code == "XX-20"
+    # The inherited treatment code is untouched: dropping is per code, not a
+    # way of starting over.
+    assert pack.code("EU-AE") is not None
+
+
+def test_dropping_a_code_a_surviving_class_needs_is_refused(tmp_path):
+    """The check that makes `drop_codes` safe.
+
+    A pack that dropped its own standard rate and forgot to replace the class
+    would load, look right, and resolve nothing for every domestic sale.
+    """
+    _write_minimal_generic(tmp_path)
+    _pack(
+        tmp_path,
+        'pack: probe\nextends: eu_generic\ncountries: [XX]\n'
+        "drop_codes: [EU-STD]\n",
+    )
+
+    with pytest.raises(PackError) as caught:
+        load_pack("probe", directory=tmp_path)
+    # Either refusal is the right one and which arrives depends on how many
+    # classes the parent had: the orphaned class goes with the dropped code,
+    # so a pack with one class is left with none, and a pack with several is
+    # left without a `standard`. Both say "tax class", and the point is that
+    # it does not load.
+    assert "tax class" in str(caught.value)
+
+
+def test_dropping_a_code_a_rule_names_is_refused(tmp_path):
+    """`EU-AE` is named by the rule this fixture declares."""
+    _write_minimal_generic(tmp_path)
+    _pack(
+        tmp_path,
+        'pack: probe\nextends: eu_generic\ncountries: [XX]\n'
+        "drop_codes: [EU-AE]\n"
+        'codes:\n  - code: XX-20\n    name: 20 %\n    rate: "20"\n'
+        "    category: S\n"
+        "classes:\n  - key: standard\n    label: 20 %\n    code: XX-20\n"
+        "rules:\n  - position: 10\n    name: Reverse charge\n"
+        "    conditions: {}\n    outcome:\n"
+        "      treatment: eu_reverse_charge\n      code: { code: EU-AE }\n",
+    )
+
+    with pytest.raises(PackError) as caught:
+        load_pack("probe", directory=tmp_path)
+    assert "does not define" in str(caught.value)
+
+
+def test_dropping_a_code_nobody_defines_is_refused(tmp_path):
+    """A typo in `drop_codes` would otherwise be a silent no-op, and the
+    author would believe a code was gone when it was not."""
+    _write_minimal_generic(tmp_path)
+    _pack(
+        tmp_path,
+        'pack: probe\nextends: eu_generic\ncountries: [XX]\n'
+        "drop_codes: [EU-STDD]\n"
+        'codes:\n  - code: XX-20\n    name: 20 %\n    rate: "20"\n'
+        "    category: S\n"
+        "classes:\n  - key: standard\n    label: 20 %\n    code: XX-20\n",
+    )
+
+    with pytest.raises(PackError) as caught:
+        load_pack("probe", directory=tmp_path)
+    message = str(caught.value)
+    assert "EU-STDD" in message and "neither this pack" in message
+
+
+def test_drop_codes_must_be_a_list_of_strings(tmp_path):
+    _write_minimal_generic(tmp_path)
+    _pack(tmp_path, "pack: probe\nextends: eu_generic\ndrop_codes: EU-STD\n")
+
+    with pytest.raises(PackError) as caught:
+        load_pack("probe", directory=tmp_path)
+    assert "`drop_codes` must be a list" in str(caught.value)
+
+
+def test_a_class_may_ship_inactive_and_a_non_boolean_is_refused(tmp_path):
+    """Austria's 4.9 % rate uses this. The refusal matters because YAML will
+    happily hand you the string "false"."""
+    _write_minimal_generic(tmp_path)
+    body = (
+        'pack: probe\nextends: eu_generic\n'
+        'codes:\n  - code: XX-20\n    name: 20 %\n    rate: "20"\n'
+        "    category: S\n"
+        "classes:\n  - key: standard\n    label: 20 %\n    code: XX-20\n"
+    )
+    _pack(tmp_path, body + "    active: false\n")
+    assert (
+        load_pack("probe", directory=tmp_path).tax_class("standard").is_active
+        is False
+    )
+
+    _pack(tmp_path, body + '    active: "false"\n')
+    with pytest.raises(PackError) as caught:
+        load_pack("probe", directory=tmp_path)
+    assert "must be true or false" in str(caught.value)
+
+
+def test_set_your_rate_is_exactly_the_unset_rates():
+    """The condition the screen shows that hint on, generalised.
+
+    Category `S`, rate 0, inactive. It must catch both generic placeholders
+    and must NOT catch Austria's 4.9 % rate, which is inactive but has a real
+    number in it — "set your rate" on a rate that is already set would send
+    somebody looking for a field that is already filled in.
+    """
+
+    def unset(pack):
+        return {
+            entry.code
+            for entry in pack.codes
+            if entry.category == "S"
+            and entry.rate == Decimal("0")
+            and not entry.is_active
+        }
+
+    assert unset(load_pack(GENERIC_PACK)) == {"EU-STD", "EU-RED"}
+    assert unset(load_pack("at")) == set()
+    assert unset(load_pack("de")) == set()
+    assert load_pack("at").code("AT-4.9").is_active is False
 
 
 def test_loading_a_pack_twice_gives_the_same_thing(tmp_path):
