@@ -140,11 +140,31 @@ def _read(name: str, directory: Path) -> Mapping[str, Any]:
 
 
 def available_packs(directory: Optional[Path] = None) -> tuple[str, ...]:
-    """Every pack that exists, by name, sorted."""
+    """Every TAX pack that exists, by name, sorted.
+
+    A tax pack is a file in this directory that declares a top-level
+    `pack:`. The discriminator is needed because `region_packs/` is no longer
+    only tax packs: P1b put `vat_formats.yaml` beside them — per-country VAT
+    ID formats, which are region-pack data of a different kind — and a bare
+    `*.yaml` glob made the tax loader try to read it as a pack and fail.
+    Checking for the key rather than maintaining an exclusion list means the
+    next non-tax data file in here is skipped without anybody remembering to
+    add it.
+    """
     directory = directory or PACK_DIRECTORY
     if not directory.is_dir():
         return ()
-    return tuple(sorted(path.stem for path in directory.glob("*.yaml")))
+    found = []
+    for path in sorted(directory.glob("*.yaml")):
+        try:
+            loaded = yaml.safe_load(path.read_text()) or {}
+        except yaml.YAMLError:
+            # A broken file is not a pack. `load_pack` reports it properly
+            # when somebody asks for it by name; listing must not explode.
+            continue
+        if isinstance(loaded, Mapping) and loaded.get("pack"):
+            found.append(path.stem)
+    return tuple(found)
 
 
 def _rate(value: Any, *, where: str) -> Decimal:

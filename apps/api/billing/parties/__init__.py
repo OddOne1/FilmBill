@@ -27,6 +27,20 @@ value with no provenance is a value somebody has to guess the origin of, and
 on an invoice that guess is expensive.
 """
 
+from .vat import (
+    FORMATS_FILE,
+    ISO_GREECE,
+    VIES_GREECE,
+    NormalisedVatId,
+    VatFormatError,
+    is_checkable,
+    iso_country,
+    known_countries,
+    normalise,
+    normalise_and_validate,
+    validate_format,
+    vies_country,
+)
 from .resolver import (
     LEVELS,
     LEVEL_DEPARTMENT,
@@ -45,6 +59,18 @@ from .resolver import (
 
 __all__ = [
     "BUYER_REASONS",
+    "FORMATS_FILE",
+    "ISO_GREECE",
+    "NormalisedVatId",
+    "VIES_GREECE",
+    "VatFormatError",
+    "is_checkable",
+    "iso_country",
+    "known_countries",
+    "normalise",
+    "normalise_and_validate",
+    "validate_format",
+    "vies_country",
     "LEVELS",
     "LEVEL_DEPARTMENT",
     "LEVEL_ORGANISATION",

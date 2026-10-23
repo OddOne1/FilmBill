@@ -1,0 +1,76 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Accepted VAT-identification-number formats, per country.
+#
+# Data, not code (CLAUDE.md rule 7), for the same reason the tax rates are: a
+# format changes when a member state changes it, and that must not need a
+# release.
+#
+# **NOT FROM THE OFFICIAL VIES DOCUMENTATION, AND NOT VERIFIED.** [Likely.]
+# The Commission's VIES service does not publish per-country formats at all —
+# the only machine-readable constraint it states is in the SOAP WSDL, and it
+# is very loose: the country code must match `[A-Z]{2}` and the number part
+# `[0-9A-Za-z+*.]{2,12}`. That constraint IS enforced below as `_wsdl`, and
+# it is the only line in this file with an official source
+# (https://ec.europa.eu/taxation_customs/vies/services/checkVatService.wsdl,
+# read 2026-10-23).
+#
+# Everything else here is the format in ordinary published use, written down
+# so a typo is caught before a network call rather than after one. Two
+# consequences, both deliberate:
+#
+#   * a pattern that is WRONG rejects a real number. So each entry is a
+#     starting point a user can correct, and the refusal says which country's
+#     format it checked against and what the number looked like.
+#   * a pattern that is too LOOSE costs nothing: VIES decides validity, not
+#     this file. When in doubt the entry here is the looser one.
+#
+# **Greece is `EL` in VIES and `GR` in ISO 3166.** Both appear below, mapped
+# to the same pattern, and `billing/parties/vat.py` translates in both
+# directions — the live `check-status` endpoint lists `EL` and has no `GR`
+# entry at all, so a lookup sent as `GR` would simply not be answered.
+#
+# `XI` is Northern Ireland and is a real VIES country code (confirmed in that
+# same `check-status` listing, which also has no `GB`). The "Northern
+# Ireland" gloss is not stated by the documentation; the code is.
+#
+# Non-EU countries are deliberately absent. A Swiss UID or a US EIN is
+# accepted as free text and recorded as `not_applicable`: VIES does not cover
+# them, and refusing a number because this file has no pattern for it would
+# make a Swiss supplier unsaveable.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# The official, loose constraint from the WSDL. Applied to every number
+# regardless of country, including the ones with no entry below.
+_wsdl: "[0-9A-Za-z+*.]{2,12}"
+
+countries:
+  AT: "U[0-9]{8}"
+  BE: "[01][0-9]{9}"
+  BG: "[0-9]{9,10}"
+  CY: "[0-9]{8}[A-Z]"
+  CZ: "[0-9]{8,10}"
+  DE: "[0-9]{9}"
+  DK: "[0-9]{8}"
+  EE: "[0-9]{9}"
+  # Greece: `EL` to VIES, `GR` in ISO 3166. Both spellings, one pattern.
+  EL: "[0-9]{9}"
+  GR: "[0-9]{9}"
+  ES: "[A-Z0-9][0-9]{7}[A-Z0-9]"
+  FI: "[0-9]{8}"
+  FR: "[A-Z0-9]{2}[0-9]{9}"
+  HR: "[0-9]{11}"
+  HU: "[0-9]{8}"
+  IE: "([0-9]{7}[A-Z]{1,2}|[0-9][A-Z][0-9]{5}[A-Z])"
+  IT: "[0-9]{11}"
+  LT: "([0-9]{9}|[0-9]{12})"
+  LU: "[0-9]{8}"
+  LV: "[0-9]{11}"
+  MT: "[0-9]{8}"
+  NL: "[0-9]{9}B[0-9]{2}"
+  PL: "[0-9]{10}"
+  PT: "[0-9]{9}"
+  RO: "[0-9]{2,10}"
+  SE: "[0-9]{12}"
+  SI: "[0-9]{8}"
+  SK: "[0-9]{10}"
+  XI: "([0-9]{9}|[0-9]{12}|GD[0-9]{3}|HA[0-9]{3})"
