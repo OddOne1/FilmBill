@@ -21,6 +21,7 @@ from them. `docs/SCOPE.md` is where the product is decided.
 | restore-sudo | The printed restore command could not read its own dump | [`20-backup-restore-needs-sudo-gunzip.md`](20-backup-restore-needs-sudo-gunzip.md) | `af9bbc7` | done — see notes |
 | P1a | Tax: data model, region packs, the proposal engine, API, screens | [`21-filmbill-P1a-tax.md`](21-filmbill-P1a-tax.md) | `57d9b5a`…`154160c` | done — see notes |
 | P1a-2 | A company adds its own rates and no-tax cases | [`22-filmbill-P1a-2-user-rates.md`](22-filmbill-P1a-2-user-rates.md) | `f84ca55`…`6c7a37f` | done — see notes |
+| P1b | Change country, then parties (customers, suppliers, contacts) | [`23-filmbill-P1b-parties.md`](23-filmbill-P1b-parties.md) | `f0f9a1c`…`dfe7399` | done — see notes |
 | P0b | Foundations: companies, roles, number series, audit, money, codegen | [`03-filmbill-P0b-foundations.md`](03-filmbill-P0b-foundations.md) | — | superseded — split into P0b-0, P0b-1, P0b-2 |
 
 ---
@@ -1157,3 +1158,67 @@ and §17 question 9(a) extended to ask about the 4.9 % rate.
 **Flagged.** Two decisions are marked `[Guessing]` in D51 and are Claude's,
 not Mathias's: the two-unset-rates start state for a country with no pack
 (f), and that a custom no-tax case is never chosen automatically (g).
+
+---
+
+## P1b — change country, then parties
+
+Six commits, each green on its own, in the prompt's order. Prompt:
+[`23-filmbill-P1b-parties.md`](23-filmbill-P1b-parties.md). Decisions in
+SCOPE §16 **D53–D58**, and §17 gains **question 10**.
+
+**Part 0 — Change country (`f0f9a1c`).** The pack used to be installed once,
+on first set; a later change installed nothing, so a company that mis-typed
+`DE` and corrected it to `AT` kept German rates for ever. Now a plan →
+confirm flow, non-destructive in five senses (D53), with `PATCH /company`
+refusing a country change once tax rows exist. Two things found rather than
+assumed: all three packs ship the **identical** eight rules, so a switch
+changes no rule at all today; and re-pointing would have switched **on** a
+0 % standard code, which would propose 0 % tax — hence the one asymmetry in
+the pair rule. Two of the four mutations did not fail at first, because the
+tests were written against a code that survives for a different reason.
+
+**Part 1 — the tables and the resolver (`2d29662`).** Five tables, migration
+0012, and `apps/api/billing/parties/` as pure Python with the same
+import-boundary test as `billing/tax/`. The tree is three deep (D54); the
+contact name never inherits; every resolved field carries its source; the
+result is a detached immutable value object, and a test proves a previously
+resolved recipient does not follow the organisation to its new office.
+`party_vat_checks` is append-only like `audit_events`. Four findings: `auto`
+cannot take part in inheritance; a cycle is structurally unreachable with
+three types; the test teardown needed to learn about the second append-only
+table; and a Postgres `ARRAY` column broke nine unrelated tests that build
+the schema on SQLite.
+
+**Part 2 — VAT IDs and VIES (`07f696a`).** The Commission publishes no REST
+contract — the technical-information page is a JavaScript app, the OpenAPI
+paths are 404 — so the shapes were **observed** with two probe requests and
+pinned by a test. The finding that shaped the module: **a VIES error arrives
+with HTTP 200**, so a client keyed on the status code would report a good
+number as invalid. `unavailable` is never `invalid` (D56). Formats are data
+in `region_packs/vat_formats.yaml` and the file says in capitals that they
+are not official; Greece is `EL` to VIES and `GR` in ISO, tested to the wire.
+
+**Part 3 — API, permissions, audit, registry (`32aa472`).** Fourteen
+endpoints, no DELETE anywhere (asserted on the OpenAPI document), two new
+permission keys (D58), party IBANs masked in audit rows, duplicates as
+warnings, and a party's `tax_override` registered as a referrer of tax codes
+so deactivating one names the customer. `/parties` is a top-level path, which
+nearly cost the isolation suite fourteen endpoints — the selector had to
+learn about it.
+
+**Part 4 — the screens (`bd87a7f`).** A list, a detail page with six tabs and
+a resolved panel that greys inherited values and names their origin, "take
+buyer from a party" on the Tax screen, and a dev-only seed script whose
+refusal has three independently tested gates and no override flag. One real
+bug found: the Tax tab set an error and never rendered it.
+
+**Part 5 — documentation (`dfe7399`).** SCOPE §16 D53–D58 and
+§17 question 10 (is a VIES lookup enough evidence; how long may a stored
+check be relied on; does a sole trader count as a business).
+
+**Flagged.** `D58` (the party permission matrix) and the sole-trader clause
+in `D55` are Claude's proposals, not Mathias's decisions. The VIES REST
+request and response shapes are **observed, not documented** — if the
+Commission changes them, the test that pins the endpoint and payload is what
+will say so.
