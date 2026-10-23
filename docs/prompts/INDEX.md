@@ -20,6 +20,7 @@ from them. `docs/SCOPE.md` is where the product is decided.
 | P0b-3 | Healthcheck, IBAN uniqueness, CI real-DB guard, number series, audit events, backup modes, rule consolidation | [`19-filmbill-P0b-3.md`](19-filmbill-P0b-3.md) | `b8e10b3`…`0c186df` | done — see notes |
 | restore-sudo | The printed restore command could not read its own dump | [`20-backup-restore-needs-sudo-gunzip.md`](20-backup-restore-needs-sudo-gunzip.md) | `af9bbc7` | done — see notes |
 | P1a | Tax: data model, region packs, the proposal engine, API, screens | [`21-filmbill-P1a-tax.md`](21-filmbill-P1a-tax.md) | `57d9b5a`…`154160c` | done — see notes |
+| P1a-2 | A company adds its own rates and no-tax cases | [`22-filmbill-P1a-2-user-rates.md`](22-filmbill-P1a-2-user-rates.md) | `f84ca55`…`PENDING` | done — see notes |
 | P0b | Foundations: companies, roles, number series, audit, money, codegen | [`03-filmbill-P0b-foundations.md`](03-filmbill-P0b-foundations.md) | — | superseded — split into P0b-0, P0b-1, P0b-2 |
 
 ---
@@ -1090,3 +1091,69 @@ the AT/DE rates, the legal-note wording, and the two [Guessing] decisions
    on two tables; `CompanyBankAccount` and `NumberSeries` both use
    `is_active`, and four tables in one schema disagreeing is worse than a
    one-word deviation. Say the word and it is a migration and a rename.
+
+---
+
+## P1a-2 — a company adds its own rates and no-tax cases
+
+Six commits, each green on its own, in the prompt's order. Prompt:
+[`22-filmbill-P1a-2-user-rates.md`](22-filmbill-P1a-2-user-rates.md).
+
+Mathias, 2026-10-23: *"this app is for users all over Europe: one or several
+reduced rates, maybe several standard rates; the number is up to the user …
+there must also be the option of no tax."* P1a's region pack is now a
+starting point rather than the whole configuration. Decisions in SCOPE §16
+**D51** (seven parts) and **D52**.
+
+**Part 1 — create, edit, retire (`f84ca55`).** `POST /company/tax/rates`
+makes a class and its `S` code in one transaction, with a generated
+immutable key (`custom_1`) and a code defaulting to `<COUNTRY>-<rate>`.
+`POST /company/tax/no-tax-cases` makes a rate-0 code in one of six
+categories, with no class. `GET /company/tax/no-tax-categories` serves the
+six with a sentence each in German and English. Migration 0011 adds
+`tax_classes.is_active`; there is no DELETE route and a test asserts that on
+the OpenAPI document. Thirty codes per company, a guard rather than a
+product limit. New audit actions `tax_code.created`, `tax_class.created`,
+`tax_class.updated`.
+
+  Two defects the new tests found: `audit.SECRET_FIELDS` held a bare
+  `"code"`, so `tax_code.created` logged `[redacted] → [redacted]` — an audit
+  row that could not answer its own question; and the real-database fixtures
+  shared one scratch-database name, so two concurrent pytest runs made the
+  loser **skip 441 checks while exiting 0** (laptop-only, because CI runs one
+  process and `_no_postgres` fails there). Both fixed, the second recorded as
+  instance 17 in `docs/engineering/test-harness-traps.md`.
+
+**Part 2 — the reference guard (`4bbde76`).** Deactivating a code or class
+something still points at is refused with a 409 **naming the referrer**. The
+alternative is silent: a deactivated code a rule still resolves to makes
+every matching sale `blocking` with no indication why, surfacing in P2's
+finalize. `@item` is deliberately not a class reference — counting it would
+make every class permanently un-retirable. P1b, P1c and P2 register their own
+sources at one registration point, proven by a test that registers one at
+test time.
+
+**Part 3 — packs (`6ca471e`).** `eu_generic` now ships **two** unset rates
+(Standard and Reduced) and no `zero` class; `drop_codes` lets Austria and
+Germany not inherit the two placeholders, which would otherwise be orphans
+belonging to no section of the new screen. Austria gains the 4.9 %
+foodstuffs rate, shipped off (D52). No migration: nothing needs a column and
+no company has Austrian tax rows for a backfill to reach.
+
+**Part 4 — engine proof (`3044278`).** 14 fixtures over rates a user typed,
+end to end. **No engine change was needed** — the result, not the
+assumption. Also pins D51(g) as a property of the pack data rather than as a
+promise.
+
+**Part 5 — the screen (`652decc`).** Two sections with a + button each, two
+dialogs, row editing and retiring, the 409 shown with the referrer's name,
+and selectors that offer only what can actually be proposed. One real bug
+fixed: a refresh after a save unmounted the section and ate the server's own
+notice.
+
+**Part 6 — documentation (`PENDING`, this commit).** SCOPE §16 D51 and D52,
+and §17 question 9(a) extended to ask about the 4.9 % rate.
+
+**Flagged.** Two decisions are marked `[Guessing]` in D51 and are Claude's,
+not Mathias's: the two-unset-rates start state for a country with no pack
+(f), and that a custom no-tax case is never chosen automatically (g).
