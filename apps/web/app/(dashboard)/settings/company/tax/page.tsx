@@ -9,6 +9,9 @@ import { usePermissions } from '@/hooks/use-permissions'
 import { useCompanyStore } from '@/stores/company-store'
 import type {
   NoTaxCategoryOption,
+  Party,
+  PartyPage,
+  ResolvedRecipient,
   TaxClass,
   TaxCode,
   TaxOverrideKind,
@@ -1043,6 +1046,10 @@ function overrideBody(
 function TestTab() {
   const activeCompanyId = useCompanyStore((state) => state.activeCompanyId)
   const [draft, setDraft] = React.useState<CaseDraft>(EMPTY_CASE)
+  // P1b: take the buyer from a real party instead of typing one.
+  const [parties, setParties] = React.useState<Party[]>([])
+  const [fromPartyId, setFromPartyId] = React.useState('')
+  const [resolved, setResolved] = React.useState<ResolvedRecipient | null>(null)
   const [codes, setCodes] = React.useState<TaxCode[]>([])
   const [classes, setClasses] = React.useState<TaxClass[]>([])
   const [rules, setRules] = React.useState<TaxRule[]>([])
@@ -1070,6 +1077,54 @@ function TestTab() {
       }
     })()
   }, [activeCompanyId])
+
+  // The party list, for the "take the buyer from" selector. Loaded once —
+  // a company has tens of customers, not thousands, and the selector is a
+  // convenience rather than the search.
+  React.useEffect(() => {
+    void (async () => {
+      try {
+        const page = await api.get<PartyPage>('/parties?limit=200')
+        setParties(page.parties)
+      } catch {
+        // No `parties.view`, or none yet. The selector simply does not
+        // appear; the fields stay typeable.
+        setParties([])
+      }
+    })()
+  }, [activeCompanyId])
+
+  // When a party is chosen, the buyer fields come from the API's RESOLVED
+  // recipient — never from the party row, and never worked out here. A
+  // department inherits its organisation's VAT ID and verified flag, and
+  // only the resolver knows that.
+  React.useEffect(() => {
+    if (!fromPartyId) {
+      setResolved(null)
+      return
+    }
+    void (async () => {
+      try {
+        const answer = await api.get<ResolvedRecipient>(
+          `/parties/${fromPartyId}/resolved`,
+        )
+        setResolved(answer)
+        setDraft((current) => ({
+          ...current,
+          buyer_country: String(answer.tax_country.value ?? ''),
+          buyer_type: answer.buyer_type === 'private' ? 'private' : 'business',
+          buyer_vat_verified: Boolean(answer.vat_verified.value),
+        }))
+      } catch (err) {
+        setResolved(null)
+        setError(
+          err instanceof ApiError
+            ? err.detail
+            : 'Could not read that party’s details',
+        )
+      }
+    })()
+  }, [fromPartyId])
 
   // The proposal, from the API, debounced. Every option change asks the
   // server — there is no local evaluation to fall back on, by design.
@@ -1147,20 +1202,67 @@ function TestTab() {
           />
         </Field>
 
-        <Field label="Buyer country" hint="Two-letter ISO code, e.g. DE.">
+        {parties.length > 0 && (
+          <Field
+            label="Take buyer from a party"
+            hint="Fills the buyer fields from what a document to that party would actually use — inheritance included."
+          >
+            <select
+              aria-label="Take buyer from a party"
+              value={fromPartyId}
+              onChange={(event) => setFromPartyId(event.target.value)}
+              className="w-full rounded-md border border-border bg-bg-primary px-3 py-2 text-sm"
+            >
+              <option value="">Type the buyer by hand</option>
+              {parties.map((entry) => (
+                <option key={entry.id} value={entry.id}>
+                  {entry.name} ({entry.type})
+                </option>
+              ))}
+            </select>
+          </Field>
+        )}
+
+        <Field
+          label="Buyer country"
+          hint={
+            resolved
+              ? undefined
+              : 'Two-letter ISO code, e.g. DE.'
+          }
+        >
           <Input
+            aria-label="Buyer country"
             value={draft.buyer_country}
             maxLength={2}
+            readOnly={resolved !== null}
+            disabled={resolved !== null}
             onChange={(event) =>
               set('buyer_country', event.target.value.toUpperCase())
             }
           />
         </Field>
+        {resolved && (
+          <p
+            data-testid="tax-buyer-from-party"
+            className="rounded-md border border-border bg-bg-secondary px-3 py-2 text-xs text-text-secondary"
+          >
+            From <strong>{String(resolved.names.organisation ?? resolved.names[resolved.own_level])}</strong>:
+            country {String(resolved.tax_country.value ?? '—')} (from{' '}
+            {resolved.tax_country.source ?? 'nowhere'}), VAT ID{' '}
+            {String(resolved.vat_id.value ?? '—')} (from{' '}
+            {resolved.vat_id.source ?? 'nowhere'}),{' '}
+            {resolved.vat_verified.value ? 'verified' : 'not verified'},
+            treated as {resolved.buyer_type}. The fields are read-only while a
+            party is chosen.
+          </p>
+        )}
 
         <Field label="Buyer">
           <select
             aria-label="Buyer"
             value={draft.buyer_type}
+            disabled={resolved !== null}
             onChange={(event) =>
               set('buyer_type', event.target.value as 'business' | 'private')
             }
@@ -1175,7 +1277,7 @@ function TestTab() {
           <input
             type="checkbox"
             checked={draft.buyer_vat_verified}
-            disabled={draft.buyer_type !== 'business'}
+            disabled={draft.buyer_type !== 'business' || resolved !== null}
             onChange={(event) => set('buyer_vat_verified', event.target.checked)}
             className="mt-0.5"
           />

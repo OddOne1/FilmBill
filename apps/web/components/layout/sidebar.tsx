@@ -4,10 +4,11 @@ import * as React from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-  LayoutDashboard,
+  Archive,
   Bell,
   ChevronsLeft,
-  Archive,
+  LayoutDashboard,
+  Users,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
@@ -41,6 +42,10 @@ interface NavItem {
 // indistinguishable from a broken one.
 const navItems: NavItem[] = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
+  // P1b. Customers, suppliers, partners and the people in them. A top-level
+  // entry rather than a company setting, because a customer list is not a
+  // setting — it is one of the two things the application is about.
+  { href: '/parties', label: 'Parties', icon: Users, permission: 'parties.view' },
   { href: '/archive', label: 'Archive', icon: Archive, permission: 'archive.view' },
 ]
 

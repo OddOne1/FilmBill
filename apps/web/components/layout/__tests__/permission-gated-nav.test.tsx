@@ -82,3 +82,43 @@ describe('sidebar navigation gating', () => {
     expect(screen.getByText('Dashboard')).toBeInTheDocument()
   })
 })
+
+describe('the Parties entry (P1b)', () => {
+  it('is shown to a producer, who holds parties.view', () => {
+    // A producer sends the invoice, so a producer sees who it goes to.
+    seed(['company.view', 'parties.view', 'documents.finalize'], 'producer')
+    render(<Sidebar collapsed={false} onToggle={() => {}} />)
+
+    expect(screen.getByText('Parties')).toBeInTheDocument()
+  })
+
+  it('is hidden from a tax advisor, whose access is the archive', () => {
+    // D23/D43: the advisor reads finalized documents, where the recipient is
+    // already snapshotted on the document in front of them. The live
+    // customer list is wider than what they were handed the archive to do.
+    seed(['company.view', 'archive.view'], 'tax_advisor')
+    render(<Sidebar collapsed={false} onToggle={() => {}} />)
+
+    expect(screen.queryByText('Parties')).not.toBeInTheDocument()
+    expect(screen.getByText('Archive')).toBeInTheDocument()
+  })
+
+  it('is hidden from staff, who hold neither key', () => {
+    seed(['company.view'], 'staff')
+    render(<Sidebar collapsed={false} onToggle={() => {}} />)
+
+    expect(screen.queryByText('Parties')).not.toBeInTheDocument()
+  })
+
+  it('sits between the dashboard and the archive', () => {
+    seed(['company.view', 'parties.view', 'archive.view'], 'owner')
+    render(<Sidebar collapsed={false} onToggle={() => {}} />)
+
+    const labels = screen
+      .getAllByRole('link')
+      .map((link) => link.textContent?.trim())
+      .filter(Boolean) as string[]
+    expect(labels.indexOf('Parties')).toBeGreaterThan(labels.indexOf('Dashboard'))
+    expect(labels.indexOf('Parties')).toBeLessThan(labels.indexOf('Archive'))
+  })
+})

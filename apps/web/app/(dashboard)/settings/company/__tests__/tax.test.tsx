@@ -239,6 +239,32 @@ const CUSTOM_CLASS: TaxClass = {
   is_custom: true,
 }
 
+/** What `GET /parties/{id}/resolved` says — values the screen could not have
+ *  worked out from the party row it never sees. */
+const RESOLVED_FROM_PARTY = {
+  own_level: 'department',
+  ids: { department: 'p-dept', organisation: 'p-org' },
+  names: { department: 'Einkauf', organisation: 'Berlin GmbH' },
+  contact_name: { value: 'Einkauf', source: 'department' },
+  invoice_name: { value: 'Berlin GmbH', source: 'organisation' },
+  billing_address: { value: null, source: null },
+  vat_id: { value: 'DE123456789', source: 'organisation' },
+  vat_verified: { value: true, source: 'organisation' },
+  tax_country: { value: 'DE', source: 'organisation' },
+  business_status: { value: 'auto', source: 'department' },
+  tax_override: { value: null, source: null },
+  language: { value: null, source: null },
+  default_currency: { value: null, source: null },
+  payment_terms_days: { value: null, source: null },
+  payment_terms_text: { value: null, source: null },
+  po_reference: { value: null, source: null },
+  email: { value: null, source: null },
+  phone: { value: null, source: null },
+  einvoice_routing: { value: null, source: null },
+  buyer_type: 'business',
+  buyer_type_reason: 'organisation',
+}
+
 function seedCompany(permissions = ['company.view', 'company.settings.edit']) {
   useCompanyStore.setState({
     companies: [
@@ -265,18 +291,24 @@ function mockApi({
   rules = RULES,
   categories = CATEGORIES,
   proposal = makeProposal(),
+  parties = [],
+  resolvedRecipient = RESOLVED_FROM_PARTY,
 }: {
   codes?: TaxCode[]
   classes?: TaxClass[]
   rules?: TaxRule[]
   categories?: NoTaxCategoryOption[]
   proposal?: TaxProposal
+  parties?: { id: string; name: string; type: string }[]
+  resolvedRecipient?: unknown
 } = {}) {
   vi.mocked(api.get).mockImplementation(async (path: string) => {
     if (path === '/company/tax/codes') return codes as never
     if (path === '/company/tax/classes') return classes as never
     if (path === '/company/tax/rules') return rules as never
     if (path === '/company/tax/no-tax-categories') return categories as never
+    if (path.startsWith('/parties?')) return { parties, total: parties.length, limit: 200, offset: 0 } as never
+    if (path.startsWith('/parties/')) return resolvedRecipient as never
     throw new Error(`unexpected GET ${path}`)
   })
   vi.mocked(api.post).mockImplementation(async (path: string) => {
@@ -1001,5 +1033,117 @@ describe('the Test-a-case selectors offer only what can be proposed', () => {
     const picker = await screen.findByLabelText('Party override — tax code')
     expect(picker).toHaveTextContent('AT-20')
     expect(picker).not.toHaveTextContent('AT-E')
+  })
+})
+
+// ─── Taking the buyer from a party (P1b) ───────────────────────────────────
+
+describe('taking the buyer from a party', () => {
+  const PARTIES = [
+    { id: 'p-dept', name: 'Einkauf', type: 'department' },
+    { id: 'p-org', name: 'Berlin GmbH', type: 'organisation' },
+  ]
+
+  it('is not offered when there are no parties, so the fields stay typeable', async () => {
+    mockApi({ parties: [] })
+    render(<TaxPage />)
+    await openTestTab()
+
+    expect(
+      screen.queryByLabelText('Take buyer from a party'),
+    ).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/Buyer country/)).toBeEnabled()
+  })
+
+  it('fills the buyer fields from the API’s RESOLVED recipient', async () => {
+    mockApi({ parties: PARTIES })
+    render(<TaxPage />)
+    await openTestTab()
+
+    fireEvent.change(
+      await screen.findByLabelText('Take buyer from a party'),
+      { target: { value: 'p-dept' } },
+    )
+
+    // `DE` and `verified` come from the organisation two levels up. The
+    // screen sees no party row at all — only the resolver's answer — so
+    // these values are ones it could not have worked out.
+    await waitFor(() =>
+      expect(screen.getByLabelText('Buyer country')).toHaveValue('DE'),
+    )
+    await waitFor(() =>
+      expect(vi.mocked(api.post).mock.calls.at(-1)?.[1]).toMatchObject({
+        buyer_country: 'DE',
+        buyer_type: 'business',
+        buyer_vat_verified: true,
+      }),
+    )
+  })
+
+  it('shows where each value came from', async () => {
+    mockApi({ parties: PARTIES })
+    render(<TaxPage />)
+    await openTestTab()
+    fireEvent.change(
+      await screen.findByLabelText('Take buyer from a party'),
+      { target: { value: 'p-dept' } },
+    )
+
+    const note = await screen.findByTestId('tax-buyer-from-party')
+    expect(note).toHaveTextContent('Berlin GmbH')
+    expect(note).toHaveTextContent('country DE (from organisation)')
+    expect(note).toHaveTextContent('VAT ID DE123456789 (from organisation)')
+    expect(note).toHaveTextContent('verified')
+    expect(note).toHaveTextContent('treated as business')
+  })
+
+  it('makes the buyer fields read-only while a party is chosen', async () => {
+    mockApi({ parties: PARTIES })
+    render(<TaxPage />)
+    await openTestTab()
+    fireEvent.change(
+      await screen.findByLabelText('Take buyer from a party'),
+      { target: { value: 'p-dept' } },
+    )
+
+    await waitFor(() =>
+      expect(screen.getByLabelText('Buyer country')).toBeDisabled(),
+    )
+    expect(screen.getByLabelText('Buyer')).toBeDisabled()
+    expect(screen.getByLabelText(/VAT ID verified/)).toBeDisabled()
+  })
+
+  it('hands the fields back when the party is deselected', async () => {
+    mockApi({ parties: PARTIES })
+    render(<TaxPage />)
+    await openTestTab()
+    const selector = await screen.findByLabelText('Take buyer from a party')
+    fireEvent.change(selector, { target: { value: 'p-dept' } })
+    await waitFor(() =>
+      expect(screen.getByLabelText('Buyer country')).toBeDisabled(),
+    )
+
+    fireEvent.change(selector, { target: { value: '' } })
+
+    await waitFor(() =>
+      expect(screen.getByLabelText('Buyer country')).toBeEnabled(),
+    )
+    expect(
+      screen.queryByTestId('tax-buyer-from-party'),
+    ).not.toBeInTheDocument()
+  })
+
+  it('shows the result panel unchanged', async () => {
+    mockApi({ parties: PARTIES })
+    render(<TaxPage />)
+    await openTestTab()
+    fireEvent.change(
+      await screen.findByLabelText('Take buyer from a party'),
+      { target: { value: 'p-dept' } },
+    )
+
+    // Still the server's code and rate, still from `POST .../propose`.
+    expect(await screen.findByText(SERVER_ONLY_CODE)).toBeInTheDocument()
+    expect(screen.getByText(`${SERVER_ONLY_RATE} %`)).toBeInTheDocument()
   })
 })
