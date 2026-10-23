@@ -51,7 +51,7 @@ from ..schemas.tax import (
     TaxWarningResponse,
     TaxWouldHaveAppliedResponse,
 )
-from ..services import audit, tax_service
+from ..services import audit, tax_references, tax_service
 from ..services.permissions import scoped
 
 router = APIRouter(tags=["tax"])
@@ -106,6 +106,24 @@ def _code_or_404(db: Session, membership: Membership, tax_code_id: uuid.UUID) ->
             status_code=status.HTTP_404_NOT_FOUND, detail="Tax code not found"
         )
     return row
+
+
+def _refuse_if_referenced(subject: str, referrers: list) -> None:
+    """409 with the referrers named, or nothing.
+
+    A sentence rather than a code, and the names rather than a count: "used
+    by 3 things" is not something anybody can act on. The alternative to
+    refusing is worse than it looks — a deactivated code that a rule still
+    resolves to makes every matching sale unpriceable with a `blocking`
+    answer and no indication which switch caused it, and it surfaces in P2's
+    finalize to somebody who did not make the change.
+    """
+    if not referrers:
+        return
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=tax_references.refusal_sentence(subject, referrers),
+    )
 
 
 def _code_response(row: TaxCode, notices: Optional[list[str]] = None) -> TaxCodeResponse:
@@ -214,6 +232,11 @@ def update_tax_code(
                     "state nothing can explain."
                 ),
             )
+
+    if changes.get("is_active") is False and row.is_active:
+        _refuse_if_referenced(
+            row.code, tax_references.references_to_code(db, row.id)
+        )
 
     before = audit.snapshot(row, TAX_CODE_AUDITED)
     if changes.get("rate") is not None:
@@ -475,6 +498,15 @@ def update_tax_class(
     code = _code_of_class(db, membership, row)
     before_class = audit.snapshot(row, TAX_CLASS_AUDITED)
     before_code = audit.snapshot(code, TAX_CODE_AUDITED)
+
+    if changes.get("is_active") is False and row.is_active:
+        # Both halves, through one call: `references_to_class` asks the
+        # code's own sources too, because retiring the pair breaks a rule
+        # that names the code just as surely as deactivating the code would.
+        _refuse_if_referenced(
+            f"The rate “{row.label}”",
+            tax_references.references_to_class(db, row.id),
+        )
 
     if "label" in changes and changes["label"] is not None:
         row.label = changes["label"]
