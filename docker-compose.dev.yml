@@ -210,6 +210,13 @@ services:
         condition: service_started
     volumes:
       - ./apps/api:/workspace/apps/api
+      # Read-only, and only in dev. `scripts/` holds the operational tools —
+      # P1b's `seed_dev_parties.py` is the first one meant to be run from
+      # inside a container — and without this mount the documented command
+      # fails with "can't open file", which reads as a broken instruction
+      # rather than a missing mount. Read-only because nothing in here should
+      # be writing to the repository.
+      - ./scripts:/workspace/scripts:ro
     command: >
       sh -c "cd /workspace/apps/api && alembic upgrade head && cd /workspace && uvicorn apps.api.main:app --host 0.0.0.0 --port 8000 --reload"
 
