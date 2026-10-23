@@ -18,6 +18,7 @@ The translation layer between `models/party.py` and
 import uuid
 from typing import Optional
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..billing.parties import (
@@ -346,3 +347,180 @@ def allocate_party_number(
         return None
     party.party_number = plan.number
     return party.party_number
+
+
+# ─── Duplicates: a warning, never a refusal ─────────────────────────────────
+
+
+def find_duplicates(
+    db: Session,
+    *,
+    company_id: uuid.UUID,
+    name: Optional[str] = None,
+    vat_id: Optional[str] = None,
+    email: Optional[str] = None,
+    zip_code: Optional[str] = None,
+    exclude_id: Optional[uuid.UUID] = None,
+) -> list[dict]:
+    """"This might be one you already have." Three signals, never blocking.
+
+    Blocking a create on a guess is worse than a duplicate: the guess is
+    sometimes wrong — a holding company and its subsidiary legitimately
+    share a name and a postcode — and somebody who cannot save a customer
+    cannot invoice them. So it is a list of warnings, and the merge tool is
+    later.
+
+    The three signals, in descending confidence: the same normalised VAT ID
+    (near-certain), the same primary email (near-certain), the same name and
+    postcode (a hint).
+    """
+    found: list[dict] = []
+    seen: set = set()
+
+    def _add(row, reason: str, detail: str) -> None:
+        if row.id in seen or row.id == exclude_id:
+            return
+        seen.add(row.id)
+        found.append(
+            {
+                "party_id": row.id,
+                "name": row.name,
+                "reason": reason,
+                "detail": detail,
+            }
+        )
+
+    if vat_id:
+        for row in (
+            db.query(Party)
+            .filter(Party.company_id == company_id, Party.vat_id == vat_id)
+            .all()
+        ):
+            _add(
+                row,
+                "vat_id",
+                f"{row.name} already has the VAT ID {vat_id}.",
+            )
+
+    if email:
+        rows = (
+            db.query(Party)
+            .join(PartyContactPoint, PartyContactPoint.party_id == Party.id)
+            .filter(
+                Party.company_id == company_id,
+                PartyContactPoint.kind == "email",
+                func.lower(PartyContactPoint.value) == email.strip().lower(),
+            )
+            .all()
+        )
+        for row in rows:
+            _add(row, "email", f"{row.name} already uses the address {email}.")
+
+    if name and zip_code:
+        rows = (
+            db.query(Party)
+            .join(PartyAddress, PartyAddress.party_id == Party.id)
+            .filter(
+                Party.company_id == company_id,
+                func.lower(Party.name) == name.strip().lower(),
+                PartyAddress.zip == zip_code,
+            )
+            .all()
+        )
+        for row in rows:
+            _add(
+                row,
+                "name_and_zip",
+                f"{row.name} has the same name and postcode ({zip_code}).",
+            )
+
+    return found
+
+
+# ─── Archiving ──────────────────────────────────────────────────────────────
+
+
+def active_children(db: Session, party: Party) -> list[Party]:
+    return (
+        db.query(Party)
+        .filter(
+            Party.company_id == party.company_id,
+            Party.parent_id == party.id,
+            Party.is_active.is_(True),
+        )
+        .order_by(Party.name)
+        .all()
+    )
+
+
+def refuse_archive_with_active_children(db: Session, party: Party) -> None:
+    """An organisation with live departments or people cannot be archived.
+
+    Named, because "cannot archive: it has children" leaves somebody opening
+    rows one at a time to find out which. Archiving the parent while a
+    department is still live would leave that department resolving its
+    address from an archived organisation — usable, but explaining itself
+    with a row the list no longer shows.
+    """
+    children = active_children(db, party)
+    if not children:
+        return
+    listed = ", ".join(f"{child.name} ({child.type})" for child in children)
+    raise PartyError(
+        f"{party.name} still has active entries below it: {listed}. Archive "
+        "those first — archiving never deletes, so they stay readable "
+        "afterwards."
+    )
+
+
+# ─── Parties as referrers of tax codes and classes (P1a-2 part 2) ───────────
+#
+# Registered HERE, at the bottof the module that owns the referring table,
+# which is what `tax_references`' registration point is for: a guard whose
+# knowledge lives in the tax router is a guard the next endpoint forgets.
+#
+# A party's `tax_override` points at a tax code by its CODE STRING or names
+# the `domestic_for_foreign_business` kind, which points at no code at all.
+# So only the first shape is a reference — and deactivating a code a customer
+# is pinned to would make every sale to that customer unpriceable, with a
+# `blocking` answer and no indication which switch caused it.
+
+
+def _parties_overriding_to(db: Session, code) -> list:
+    """Active parties whose `tax_override` names this code."""
+    from .tax_references import Referrer
+
+    rows = (
+        db.query(Party)
+        .filter(
+            Party.company_id == code.company_id,
+            Party.is_active.is_(True),
+            Party.tax_override.isnot(None),
+        )
+        .order_by(Party.name)
+        .all()
+    )
+    found = []
+    for row in rows:
+        override = row.tax_override or {}
+        if override.get("kind") == "code" and override.get("code") == code.code:
+            found.append(Referrer(kind="customer", name=row.name))
+    return found
+
+
+def register_referrers() -> None:
+    """Tell the tax reference registry about parties.
+
+    A function rather than a decorator at import time, called from
+    `main.py`, because the registry lives in `tax_references` and importing
+    this module from there would close a cycle. Idempotent — the registry
+    refuses a duplicate source — so importing twice is harmless.
+    """
+    from .tax_references import register_code_referrers
+
+    register_code_referrers(_parties_overriding_to)
+
+
+# Registered on import as well, so a test that imports this module without
+# going through `main` still gets the guard. The registry is idempotent.
+register_referrers()

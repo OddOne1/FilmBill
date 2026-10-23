@@ -14,6 +14,7 @@ from .routers import (
     health,
     notifications,
     number_series,
+    parties,
     setup,
     site_settings,
     tax,
@@ -84,6 +85,7 @@ app.include_router(users.router)
 app.include_router(setup.router)
 app.include_router(companies.router)
 app.include_router(number_series.router)
+app.include_router(parties.router)
 app.include_router(tax.router)
 app.include_router(audit.router)
 app.include_router(admin.router)

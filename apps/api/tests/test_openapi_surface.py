@@ -68,6 +68,13 @@ EXPECTED_TAGS = {
     #: the `/company/...` PATH rather than on the tag, so a new tag under that
     #: path cannot escape it (see tests/test_company_isolation.py).
     "number-series",
+    #: P1b. Customers, suppliers, partners and the people in them. A tag of
+    #: its own, and a top-level PATH rather than `/company/...`, because a
+    #: customer list is not a company setting — which is exactly why
+    #: `test_company_isolation._is_company_scoped` had to learn about
+    #: `/parties`: fourteen endpoints would otherwise have been invisible to
+    #: the suite that proves cross-company isolation.
+    "parties",
     #: P1a. Settings → Company → Tax: codes, classes, read-only rules and the
     #: proposal preview. Its own tag because the tax engine is one subject
     #: that P2 (document and line tax), P5 (the advisor's archive) and P6

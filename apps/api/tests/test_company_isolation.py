@@ -35,6 +35,7 @@ from .company_factories import (
     make_bank_account,
     make_company,
     make_number_series,
+    make_party,
     make_superadmin,
     make_tax_class,
     make_tax_code,
@@ -55,8 +56,20 @@ from .company_factories import (
 #: P0b-3 added `/company/number-series` under a tag of its own. Those four
 #: endpoints would have escaped silently — the file would have gone on
 #: passing, and reading as coverage.
+#: `/parties` is company-scoped too, and is NOT under `/company/...`.
+#:
+#: P1b added it as a top-level path because a customer list is not a company
+#: setting, and that very nearly made fourteen endpoints invisible to this
+#: file — the same way P0b-3's number-series endpoints nearly escaped when the
+#: selector was a TAG. Listed explicitly rather than widened to "anything
+#: scoped", because the point of this function is that adding a path somebody
+#: forgot about makes a test fail rather than quietly pass.
+_SCOPED_PREFIXES = ("/company/", "/parties")
+_SCOPED_EXACT = ("/companies", "/company", "/parties")
+
+
 def _is_company_scoped(path: str) -> bool:
-    return path == "/companies" or path == "/company" or path.startswith("/company/")
+    return path in _SCOPED_EXACT or path.startswith(_SCOPED_PREFIXES)
 
 #: Marks an operation that takes no company context BY DESIGN, with the
 #: reason. Listing your own companies and creating a new one are the only two
@@ -159,6 +172,29 @@ CASES: dict[str, object] = {
     "POST /company/tax/country-change": {
         "body": {"country": "DE", "mode": "apply_pack"}
     },
+    # P1b. Fourteen endpoints on a top-level path, which is why
+    # `_is_company_scoped` had to learn about `/parties`: without that they
+    # would all have been invisible here.
+    "GET /parties": {"body": None},
+    "POST /parties": {"body": {"type": "organisation", "name": "Stolen"}},
+    "GET /parties/{party_id}": {"body": None},
+    "PATCH /parties/{party_id}": {"body": {"name": "Stolen"}},
+    "POST /parties/{party_id}/archive": {"body": None},
+    "POST /parties/{party_id}/reactivate": {"body": None},
+    "GET /parties/{party_id}/children": {"body": None},
+    "POST /parties/{party_id}/addresses": {
+        "body": {"kind": "billing", "street": "Stolen 1"}
+    },
+    "POST /parties/{party_id}/contact-points": {
+        "body": {"kind": "email", "value": "stolen@example.com"}
+    },
+    "POST /parties/{party_id}/bank-accounts": {
+        "body": {"iban": "AT61 1904 3002 3457 3201"}
+    },
+    "GET /parties/{party_id}/resolved": {"body": None},
+    "POST /parties/{party_id}/vat-check": {"body": None},
+    "GET /parties/{party_id}/vat-checks": {"body": None},
+    "POST /parties/{party_id}/tax-preview": {"body": {"supply_kind": "services"}},
 }
 
 #: Placeholder -> the key in the `two_companies` fixture holding a row that
@@ -169,6 +205,7 @@ OTHER_COMPANY_ROWS = {
     "{series_id}": "series_in_b",
     "{tax_code_id}": "tax_code_in_b",
     "{tax_class_id}": "tax_class_in_b",
+    "{party_id}": "party_in_b",
 }
 
 
@@ -242,6 +279,10 @@ def two_companies(pg_db):
     # a `company_id` filter would find it and rename it.
     tax_code_in_b = make_tax_code(pg_db, company_b, code="AT-20")
     tax_class_in_b = make_tax_class(pg_db, company_b, code=tax_code_in_b)
+    # And a party of B's: every `/parties/{id}` endpoint looked up without a
+    # `company_id` filter would FIND it, and answering anything but 404
+    # confirms it exists.
+    party_in_b = make_party(pg_db, company_b, name="Their customer")
     return {
         "ada": ada,
         "bo": bo,
@@ -252,6 +293,7 @@ def two_companies(pg_db):
         "series_in_b": series_in_b,
         "tax_code_in_b": tax_code_in_b,
         "tax_class_in_b": tax_class_in_b,
+        "party_in_b": party_in_b,
     }
 
 

@@ -67,6 +67,15 @@ _PRODUCTION: set[CompanyRole] = {
     CompanyRole.accountant,
     CompanyRole.producer,
 }
+#: Who may CHANGE a party. `_PRODUCTION` without the accountant: a party's
+#: address and VAT ID are snapshotted onto documents, so editing one is a
+#: structural act. A set of its own rather than an expression at the use
+#: site, so that `PERMISSIONS` stays readable as a table.
+_PARTY_EDIT: set[CompanyRole] = {
+    CompanyRole.owner,
+    CompanyRole.admin,
+    CompanyRole.producer,
+}
 
 #: Every permission this system knows about, and which roles hold it.
 #:
@@ -110,6 +119,31 @@ PERMISSIONS: dict[str, set[CompanyRole]] = {
     #: `company.settings.edit` to read, and `audit.view` must not be a way
     #: round that gate.
     "audit.view": _OWNER_ADMIN | {CompanyRole.tax_advisor},
+    #: P1b. Customers, suppliers, partners and the people in them.
+    #:
+    #: **View is `_PRODUCTION`** — owner, admin, accountant, producer — which
+    #: is the set that already exists for `documents.finalize`, and the
+    #: reasoning is the same: a producer sends the invoice, so a producer has
+    #: to be able to see who it goes to. The accountant reads them because
+    #: reconciling a payment means knowing which customer it came from.
+    #:
+    #: **Edit drops the accountant** (`_PARTY_EDIT`): a party's address and
+    #: VAT ID end up snapshotted on a document, so changing one is a
+    #: structural act rather than a bookkeeping one — the same line
+    #: `company.settings.edit` and `number_series.manage` draw.
+    #:
+    #: **Staff and the tax advisor hold neither.** Staff have no business
+    #: with the customer list, and the advisor's access is the ARCHIVE
+    #: (D23/D43): finalized documents, where the recipient is already
+    #: snapshotted on the document they are reading. Giving them the live
+    #: party list would widen an outside party's access beyond what they were
+    #: handed the archive to do.
+    #:
+    #: [Guessing] — the matrix is the prompt's proposal with the accountant
+    #: kept on view, and it is recorded as a decision rather than a
+    #: certainty (SCOPE D60).
+    "parties.view": _PRODUCTION,
+    "parties.edit": _PARTY_EDIT,
     #: P5. The archive of finalized documents. The tax advisor's entire
     #: reason for existing in this system.
     "archive.view": _BOOKS | {CompanyRole.tax_advisor},

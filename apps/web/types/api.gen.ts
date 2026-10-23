@@ -1587,6 +1587,275 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/parties": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Parties
+         * @description Search by name, trading name, party number, VAT ID or email.
+         *
+         *     One query over five columns rather than five filters, because somebody
+         *     looking for a customer types what they remember and does not know which
+         *     field it was.
+         */
+        get: operations["list_parties_parties_get"];
+        put?: never;
+        /**
+         * Create Party
+         * @description Add an organisation, a department or a person.
+         *
+         *     The number is allocated in THIS transaction (rule 5's reasoning applied
+         *     to a customer number): a rolled-back create must not consume one and
+         *     leave a gap.
+         */
+        post: operations["create_party_parties_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/parties/{party_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Party */
+        get: operations["read_party_parties__party_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Party
+         * @description Change a party. `type` cannot change — see `PartyWrite`.
+         */
+        patch: operations["update_party_parties__party_id__patch"];
+        trace?: never;
+    };
+    "/parties/{party_id}/addresses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Address
+         * @description Add an address. Recorded inside `party.updated`'s diff.
+         *
+         *     Inside the party's own event rather than as `party_address.created`,
+         *     because an address is read as part of the party: "what changed about this
+         *     customer" is the question, and three event types for one answer makes the
+         *     log harder to read rather than richer.
+         */
+        post: operations["add_address_parties__party_id__addresses_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/parties/{party_id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Archive Party
+         * @description Retire a party. Never deletes.
+         *
+         *     Refused while it still has active entries below it, naming them: an
+         *     archived organisation with a live department would leave that department
+         *     resolving its address from a row the list no longer shows.
+         */
+        post: operations["archive_party_parties__party_id__archive_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/parties/{party_id}/bank-accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Bank Account
+         * @description Add a supplier's account. The IBAN is normalised and masked in audit.
+         *
+         *     Normalised exactly like the company's own — compact, upper case — because
+         *     one IBAN written two ways is two rows that look like two accounts.
+         */
+        post: operations["add_bank_account_parties__party_id__bank_accounts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/parties/{party_id}/children": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Children */
+        get: operations["list_children_parties__party_id__children_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/parties/{party_id}/contact-points": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add Contact Point */
+        post: operations["add_contact_point_parties__party_id__contact_points_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/parties/{party_id}/reactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reactivate Party */
+        post: operations["reactivate_party_parties__party_id__reactivate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/parties/{party_id}/resolved": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Resolved
+         * @description Exactly what a document addressed to this party would use.
+         *
+         *     The shape P2 will snapshot, with every field's source, so the screen can
+         *     grey an inherited value and name its origin.
+         */
+        get: operations["read_resolved_parties__party_id__resolved_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/parties/{party_id}/tax-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Tax
+         * @description What tax a sale to this party would carry. Reads; writes nothing.
+         *
+         *     The buyer side comes from the resolved recipient and the seller side from
+         *     the company, so neither can be asserted by the caller. Same engine, same
+         *     inputs, same answer as Settings → Company → Tax — the web computes no
+         *     tax anywhere.
+         */
+        post: operations["preview_tax_parties__party_id__tax_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/parties/{party_id}/vat-check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check Vat
+         * @description Look this party's current VAT ID up in VIES and record the answer.
+         *
+         *     Append-only history: the row is the evidence for a reverse charge. A
+         *     failure to obtain an answer is recorded as `unavailable` and never as
+         *     `invalid`, and the party stays usable either way — no check is ever
+         *     required to save one.
+         */
+        post: operations["check_vat_parties__party_id__vat_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/parties/{party_id}/vat-checks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Vat Checks
+         * @description The whole history, newest first. Append-only, so it only grows.
+         */
+        get: operations["list_vat_checks_parties__party_id__vat_checks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/setup/create-superadmin": {
         parameters: {
             query?: never;
@@ -2553,6 +2822,23 @@ export interface components {
             password: string;
         };
         /**
+         * DuplicateWarning
+         * @description "This might be one you already have." Never blocking.
+         */
+        DuplicateWarning: {
+            /** Detail */
+            detail: string;
+            /** Name */
+            name: string;
+            /**
+             * Party Id
+             * Format: uuid
+             */
+            party_id: string;
+            /** Reason */
+            reason: string;
+        };
+        /**
          * EmailSettingsResponse
          * @description What the admin form reads.
          *
@@ -2938,6 +3224,500 @@ export interface components {
             /** Message */
             message: string;
         };
+        /** PartyAddressResponse */
+        PartyAddressResponse: {
+            /** City */
+            city?: string | null;
+            /** Country */
+            country?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Is Default
+             * @default false
+             */
+            is_default: boolean;
+            /** Kind */
+            kind: string;
+            /** Street */
+            street?: string | null;
+            /** Street2 */
+            street2?: string | null;
+            /** Zip */
+            zip?: string | null;
+        };
+        /** PartyAddressWrite */
+        PartyAddressWrite: {
+            /** City */
+            city?: string | null;
+            /** Country */
+            country?: string | null;
+            /**
+             * Is Default
+             * @default false
+             */
+            is_default: boolean;
+            /**
+             * Kind
+             * @default billing
+             * @enum {string}
+             */
+            kind: "billing" | "delivery" | "postal";
+            /** Street */
+            street?: string | null;
+            /** Street2 */
+            street2?: string | null;
+            /** Zip */
+            zip?: string | null;
+        };
+        /** PartyBankAccountResponse */
+        PartyBankAccountResponse: {
+            /** Bank Name */
+            bank_name?: string | null;
+            /** Bic */
+            bic?: string | null;
+            /** Iban */
+            iban: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Is Default
+             * @default false
+             */
+            is_default: boolean;
+            /** Label */
+            label?: string | null;
+        };
+        /** PartyBankAccountWrite */
+        PartyBankAccountWrite: {
+            /** Bank Name */
+            bank_name?: string | null;
+            /** Bic */
+            bic?: string | null;
+            /** Iban */
+            iban: string;
+            /**
+             * Is Default
+             * @default false
+             */
+            is_default: boolean;
+            /** Label */
+            label?: string | null;
+        };
+        /** PartyChild */
+        PartyChild: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /** Name */
+            name: string;
+            /** Party Number */
+            party_number?: string | null;
+            /** Position */
+            position?: string | null;
+            /** Type */
+            type: string;
+        };
+        /** PartyContactPointResponse */
+        PartyContactPointResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Is Primary
+             * @default false
+             */
+            is_primary: boolean;
+            /** Kind */
+            kind: string;
+            /** Label */
+            label?: string | null;
+            /**
+             * Purpose
+             * @default general
+             */
+            purpose: string;
+            /** Value */
+            value: string;
+        };
+        /** PartyContactPointWrite */
+        PartyContactPointWrite: {
+            /**
+             * Is Primary
+             * @default false
+             */
+            is_primary: boolean;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "email" | "phone";
+            /** Label */
+            label?: string | null;
+            /**
+             * Purpose
+             * @default general
+             * @enum {string}
+             */
+            purpose: "general" | "invoice";
+            /** Value */
+            value: string;
+        };
+        /** PartyCreate */
+        PartyCreate: {
+            /** Business Status */
+            business_status?: ("auto" | "business" | "private") | null;
+            /** Default Currency */
+            default_currency?: string | null;
+            /** Einvoice Routing */
+            einvoice_routing?: {
+                [key: string]: unknown;
+            } | null;
+            /** Is Customer */
+            is_customer?: boolean | null;
+            /** Is Partner */
+            is_partner?: boolean | null;
+            /** Is Supplier */
+            is_supplier?: boolean | null;
+            /** Language */
+            language?: string | null;
+            /** Legal Form */
+            legal_form?: string | null;
+            /** Name */
+            name: string;
+            /** Notes */
+            notes?: string | null;
+            /** Parent Id */
+            parent_id?: string | null;
+            /** Party Number */
+            party_number?: string | null;
+            /** Payment Terms Days */
+            payment_terms_days?: number | null;
+            /** Payment Terms Text */
+            payment_terms_text?: string | null;
+            /** Po Reference */
+            po_reference?: string | null;
+            /** Position */
+            position?: string | null;
+            /** Register Court */
+            register_court?: string | null;
+            /** Register Number */
+            register_number?: string | null;
+            /** Tags */
+            tags?: string[] | null;
+            /** Tax Country */
+            tax_country?: string | null;
+            /** Tax Override */
+            tax_override?: {
+                [key: string]: unknown;
+            } | null;
+            /** Title */
+            title?: string | null;
+            /** Trading Name */
+            trading_name?: string | null;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "organisation" | "department" | "person";
+            /** Vat Id */
+            vat_id?: string | null;
+        };
+        /**
+         * PartyPage
+         * @description One page of the list, newest-relevant first.
+         */
+        PartyPage: {
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Parties */
+            parties: components["schemas"]["PartyResponse"][];
+            /** Total */
+            total: number;
+        };
+        /** PartyResponse */
+        PartyResponse: {
+            /**
+             * Addresses
+             * @default []
+             */
+            addresses: components["schemas"]["PartyAddressResponse"][];
+            /**
+             * Bank Accounts
+             * @default []
+             */
+            bank_accounts: components["schemas"]["PartyBankAccountResponse"][];
+            /**
+             * Business Status
+             * @default auto
+             */
+            business_status: string;
+            /** Buyer Type */
+            buyer_type?: string | null;
+            /** Buyer Type Reason */
+            buyer_type_reason?: string | null;
+            /**
+             * Children
+             * @default []
+             */
+            children: components["schemas"]["PartyChild"][];
+            /**
+             * Contact Points
+             * @default []
+             */
+            contact_points: components["schemas"]["PartyContactPointResponse"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Default Currency */
+            default_currency?: string | null;
+            /**
+             * Duplicates
+             * @default []
+             */
+            duplicates: components["schemas"]["DuplicateWarning"][];
+            /**
+             * Einvoice Routing
+             * @default {}
+             */
+            einvoice_routing: {
+                [key: string]: unknown;
+            };
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /**
+             * Is Customer
+             * @default false
+             */
+            is_customer: boolean;
+            /**
+             * Is Partner
+             * @default false
+             */
+            is_partner: boolean;
+            /**
+             * Is Supplier
+             * @default false
+             */
+            is_supplier: boolean;
+            /** Language */
+            language?: string | null;
+            latest_vat_check?: components["schemas"]["PartyVatCheckResponse"] | null;
+            /** Legal Form */
+            legal_form?: string | null;
+            /** Name */
+            name: string;
+            /** Notes */
+            notes?: string | null;
+            /** Parent Id */
+            parent_id?: string | null;
+            /** Party Number */
+            party_number?: string | null;
+            /** Payment Terms Days */
+            payment_terms_days?: number | null;
+            /** Payment Terms Text */
+            payment_terms_text?: string | null;
+            /** Po Reference */
+            po_reference?: string | null;
+            /** Position */
+            position?: string | null;
+            /** Register Court */
+            register_court?: string | null;
+            /** Register Number */
+            register_number?: string | null;
+            /**
+             * Tags
+             * @default []
+             */
+            tags: string[];
+            /** Tax Country */
+            tax_country?: string | null;
+            /** Tax Override */
+            tax_override?: {
+                [key: string]: unknown;
+            } | null;
+            /** Title */
+            title?: string | null;
+            /** Trading Name */
+            trading_name?: string | null;
+            /** Type */
+            type: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Vat Id */
+            vat_id?: string | null;
+            /**
+             * Vat Verified
+             * @default false
+             */
+            vat_verified: boolean;
+        };
+        /**
+         * PartyTaxPreviewRequest
+         * @description Ask what tax a sale to this party would carry.
+         *
+         *     The buyer side is NOT in here: it comes from the resolved recipient, so a
+         *     caller cannot ask "what if this customer were German". The seller side
+         *     comes from the company, as it does on `POST /company/tax/propose`.
+         */
+        PartyTaxPreviewRequest: {
+            /**
+             * Item Class
+             * @default standard
+             */
+            item_class: string;
+            /** Item Override */
+            item_override?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Lang
+             * @default en
+             */
+            lang: string;
+            /**
+             * Supply Kind
+             * @default services
+             * @enum {string}
+             */
+            supply_kind: "goods" | "services";
+        };
+        /**
+         * PartyVatCheckResponse
+         * @description One VIES lookup, as stored. Append-only, so this never changes.
+         */
+        PartyVatCheckResponse: {
+            /**
+             * Checked At
+             * Format: date-time
+             */
+            checked_at: string;
+            /** Consultation Ref */
+            consultation_ref?: string | null;
+            /** Country */
+            country: string;
+            /**
+             * Detail
+             * @default
+             */
+            detail: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Response
+             * @default {}
+             */
+            response: {
+                [key: string]: unknown;
+            };
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "valid" | "invalid" | "unavailable" | "not_applicable";
+            /** Trader Address */
+            trader_address?: string | null;
+            /** Trader Name */
+            trader_name?: string | null;
+            /** Vat Id */
+            vat_id: string;
+        };
+        /**
+         * PartyWrite
+         * @description Create and update share a shape; `type` is immutable after creation.
+         *
+         *     `type` is absent from the update path because the tree's rules hang off
+         *     it: turning a person into an organisation would have to re-validate its
+         *     parent, its children and its number, and "delete it and make the right
+         *     one" is both clearer and the only thing that keeps the history honest.
+         */
+        PartyWrite: {
+            /** Business Status */
+            business_status?: ("auto" | "business" | "private") | null;
+            /** Default Currency */
+            default_currency?: string | null;
+            /** Einvoice Routing */
+            einvoice_routing?: {
+                [key: string]: unknown;
+            } | null;
+            /** Is Customer */
+            is_customer?: boolean | null;
+            /** Is Partner */
+            is_partner?: boolean | null;
+            /** Is Supplier */
+            is_supplier?: boolean | null;
+            /** Language */
+            language?: string | null;
+            /** Legal Form */
+            legal_form?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Parent Id */
+            parent_id?: string | null;
+            /** Party Number */
+            party_number?: string | null;
+            /** Payment Terms Days */
+            payment_terms_days?: number | null;
+            /** Payment Terms Text */
+            payment_terms_text?: string | null;
+            /** Po Reference */
+            po_reference?: string | null;
+            /** Position */
+            position?: string | null;
+            /** Register Court */
+            register_court?: string | null;
+            /** Register Number */
+            register_number?: string | null;
+            /** Tags */
+            tags?: string[] | null;
+            /** Tax Country */
+            tax_country?: string | null;
+            /** Tax Override */
+            tax_override?: {
+                [key: string]: unknown;
+            } | null;
+            /** Title */
+            title?: string | null;
+            /** Trading Name */
+            trading_name?: string | null;
+            /** Vat Id */
+            vat_id?: string | null;
+        };
         /**
          * PasswordPolicyResponse
          * @description The rules, so the screen can state them before the first attempt.
@@ -2976,6 +3756,61 @@ export interface components {
             name: string;
             /** Password */
             password: string;
+        };
+        /**
+         * ResolvedFieldResponse
+         * @description A value and the level it came from. Both, always.
+         */
+        ResolvedFieldResponse: {
+            /** Source */
+            source?: string | null;
+            /** Value */
+            value?: unknown | null;
+        };
+        /**
+         * ResolvedRecipientResponse
+         * @description Exactly what a document addressed to this party would use.
+         *
+         *     The shape P2 will snapshot. Every field carries its source so the screen
+         *     can grey an inherited value and name its origin.
+         */
+        ResolvedRecipientResponse: {
+            billing_address: components["schemas"]["ResolvedFieldResponse"];
+            business_status: components["schemas"]["ResolvedFieldResponse"];
+            /** Buyer Type */
+            buyer_type: string;
+            /** Buyer Type Reason */
+            buyer_type_reason: string;
+            contact_name: components["schemas"]["ResolvedFieldResponse"];
+            default_currency: components["schemas"]["ResolvedFieldResponse"];
+            einvoice_routing: components["schemas"]["ResolvedFieldResponse"];
+            email: components["schemas"]["ResolvedFieldResponse"];
+            /**
+             * Ids
+             * @default {}
+             */
+            ids: {
+                [key: string]: unknown;
+            };
+            invoice_name: components["schemas"]["ResolvedFieldResponse"];
+            language: components["schemas"]["ResolvedFieldResponse"];
+            /**
+             * Names
+             * @default {}
+             */
+            names: {
+                [key: string]: unknown;
+            };
+            /** Own Level */
+            own_level: string;
+            payment_terms_days: components["schemas"]["ResolvedFieldResponse"];
+            payment_terms_text: components["schemas"]["ResolvedFieldResponse"];
+            phone: components["schemas"]["ResolvedFieldResponse"];
+            po_reference: components["schemas"]["ResolvedFieldResponse"];
+            tax_country: components["schemas"]["ResolvedFieldResponse"];
+            tax_override: components["schemas"]["ResolvedFieldResponse"];
+            vat_id: components["schemas"]["ResolvedFieldResponse"];
+            vat_verified: components["schemas"]["ResolvedFieldResponse"];
         };
         /** SendMagicCodeRequest */
         SendMagicCodeRequest: {
@@ -5895,6 +6730,498 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_parties_parties_get: {
+        parameters: {
+            query?: {
+                search?: string | null;
+                /** @description customer | supplier | partner | person */
+                role?: string | null;
+                type?: string | null;
+                include_inactive?: boolean;
+                limit?: number;
+                offset?: number;
+            };
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartyPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_party_parties_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PartyCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_party_parties__party_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                party_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_party_parties__party_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                party_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PartyWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_address_parties__party_id__addresses_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                party_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PartyAddressWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    archive_party_parties__party_id__archive_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                party_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_bank_account_parties__party_id__bank_accounts_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                party_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PartyBankAccountWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_children_parties__party_id__children_get: {
+        parameters: {
+            query?: {
+                include_inactive?: boolean;
+            };
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                party_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartyChild"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_contact_point_parties__party_id__contact_points_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                party_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PartyContactPointWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reactivate_party_parties__party_id__reactivate_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                party_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_resolved_parties__party_id__resolved_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                party_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResolvedRecipientResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_tax_parties__party_id__tax_preview_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                party_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PartyTaxPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxProposalResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    check_vat_parties__party_id__vat_check_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                party_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartyVatCheckResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_vat_checks_parties__party_id__vat_checks_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                party_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartyVatCheckResponse"][];
+                };
             };
             /** @description Validation Error */
             422: {

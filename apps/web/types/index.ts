@@ -200,6 +200,45 @@ export const TAX_WARNING_CODE_INACTIVE = 'code_inactive'
 export const TAX_WARNING_HOME_COUNTRY_MISSING = 'home_country_missing'
 export const TAX_WARNING_BUYER_COUNTRY_MISSING = 'buyer_country_missing'
 
+// ─── Parties (P1b) ──────────────────────────────────────────────────────────
+//
+// Every resolved field is a value AND its source level, so the screen can
+// grey an inherited value and name where it came from. A value with no
+// provenance is one somebody has to guess the origin of, and on an invoice
+// that guess is expensive.
+
+export type Party = Schemas['PartyResponse']
+export type PartyPage = Schemas['PartyPage']
+export type PartyCreate = Schemas['PartyCreate']
+export type PartyWrite = Schemas['PartyWrite']
+export type PartyChild = Schemas['PartyChild']
+export type PartyAddress = Schemas['PartyAddressResponse']
+export type PartyAddressWrite = Schemas['PartyAddressWrite']
+export type PartyContactPoint = Schemas['PartyContactPointResponse']
+export type PartyContactPointWrite = Schemas['PartyContactPointWrite']
+export type PartyBankAccount = Schemas['PartyBankAccountResponse']
+export type PartyBankAccountWrite = Schemas['PartyBankAccountWrite']
+export type PartyVatCheck = Schemas['PartyVatCheckResponse']
+export type ResolvedRecipient = Schemas['ResolvedRecipientResponse']
+export type ResolvedField = Schemas['ResolvedFieldResponse']
+export type DuplicateWarning = Schemas['DuplicateWarning']
+export type PartyTaxPreviewRequest = Schemas['PartyTaxPreviewRequest']
+
+/** `organisation` | `department` | `person`. */
+export type PartyType = PartyCreate['type']
+/** `auto` | `business` | `private`. */
+export type BusinessStatus = NonNullable<PartyWrite['business_status']>
+
+/** The three levels, outermost last — the resolver's own lookup order. */
+export const PARTY_LEVELS = ['person', 'department', 'organisation'] as const
+
+/** Branched on, never matched as prose. `invalid` means VIES positively said
+ *  so; everything else that is not `valid` is a failure to get an answer. */
+export const VAT_VALID = 'valid'
+export const VAT_INVALID = 'invalid'
+export const VAT_UNAVAILABLE = 'unavailable'
+export const VAT_NOT_APPLICABLE = 'not_applicable'
+
 // ════════════════════════════════════════════════════════════════════════════
 // Hand-written, deliberately
 //
