@@ -16,6 +16,13 @@ from .company import (
 from .number_series import NumberAllocation, NumberSeries
 from .audit import AuditEvent
 from .tax import TaxClass, TaxCode, TaxRule
+from .party import (
+    Party,
+    PartyAddress,
+    PartyBankAccount,
+    PartyContactPoint,
+    PartyVatCheck,
+)
 
 __all__ = [
     "User",
@@ -35,4 +42,9 @@ __all__ = [
     "TaxCode",
     "TaxClass",
     "TaxRule",
+    "Party",
+    "PartyAddress",
+    "PartyBankAccount",
+    "PartyContactPoint",
+    "PartyVatCheck",
 ]

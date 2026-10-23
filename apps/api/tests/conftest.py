@@ -331,6 +331,15 @@ def auth_headers(client, mock_db, test_user):
 # `alembic upgrade head` step, which runs after pytest against the very same
 # URL, still meets an empty schema.
 
+#: Every table whose triggers refuse DELETE, so the teardown can clear it.
+#:
+#: A list rather than one name, because P1b added the second one
+#: (`party_vat_checks`, the evidence for a reverse charge) and a teardown
+#: that knew about only the first failed with "current transaction is
+#: aborted" — which reads as a database problem rather than as a missing
+#: name. Adding an append-only table means adding it here.
+_APPEND_ONLY_TABLES = ("audit_events", "party_vat_checks")
+
 #: The scratch database's name. Distinct from anything a person would run a
 #: dev stack on, and dropped at both ends of the session so a crashed run
 #: cannot poison the next one.
@@ -515,16 +524,16 @@ def pg_db(pg_engine):
         # that; `test_audit_events.py` asserts the triggers are on and that
         # they fire, through the same role the application uses.
         with pg_engine.begin() as conn:
-            conn.execute(
-                text("ALTER TABLE audit_events DISABLE TRIGGER USER")
-            )
+            for table in _APPEND_ONLY_TABLES:
+                conn.execute(text(f"ALTER TABLE {table} DISABLE TRIGGER USER"))
             try:
                 for table in reversed(Base.metadata.sorted_tables):
                     conn.execute(table.delete())
             finally:
-                conn.execute(
-                    text("ALTER TABLE audit_events ENABLE TRIGGER USER")
-                )
+                for table in _APPEND_ONLY_TABLES:
+                    conn.execute(
+                        text(f"ALTER TABLE {table} ENABLE TRIGGER USER")
+                    )
         database.engine, database.SessionLocal, setup_guard._setup_complete = previous
 
 

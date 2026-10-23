@@ -568,6 +568,20 @@ DEFAULT_SERIES: tuple[tuple[str, str, str], ...] = (
     ("letter", "BR", "Briefe"),
 )
 
+#: The two series that are NOT document numbers: a customer number and a
+#: supplier number (P1b). They use the same machinery because the promise is
+#: the same one — a number issued once, gap-free, from a counter a user can
+#: re-point — and a second mechanism for it would be a second place for that
+#: promise to be broken.
+#:
+#: `never` rather than `yearly`: a customer number that restarted every
+#: January would give two customers the same number, which is the one thing
+#: a customer number may not do. No year token for the same reason.
+PARTY_SERIES: tuple[tuple[str, str, str], ...] = (
+    ("customer", "K", "Kundennummern"),
+    ("supplier", "L", "Lieferantennummern"),
+)
+
 DEFAULT_PADDING = 4
 
 
@@ -579,7 +593,7 @@ def seed_rows(company_id: uuid.UUID) -> list[NumberSeries]:
     two disagree is the day a company created before the migration numbers
     its invoices differently from one created after it.
     """
-    return [
+    rows = [
         NumberSeries(
             company_id=company_id,
             document_type=document_type,
@@ -593,6 +607,22 @@ def seed_rows(company_id: uuid.UUID) -> list[NumberSeries]:
         )
         for document_type, prefix, name in DEFAULT_SERIES
     ]
+    rows += [
+        NumberSeries(
+            company_id=company_id,
+            document_type=document_type,
+            name=name,
+            # No year token and no restart — see PARTY_SERIES.
+            pattern=f"{prefix}-{{SEQ}}",
+            reset=RESET_NEVER,
+            next_value=1,
+            current_period=None,
+            padding=DEFAULT_PADDING,
+            is_active=True,
+        )
+        for document_type, prefix, name in PARTY_SERIES
+    ]
+    return rows
 
 
 def seed_number_series(db: Session, *, company_id: uuid.UUID) -> list[NumberSeries]:

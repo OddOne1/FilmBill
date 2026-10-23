@@ -459,12 +459,13 @@ def test_creating_a_company_with_a_country_seeds_its_pack(pg_db):
         pg_db.query(TaxRule).filter(TaxRule.company_id == company.id).count() == 8
     )
     # And the number series are still seeded beside it: two seeders in one
-    # create, and the second must not have replaced the first.
+    # create, and the second must not have replaced the first. Ten of them —
+    # eight document series and the two party ones (P1b).
     assert (
         pg_db.query(NumberSeries)
         .filter(NumberSeries.company_id == company.id)
         .count()
-        == 8
+        == 10
     )
 
 

@@ -735,7 +735,7 @@ def test_a_thread_that_rolls_back_leaves_no_gap(pg_engine, pg_db, world):
 # ─── Seeding ────────────────────────────────────────────────────────────────
 
 
-def test_a_new_company_gets_the_eight_default_series(pg_client, pg_db):
+def test_a_new_company_gets_every_default_series(pg_client, pg_db):
     """Through the endpoint, because `create_company` is what seeds them and
     a company that cannot number its first invoice is a company that has to
     be configured on the day it issues one."""
@@ -756,8 +756,14 @@ def test_a_new_company_gets_the_eight_default_series(pg_client, pg_db):
         .filter(NumberSeries.company_id == uuid.UUID(company_id))
         .all()
     )
+    # The eight DOCUMENT series plus the two party ones (P1b): a customer
+    # and a supplier number use the same machinery, because the promise —
+    # a number issued once, from a counter a user can re-point — is the
+    # same one, and a second mechanism for it would be a second place for
+    # that promise to break.
     assert {row.document_type for row in rows} == {
-        document_type for document_type, _, _ in engine.DEFAULT_SERIES
+        document_type
+        for document_type, _, _ in engine.DEFAULT_SERIES + engine.PARTY_SERIES
     }
     by_type = {row.document_type: row for row in rows}
     assert by_type["invoice"].pattern == "AR-{YYYY}-{SEQ}"
@@ -777,7 +783,7 @@ def test_seeding_twice_adds_nothing(pg_db, world):
     pg_db.commit()
 
     assert created == []
-    assert pg_db.query(func.count(NumberSeries.id)).scalar() == before + 7, (
+    assert pg_db.query(func.count(NumberSeries.id)).scalar() == before + 9, (
         "the fixture's hand-made invoice series was duplicated or the seed "
         "count changed"
     )
@@ -794,12 +800,17 @@ def test_the_listing_shows_the_seeded_series(pg_client, pg_db, world):
 
     assert response.status_code == 200, response.text
     body = response.json()
-    assert len(body) == 8
+    assert len(body) == len(engine.DEFAULT_SERIES) + len(engine.PARTY_SERIES)
     invoice = next(entry for entry in body if entry["document_type"] == "invoice")
     assert invoice["pattern"] == "AR-{YYYY}-{SEQ}"
     assert invoice["reset"] == "yearly"
     assert invoice["allocated_count"] == 0
     assert invoice["latest_number"] is None
+    # A customer number does not restart and carries no year token: one that
+    # restarted every January would give two customers the same number.
+    customer = next(entry for entry in body if entry["document_type"] == "customer")
+    assert customer["pattern"] == "K-{SEQ}"
+    assert customer["reset"] == "never"
 
 
 def test_the_preview_allocates_nothing(pg_client, pg_db, world):
@@ -1198,14 +1209,34 @@ def test_the_migration_backfills_existing_companies(at_revision_0007):
             {"id": company_id},
         ).fetchall()
 
+    # The eight DOCUMENT series plus the two party ones (P1b): a customer
+    # and a supplier number use the same machinery, because the promise —
+    # a number issued once, from a counter a user can re-point — is the
+    # same one, and a second mechanism for it would be a second place for
+    # that promise to break.
     assert {row.document_type for row in rows} == {
-        document_type for document_type, _, _ in engine.DEFAULT_SERIES
+        document_type
+        for document_type, _, _ in engine.DEFAULT_SERIES + engine.PARTY_SERIES
     }
     by_type = {row.document_type: row for row in rows}
     assert by_type["invoice"].pattern == "AR-{YYYY}-{SEQ}"
     assert by_type["quote"].pattern == "AN-{YYYY}-{SEQ}"
     assert by_type["letter"].pattern == "BR-{YYYY}-{SEQ}"
-    assert all(row.reset == "yearly" for row in rows)
+    # The eight DOCUMENT series restart yearly; the two party ones never do
+    # (a customer number that restarted would be reissued). Asserted per
+    # group rather than over all of them, which is what made this fail
+    # usefully when P1b added the second kind.
+    document_rows = [
+        row for row in rows if row.document_type not in ("customer", "supplier")
+    ]
+    party_rows = [
+        row for row in rows if row.document_type in ("customer", "supplier")
+    ]
+    assert len(document_rows) == 8 and len(party_rows) == 2
+    assert all(row.reset == "yearly" for row in document_rows)
+    assert all(row.reset == "never" for row in party_rows)
+    assert all("{YYYY}" in row.pattern for row in document_rows)
+    assert all("{YYYY}" not in row.pattern for row in party_rows)
     assert all(row.padding == 4 for row in rows)
     assert all(row.next_value == 1 for row in rows)
     assert all(row.current_period is None for row in rows)
@@ -1238,10 +1269,28 @@ def test_the_backfill_is_idempotent(at_revision_0007):
     assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
 
     with db_engine.connect() as conn:
-        count = conn.execute(
-            text(
-                "SELECT count(*) FROM number_series WHERE company_id = :id"
-            ),
-            {"id": company_id},
-        ).scalar()
-    assert count == 8
+        types = {
+            row[0]
+            for row in conn.execute(
+                text(
+                    "SELECT document_type FROM number_series "
+                    "WHERE company_id = :id"
+                ),
+                {"id": company_id},
+            )
+        }
+    # Migration 0008's own eight, plus the two migration 0012 backfills — a
+    # customer and a supplier number (P1b). Asserted as a SET rather than a
+    # count, so the next migration that adds one says which.
+    assert types == {
+        "quote",
+        "order_confirmation",
+        "delivery_note",
+        "invoice",
+        "credit_note",
+        "self_billing",
+        "dunning",
+        "letter",
+        "customer",
+        "supplier",
+    }

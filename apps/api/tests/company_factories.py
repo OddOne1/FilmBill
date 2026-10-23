@@ -305,3 +305,79 @@ def make_tax_class(
     db.commit()
     db.refresh(row)
     return row
+
+
+def make_party(
+    db,
+    company: Company,
+    *,
+    type: str = "organisation",
+    name: str = "ORF",
+    parent=None,
+    is_customer: bool = False,
+    is_supplier: bool = False,
+    vat_id: Optional[str] = None,
+    tax_country: Optional[str] = None,
+    business_status: str = "auto",
+    tax_override: Optional[dict] = None,
+    party_number: Optional[str] = None,
+    is_active: bool = True,
+):
+    """One party, written directly.
+
+    Directly rather than through `POST /parties`, for the same reason `grant`
+    does not use the members endpoint: a test about scoping or inheritance
+    must not be able to pass because the endpoint happened to behave.
+    """
+    from apps.api.models.party import Party
+
+    row = Party(
+        company_id=company.id,
+        type=type,
+        name=name,
+        parent_id=parent.id if parent is not None else None,
+        is_customer=is_customer,
+        is_supplier=is_supplier,
+        vat_id=vat_id,
+        tax_country=tax_country,
+        business_status=business_status,
+        tax_override=tax_override,
+        party_number=party_number,
+        is_active=is_active,
+        tags=[],
+        einvoice_routing={},
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def make_party_address(
+    db,
+    company: Company,
+    party,
+    *,
+    kind: str = "billing",
+    street: Optional[str] = "Würzburggasse 30",
+    zip: Optional[str] = "1136",
+    city: Optional[str] = "Wien",
+    country: Optional[str] = "AT",
+    is_default: bool = True,
+):
+    from apps.api.models.party import PartyAddress
+
+    row = PartyAddress(
+        company_id=company.id,
+        party_id=party.id,
+        kind=kind,
+        street=street,
+        zip=zip,
+        city=city,
+        country=country,
+        is_default=is_default,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row

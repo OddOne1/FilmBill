@@ -48,14 +48,18 @@ def test_importing_the_billing_package_loads_no_orm_and_no_web_framework():
     """
     program = (
         "import sys\n"
+        # Both packages, because the boundary is the PACKAGE's and a second
+        # one added later must not be exempt by having been forgotten here.
+        "import apps.api.billing.parties as parties\n"
         "import apps.api.billing.tax as tax\n"
         # Touch EVERY exported name, so this is not merely a check on what
         # the __init__ statements do: an import inside a function body is
         # reached as well. Written against `__all__` rather than a named
         # function so it keeps covering the whole surface as the package grows.
-        "assert tax.__all__, 'the tax package exports nothing'\n"
-        "for name in tax.__all__:\n"
-        "    getattr(tax, name)\n"
+        "for module in (tax, parties):\n"
+        "    assert module.__all__, f'{module.__name__} exports nothing'\n"
+        "    for name in module.__all__:\n"
+        "        getattr(module, name)\n"
         "loaded = sorted(\n"
         "    name for name in sys.modules\n"
         f"    if name.split('.')[0] in {FORBIDDEN_TOP_LEVEL!r}\n"
@@ -121,7 +125,7 @@ def _python_files() -> list[Path]:
 def test_the_package_has_files_to_check():
     """A glob that matched nothing would make the scan below vacuous."""
     files = _python_files()
-    assert len(files) >= 4, f"only found {files} under {BILLING}"
+    assert len(files) >= 7, f"only found {files} under {BILLING}"
 
 
 def _imported_modules(path: Path) -> list[tuple[int, str]]:
