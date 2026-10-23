@@ -35,7 +35,7 @@ from apps.api.billing.tax.packs import engine_tables as pack_tables
 from apps.api.models.audit import AuditEvent
 from apps.api.models.company import CompanyRole
 from apps.api.models.site_settings import SiteSettings
-from apps.api.models.tax import TaxCode
+from apps.api.models.tax import TaxClass, TaxCode
 from apps.api.services import tax_service
 
 from .company_factories import (
@@ -408,22 +408,31 @@ def test_a_language_key_that_is_not_a_language_is_refused(
     assert response.status_code == 422, response.text
 
 
-def test_deactivating_a_code_is_allowed_and_blocks_proposals_from_it(
+def test_retiring_a_rate_blocks_proposals_from_it(
     pg_client, pg_db, austrian_company
 ):
-    """Retiring a code is `is_active = false`, never a delete — the issued
-    documents that used it have to stay explicable."""
-    company = austrian_company["company"]
-    code = _code(pg_db, company, "AT-20")
+    """Retiring is `is_active = false`, never a delete — the issued documents
+    that used the code have to stay explicable.
 
-    assert (
-        pg_client.patch(
-            f"/company/tax/codes/{code.id}",
-            headers=_headers(austrian_company),
-            json={"is_active": False},
-        ).status_code
-        == 200
+    Done through the CLASS endpoint, which is the only way a rate is retired
+    (P1a-2): a class and its code are a 1:1 pair and the flag moves together.
+    Flipping the code alone is refused — see the test below.
+    """
+    company = austrian_company["company"]
+    standard = (
+        pg_db.query(TaxClass)
+        .filter(TaxClass.company_id == company.id, TaxClass.key == "standard")
+        .one()
     )
+
+    response = pg_client.patch(
+        f"/company/tax/classes/{standard.id}",
+        headers=_headers(austrian_company),
+        json={"is_active": False},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["is_active"] is False
+    assert response.json()["code_is_active"] is False
 
     proposal = pg_client.post(
         "/company/tax/propose",

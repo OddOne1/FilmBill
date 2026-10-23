@@ -36,6 +36,7 @@ from .company_factories import (
     make_company,
     make_number_series,
     make_superadmin,
+    make_tax_class,
     make_tax_code,
     make_user,
     unrelated_company_id,
@@ -135,6 +136,22 @@ CASES: dict[str, object] = {
     # the header says B — which is the first of the two checks below, and the
     # one that would leak a competitor's rates.
     "POST /company/tax/propose": {"body": {"buyer_country": "DE"}},
+    # P1a-2. Creating a rate or a no-tax case writes into whichever company
+    # the header names, so the first check below is the whole point: a user
+    # in A must not be able to add a rate to B.
+    "POST /company/tax/rates": {
+        "body": {"label": "Stolen rate", "rate": "7"}
+    },
+    "POST /company/tax/no-tax-cases": {
+        "body": {"label": "Stolen case", "category": "E"}
+    },
+    "PATCH /company/tax/classes/{tax_class_id}": {
+        "body": {"label": "Stolen"}
+    },
+    # Serves a fixed system list and reads no company data at all. It still
+    # takes a company context, because `require()` is how an endpoint gets
+    # one and an endpoint without one cannot be written here by accident.
+    "GET /company/tax/no-tax-categories": {"body": None},
 }
 
 #: Placeholder -> the key in the `two_companies` fixture holding a row that
@@ -144,6 +161,7 @@ OTHER_COMPANY_ROWS = {
     "{bank_account_id}": "bank_account_in_b",
     "{series_id}": "series_in_b",
     "{tax_code_id}": "tax_code_in_b",
+    "{tax_class_id}": "tax_class_in_b",
 }
 
 
@@ -216,6 +234,7 @@ def two_companies(pg_db):
     # And a tax code of B's: `PATCH /company/tax/codes/{id}` looked up without
     # a `company_id` filter would find it and rename it.
     tax_code_in_b = make_tax_code(pg_db, company_b, code="AT-20")
+    tax_class_in_b = make_tax_class(pg_db, company_b, code=tax_code_in_b)
     return {
         "ada": ada,
         "bo": bo,
@@ -225,6 +244,7 @@ def two_companies(pg_db):
         "bank_account_in_b": bank_in_b,
         "series_in_b": series_in_b,
         "tax_code_in_b": tax_code_in_b,
+        "tax_class_in_b": tax_class_in_b,
     }
 
 

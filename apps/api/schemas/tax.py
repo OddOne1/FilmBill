@@ -55,6 +55,15 @@ class TaxCodeResponse(BaseModel):
     origin_pack: Optional[str] = None
     created_at: datetime
     updated_at: datetime
+    #: Sentences the SERVER wants shown after a write. Empty on every read.
+    #:
+    #: It exists for one message with real consequences: a rate edit applies
+    #: to documents created afterwards and changes nothing about the ones
+    #: already issued (rule 3 — a line snapshots the code it used). Carried
+    #: here rather than written into the screen, for the same reason a
+    #: proposal's warnings are: the server owns the sentence, and an API
+    #: consumer that is not this web app can read it too.
+    notices: list[str] = []
 
 
 class TaxCodeUpdate(BaseModel):
@@ -113,8 +122,17 @@ class TaxClassResponse(BaseModel):
     rate: Quantity
     category: str
     code_is_active: bool
+    #: The class's own flag. A class and its code are a 1:1 pair and the two
+    #: move together, so these agree — `code_is_active` stays separate
+    #: because the screen reads the pair and a disagreement is a bug worth
+    #: being able to see.
+    is_active: bool = True
     position: int = 0
     origin_pack: Optional[str] = None
+    #: True when this class is the company's own rather than a pack's. The
+    #: screen shows it, because "FilmBill put this here" and "we added this"
+    #: are different things to somebody reviewing a tax table.
+    is_custom: bool = False
 
 
 class TaxRuleResponse(BaseModel):
@@ -129,6 +147,77 @@ class TaxRuleResponse(BaseModel):
     outcome: JsonObject = {}
     origin_pack: Optional[str] = None
     is_active: bool = True
+
+
+class TaxClassUpdate(BaseModel):
+    """What may be changed on a class. `key` is absent on purpose.
+
+    The key is what an ITEM stores, so renaming it would silently re-tax
+    every item in that class. The label is the editable part.
+
+    `is_active` here is how a RATE is retired: it sets the class and its code
+    together, because they are a 1:1 pair and a live code behind a dead class
+    is a state nobody can explain.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    label: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    is_active: Optional[bool] = None
+
+
+class TaxRateCreate(BaseModel):
+    """Add a domestic rate: a class and its `S` code, in one go.
+
+    No `category`: a rate is always `S` (standard-rated — which is what a
+    reduced rate is too). The EN 16931 categories are a system list and a
+    user never invents one, because a category nobody recognises is an
+    e-invoice the recipient's system rejects.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    label: str = Field(min_length=1, max_length=255)
+    #: A percent above 0 and below 100. A string on the wire (rule 1).
+    rate: Quantity
+    #: Optional. The default is `<COUNTRY>-<rate>` — `AT-21`, `FR-4.5` — with
+    #: a numeric suffix if that is taken.
+    code: Optional[str] = Field(default=None, min_length=1, max_length=20)
+
+
+class TaxRateResponse(BaseModel):
+    """Both halves of what was created, so the screen needs no second call."""
+
+    tax_code: TaxCodeResponse
+    tax_class: TaxClassResponse
+
+
+class TaxNoTaxCaseCreate(BaseModel):
+    """Add a rate-0 code in one of the six no-tax categories. No class.
+
+    A no-tax case is a property of a SITUATION — this customer, this supply,
+    this document — not of an item, which is why it gets no class and is
+    chosen as an override instead.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    label: str = Field(min_length=1, max_length=255)
+    category: Literal["Z", "E", "AE", "K", "G", "O"]
+    code: Optional[str] = Field(default=None, min_length=1, max_length=20)
+    #: `{lang: text}`. The user's own wording, and theirs to be right about —
+    #: it lands with `notes_reviewed` false like everything else.
+    legal_notes: LegalNotes = {}
+
+
+class NoTaxCategoryOption(BaseModel):
+    """One of the six, with the line the dialog shows beside it."""
+
+    category: str
+    #: `{lang: one plain sentence}`. Served rather than written into the web
+    #: app so that the explanation a user chooses from lives next to the
+    #: definition it explains (services/tax_service.NO_TAX_CATEGORIES).
+    labels: dict[str, str]
 
 
 # ─── Proposing ──────────────────────────────────────────────────────────────

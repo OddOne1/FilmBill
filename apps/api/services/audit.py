@@ -63,7 +63,25 @@ SECRET_FIELDS: frozenset[str] = frozenset(
         "refresh_token",
         "access_token",
         "magic_code",
-        "code",
+        # A bare "code" used to be in this list, and it was too wide. The
+        # first column in the system actually named `code` is
+        # `tax_codes.code` — `AT-20`, printed on every invoice — and
+        # redacting it made `tax_code.created` read
+        # `code: [redacted] → [redacted]`, which is an audit row that cannot
+        # answer the one question it exists for. P1b and P1c bring
+        # `country_code`, `currency_code` and item codes, none of them
+        # secret either.
+        #
+        # The one-time codes that ARE secret are named individually, and
+        # `_codes`/`_codes_hashed` remain suffixes, so nothing that was
+        # redacted before has stopped being redacted. There is deliberately
+        # no `_code` suffix rule: it would catch every country and currency
+        # code in the system and nothing that needs catching.
+        "verification_code",
+        "recovery_code",
+        "one_time_code",
+        "otp_code",
+        "reset_code",
         "jwt_secret",
         "smtp_password",
         "secret_key",

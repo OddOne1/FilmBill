@@ -63,6 +63,8 @@ function makeCode(overrides: Partial<TaxCode> = {}): TaxCode {
     origin_pack: 'at',
     created_at: '2026-10-22T00:00:00Z',
     updated_at: '2026-10-22T00:00:00Z',
+    // Empty on every read; the server fills it after a write (P1a-2).
+    notices: [],
     ...overrides,
   }
 }
@@ -101,8 +103,10 @@ const CLASSES: TaxClass[] = [
     rate: '20.0000',
     category: 'S',
     code_is_active: true,
+    is_active: true,
     position: 10,
     origin_pack: 'at',
+    is_custom: false,
   },
   {
     id: 'class-reduced',
@@ -113,8 +117,10 @@ const CLASSES: TaxClass[] = [
     rate: '10.0000',
     category: 'S',
     code_is_active: true,
+    is_active: true,
     position: 20,
     origin_pack: 'at',
+    is_custom: false,
   },
 ]
 

@@ -25,6 +25,7 @@ from .engine import (
     TaxRuleData,
     TaxWarning,
     WouldHaveApplied,
+    format_rate,
     propose_tax,
     warning_text,
 )
@@ -70,6 +71,7 @@ __all__ = [
     "TaxRuleData",
     "TaxWarning",
     "WouldHaveApplied",
+    "format_rate",
     "propose_tax",
     "warning_text",
     "GENERIC_PACK",

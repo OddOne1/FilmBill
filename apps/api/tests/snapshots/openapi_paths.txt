@@ -16,6 +16,7 @@ GET /company/members
 GET /company/number-series
 GET /company/tax/classes
 GET /company/tax/codes
+GET /company/tax/no-tax-categories
 GET /company/tax/rules
 GET /email-settings
 GET /events/me
@@ -38,6 +39,7 @@ PATCH /company
 PATCH /company/bank-accounts/{bank_account_id}
 PATCH /company/members/{membership_id}
 PATCH /company/number-series/{series_id}
+PATCH /company/tax/classes/{tax_class_id}
 PATCH /company/tax/codes/{tax_code_id}
 PATCH /email-settings
 PATCH /site-settings
@@ -66,7 +68,9 @@ POST /company/bank-accounts
 POST /company/members
 POST /company/number-series
 POST /company/number-series/preview
+POST /company/tax/no-tax-cases
 POST /company/tax/propose
+POST /company/tax/rates
 POST /email-settings/test
 POST /me/notifications/read-all
 POST /me/notifications/{notification_id}/read

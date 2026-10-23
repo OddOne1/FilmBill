@@ -174,6 +174,16 @@ export type TaxProposal = Schemas['TaxProposalResponse']
 export type TaxProposeRequest = Schemas['TaxProposeRequest']
 export type TaxWarning = Schemas['TaxWarningResponse']
 export type TaxOverrideRequest = Schemas['TaxOverrideRequest']
+export type TaxClassUpdate = Schemas['TaxClassUpdate']
+export type TaxRateCreate = Schemas['TaxRateCreate']
+export type TaxRateCreated = Schemas['TaxRateResponse']
+export type TaxNoTaxCaseCreate = Schemas['TaxNoTaxCaseCreate']
+export type NoTaxCategoryOption = Schemas['NoTaxCategoryOption']
+
+/** One of the six no-tax categories a user may pick. Never `S` — a rated code
+ *  is a RATE, added the other way — and never `L`/`M`, which carry real rates
+ *  and need a region pack rather than a dropdown. */
+export type NoTaxCategory = TaxNoTaxCaseCreate['category']
 
 /** What an override does. `code` pins one code; `domestic_for_foreign_business`
  *  is SCOPE §6.3's "use the domestic rate for foreign business buyers". */

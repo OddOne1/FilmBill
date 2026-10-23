@@ -1119,6 +1119,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/company/tax/classes/{tax_class_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Tax Class
+         * @description Rename a rate, or retire it.
+         *
+         *     `key` is not in `TaxClassUpdate` and `extra` is forbidden: the key is
+         *     what an ITEM stores, so renaming it would silently re-tax every item in
+         *     that class. The label is the editable part.
+         *
+         *     `is_active` sets the class AND its code, in this transaction. They are a
+         *     1:1 pair (Mathias, 2026-10-23), and only one of the two switched off is a
+         *     state nothing on the screen can explain.
+         *
+         *     **Nothing is ever deleted.** A class any item has been labelled with is
+         *     the only explanation of that item's tax, so retiring is a flag and there
+         *     is no delete endpoint.
+         */
+        patch: operations["update_tax_class_company_tax_classes__tax_class_id__patch"];
+        trace?: never;
+    };
     "/company/tax/codes": {
         parameters: {
             query?: never;
@@ -1174,6 +1206,61 @@ export interface paths {
         patch: operations["update_tax_code_company_tax_codes__tax_code_id__patch"];
         trace?: never;
     };
+    "/company/tax/no-tax-cases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create No Tax Case
+         * @description Add a rate-0 code in one of the six no-tax categories. No class.
+         *
+         *     Reverse charge inside the EU is the one everybody needs and the packs
+         *     ship it; the rest is a company's own list — an exemption its advisor
+         *     named, a supply that is not taxable where it sits.
+         *
+         *     **No shipped rule can ever choose one of these**, and that is structural
+         *     rather than a promise: a pack rule may only name a code the pack itself
+         *     defines (the loader refuses anything else), and a company's own code is
+         *     in no pack. It is selected explicitly, as an item or party override — and
+         *     from P2, per document or per line.
+         */
+        post: operations["create_no_tax_case_company_tax_no_tax_cases_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/company/tax/no-tax-categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List No Tax Categories
+         * @description The six categories a no-tax case may choose, with their one-liners.
+         *
+         *     Served rather than written into the web app so the sentence a user
+         *     chooses from lives beside the definition it explains, in both languages.
+         *     It is the same list the create endpoint validates against, which is the
+         *     property that matters: a dialog cannot offer a seventh.
+         */
+        get: operations["list_no_tax_categories_company_tax_no_tax_categories_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/company/tax/propose": {
         parameters: {
             query?: never;
@@ -1194,6 +1281,35 @@ export interface paths {
          *     thing every client encodes slightly differently.
          */
         post: operations["propose_tax_for_a_case_company_tax_propose_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/company/tax/rates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Tax Rate
+         * @description Add a domestic rate — one `S` code and the class that points at it.
+         *
+         *     Mathias, 2026-10-23: a company anywhere in Europe may need one reduced
+         *     rate or three, and the number is the company's business. The pack is a
+         *     starting point; this is how a company goes on from there.
+         *
+         *     One transaction for both halves. A class with no code is a class every
+         *     item in it resolves nothing from, and a code with no class is a no-tax
+         *     case — so half of this succeeding would produce one of two things nobody
+         *     asked for.
+         */
+        post: operations["create_tax_rate_company_tax_rates_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2462,6 +2578,18 @@ export interface components {
             expires_at?: string | null;
             role?: components["schemas"]["CompanyRole"] | null;
         };
+        /**
+         * NoTaxCategoryOption
+         * @description One of the six, with the line the dialog shows beside it.
+         */
+        NoTaxCategoryOption: {
+            /** Category */
+            category: string;
+            /** Labels */
+            labels: {
+                [key: string]: string;
+            };
+        };
         /** NotificationResponse */
         NotificationResponse: {
             /** Body */
@@ -2896,6 +3024,16 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /**
+             * Is Custom
+             * @default false
+             */
+            is_custom: boolean;
             /** Key */
             key: string;
             /** Label */
@@ -2913,6 +3051,23 @@ export interface components {
              * @example 1.5000
              */
             rate: string;
+        };
+        /**
+         * TaxClassUpdate
+         * @description What may be changed on a class. `key` is absent on purpose.
+         *
+         *     The key is what an ITEM stores, so renaming it would silently re-tax
+         *     every item in that class. The label is the editable part.
+         *
+         *     `is_active` here is how a RATE is retired: it sets the class and its code
+         *     together, because they are a 1:1 pair and a live code behind a dead class
+         *     is a state nobody can explain.
+         */
+        TaxClassUpdate: {
+            /** Is Active */
+            is_active?: boolean | null;
+            /** Label */
+            label?: string | null;
         };
         /** TaxCodeResponse */
         TaxCodeResponse: {
@@ -2949,6 +3104,11 @@ export interface components {
              * @default false
              */
             notes_reviewed: boolean;
+            /**
+             * Notices
+             * @default []
+             */
+            notices: string[];
             /** Origin Pack */
             origin_pack?: string | null;
             /**
@@ -2991,6 +3151,32 @@ export interface components {
             rate?: string | null;
             /** Revenue Account */
             revenue_account?: string | null;
+        };
+        /**
+         * TaxNoTaxCaseCreate
+         * @description Add a rate-0 code in one of the six no-tax categories. No class.
+         *
+         *     A no-tax case is a property of a SITUATION — this customer, this supply,
+         *     this document — not of an item, which is why it gets no class and is
+         *     chosen as an override instead.
+         */
+        TaxNoTaxCaseCreate: {
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "Z" | "E" | "AE" | "K" | "G" | "O";
+            /** Code */
+            code?: string | null;
+            /** Label */
+            label: string;
+            /**
+             * Legal Notes
+             * @default {}
+             */
+            legal_notes: {
+                [key: string]: string;
+            };
         };
         /**
          * TaxOverrideRequest
@@ -3089,6 +3275,35 @@ export interface components {
              * @enum {string}
              */
             supply_kind: "goods" | "services";
+        };
+        /**
+         * TaxRateCreate
+         * @description Add a domestic rate: a class and its `S` code, in one go.
+         *
+         *     No `category`: a rate is always `S` (standard-rated — which is what a
+         *     reduced rate is too). The EN 16931 categories are a system list and a
+         *     user never invents one, because a category nobody recognises is an
+         *     e-invoice the recipient's system rejects.
+         */
+        TaxRateCreate: {
+            /** Code */
+            code?: string | null;
+            /** Label */
+            label: string;
+            /**
+             * Rate
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @example 1.5000
+             */
+            rate: string;
+        };
+        /**
+         * TaxRateResponse
+         * @description Both halves of what was created, so the screen needs no second call.
+         */
+        TaxRateResponse: {
+            tax_class: components["schemas"]["TaxClassResponse"];
+            tax_code: components["schemas"]["TaxCodeResponse"];
         };
         /**
          * TaxRuleResponse
@@ -4912,6 +5127,43 @@ export interface operations {
             };
         };
     };
+    update_tax_class_company_tax_classes__tax_class_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                tax_class_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaxClassUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxClassResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_tax_codes_company_tax_codes_get: {
         parameters: {
             query?: {
@@ -4982,6 +5234,72 @@ export interface operations {
             };
         };
     };
+    create_no_tax_case_company_tax_no_tax_cases_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaxNoTaxCaseCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxCodeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_no_tax_categories_company_tax_no_tax_categories_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NoTaxCategoryOption"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     propose_tax_for_a_case_company_tax_propose_post: {
         parameters: {
             query?: never;
@@ -5004,6 +5322,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TaxProposalResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_tax_rate_company_tax_rates_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaxRateCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxRateResponse"];
                 };
             };
             /** @description Validation Error */

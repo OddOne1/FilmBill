@@ -239,3 +239,32 @@ refuses unless it was so marked, then compares what reached `psql` with what
 `pg_dump` wrote, byte for byte. A second test strips the `sudo` and asserts
 the refusal really happens, because a permissive double would make the first
 test pass for any printed text at all.
+
+## 17. Two pytest runs, one scratch database, 441 checks that did not run
+
+FilmBill, P1a-2, 2026-10-23. The real-database fixtures create one scratch
+database with a fixed name, `filmbill_pytest_scratch`, dropping and
+recreating it at the start of the session. Two pytest processes against the
+same Postgres — a full suite in one terminal and a single file in another,
+which is what happens all day — then fight over it: the second run's
+`DROP DATABASE IF EXISTS` fails because the first is still connected, the
+fixture's `except` treats any failure to reach a database as "there is no
+database", and the whole real-database suite **skips**.
+
+The run printed `929 passed, 441 skipped` and exited **0**. Nothing was
+wrong with the code. Every uniqueness constraint, every company-scoping
+check and every trigger test had quietly not run, and the only thing that
+said so was the `-rs` block, where 441 identical skip lines read as scenery.
+
+This is case 4 of the mechanism — a skip read as a pass — with a twist worth
+noticing: the project already has a guard for exactly this
+(`conftest._no_postgres` FAILS instead of skipping when `CI` is set), and the
+guard worked. CI was green because CI runs one pytest process. So the trap
+was laptop-only, which is the kind that survives longest: it cannot be caught
+by the check that exists, and it only ever appears when somebody is in a
+hurry enough to run two things at once.
+
+**The fix:** the scratch database name carries the process id, so concurrent
+runs cannot collide at all. Asserted by running two files at once and
+requiring zero skips from both — a test of the harness, which is the one
+place that is the right subject.

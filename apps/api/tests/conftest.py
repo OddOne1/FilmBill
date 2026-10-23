@@ -334,7 +334,18 @@ def auth_headers(client, mock_db, test_user):
 #: The scratch database's name. Distinct from anything a person would run a
 #: dev stack on, and dropped at both ends of the session so a crashed run
 #: cannot poison the next one.
-_SCRATCH_DB = "filmbill_pytest_scratch"
+#:
+#: **Per process**, which is not decoration. It used to be one fixed name,
+#: and two pytest runs against the same Postgres — a full suite in one
+#: terminal and a single file in another, which is what happens all day —
+#: then fought over it: the second run's `DROP DATABASE IF EXISTS` fails
+#: because the first is connected, the `except` below treats that as "no
+#: database", and **441 real-database checks turned into skips** while the
+#: run still exited 0. Locally that is only visible in `-rs` output; the
+#: numbers look plausible and nothing says why. CI is a single run and
+#: `_no_postgres` fails there rather than skipping, so the trap was
+#: laptop-only — which is the kind that survives longest.
+_SCRATCH_DB = f"filmbill_pytest_scratch_{os.getpid()}"
 
 #: The marker every test that needs a real database carries.
 #:

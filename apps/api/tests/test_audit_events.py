@@ -1065,3 +1065,76 @@ def test_the_tax_advisor_role_requires_two_factor_unconditionally(pg_db, world):
     assert two_factor_required_by_membership(pg_db, world["advisor"]) is True
     # And not for a role nobody configured.
     assert two_factor_required_by_membership(pg_db, world["producer"]) is False
+
+
+# ─── The redaction list, after P1a-2 narrowed it ────────────────────────────
+
+
+def test_a_bare_code_field_is_not_a_secret_but_every_real_one_still_is():
+    """`SECRET_FIELDS` used to contain a bare `"code"`.
+
+    It was too wide. The first column in the system actually named `code` is
+    `tax_codes.code` — `AT-20`, printed on every invoice — and redacting it
+    made `tax_code.created` read `code: [redacted] → [redacted]`: an audit
+    row that cannot answer the one question it exists for. P1a-2 removed the
+    bare entry and named the one-time codes individually.
+
+    This is the test that makes the narrowing safe rather than merely
+    intended. It is written as two lists because that is the actual risk: a
+    narrowing that went one field too far would be invisible until somebody
+    read a log and found a password in it.
+    """
+    from apps.api.services.audit import REDACTED, redact
+
+    # Not secrets. Each of these is printed, exported or shown on a screen.
+    for field in (
+        "code",
+        "category",
+        "country_code",
+        "currency_code",
+        "language_code",
+        "item_code",
+        "tax_code",
+    ):
+        assert redact(field, "AT-20") == "AT-20", f"{field} was redacted"
+
+    # Secrets. Nothing that was redacted before P1a-2 has stopped being.
+    for field in (
+        "password",
+        "password_hash",
+        "new_password",
+        "current_password",
+        "smtp_password",
+        "totp_secret",
+        "totp_secret_encrypted",
+        "backup_codes",
+        "backup_codes_hashed",
+        "magic_code",
+        "verification_code",
+        "recovery_code",
+        "one_time_code",
+        "otp_code",
+        "reset_code",
+        "invite_token",
+        "refresh_token",
+        "access_token",
+        "jwt_secret",
+        "secret_key",
+        "s3_secret_key",
+        "api_key",
+        "some_token",
+        "whatever_secret",
+        "custom_api_key",
+    ):
+        assert redact(field, "the-real-value") == REDACTED, (
+            f"{field} is no longer redacted"
+        )
+
+
+def test_the_iban_is_still_masked_rather_than_redacted():
+    """The other half of the redaction contract, re-asserted beside the
+    change above: an advisor reading the log can tell two of a company's
+    accounts apart without being able to be paid instead of them (D43)."""
+    from apps.api.services.audit import redact
+
+    assert redact("iban", "AT611904300234573201") == "AT…3201"

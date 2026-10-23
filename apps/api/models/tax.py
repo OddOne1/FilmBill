@@ -208,6 +208,18 @@ class TaxClass(CompanyScoped, Base):
     #: Display order, so the picker reads standard → reduced → zero rather
     #: than alphabetically (`reduced`, `reduced_2`, `standard`, `zero`).
     position: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    #: Retired, not deleted (Mathias, 2026-10-23). A class any item has ever
+    #: been labelled with is the only explanation of that item's tax, so a
+    #: rate a company stops using is deactivated and keeps explaining its
+    #: history. There is no delete endpoint and there is not going to be one.
+    #:
+    #: A class and its code are a 1:1 pair, so the two flags move together —
+    #: `PATCH /company/tax/classes/{id}` sets both, and the code endpoint
+    #: refuses to set this one on its own. A live code behind a dead class
+    #: (or the reverse) is a state nobody can explain.
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="true"
+    )
     origin_pack: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(

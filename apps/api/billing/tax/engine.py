@@ -517,7 +517,7 @@ def _from_override(
     )
 
 
-def _rate_text(rate: Decimal) -> str:
+def format_rate(rate: Decimal) -> str:
     """A rate as a human writes it: `20`, `8.1667`, `0`.
 
     Normalised, because the same rate arrives with two different scales
@@ -529,6 +529,11 @@ def _rate_text(rate: Decimal) -> str:
     scientific `2E+1`.
     """
     return format(rate.normalize(), "f")
+
+
+#: The old private name, kept because this module used it internally before it
+#: had a second caller. One formatter, one spelling (rule 2).
+_rate_text = format_rate
 
 
 def _note(code: Optional[TaxCodeData], lang: str) -> Optional[str]:
