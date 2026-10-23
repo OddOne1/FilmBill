@@ -1206,6 +1206,58 @@ export interface paths {
         patch: operations["update_tax_code_company_tax_codes__tax_code_id__patch"];
         trace?: never;
     };
+    "/company/tax/country-change": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Change Country
+         * @description Change the country, and the tax configuration with it. One transaction.
+         *
+         *     Non-destructive: nothing is deleted, nothing the user edited is touched,
+         *     and an old code something still points at stays switched on and is named
+         *     in the plan. See `services/tax_country` for all five senses of that.
+         *
+         *     **Finalized documents are unaffected by design** — a finalized line
+         *     snapshots the code and rate it used (rule 3) — so nothing here could
+         *     reach them even if it tried.
+         */
+        post: operations["change_country_company_tax_country_change_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/company/tax/country-change/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Country Change
+         * @description What changing the country would do. Writes nothing.
+         *
+         *     A preview and not a dry-run flag on the real endpoint, because the thing
+         *     being previewed touches rates: somebody has to be able to read what will
+         *     happen to their own edits without the risk of having already done it.
+         */
+        post: operations["preview_country_change_company_tax_country_change_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/company/tax/no-tax-cases": {
         parameters: {
             query?: never;
@@ -2114,6 +2166,19 @@ export interface components {
              */
             file: string;
         };
+        /**
+         * CodeReferrers
+         * @description One old code that stays switched on, and what still points at it.
+         */
+        CodeReferrers: {
+            /** Code */
+            code: string;
+            /**
+             * Referrers
+             * @default []
+             */
+            referrers: string[];
+        };
         /** CompanyCreate */
         CompanyCreate: {
             /** Address City */
@@ -2372,6 +2437,106 @@ export interface components {
             vat_timing?: ("soll" | "ist") | null;
             /** Website */
             website?: string | null;
+        };
+        /**
+         * CountryChangePlanResponse
+         * @description The plan, as counts, lists and sentences.
+         *
+         *     The sentences are built by the SERVER (`services/tax_country`) rather
+         *     than by the dialog, for the same reason a proposal's `reasons` are: the
+         *     server decided it, so the server says what it decided, and every consumer
+         *     of this API reads the same wording.
+         */
+        CountryChangePlanResponse: {
+            /**
+             * Classes Added
+             * @default []
+             */
+            classes_added: string[][];
+            /**
+             * Classes Repointed
+             * @default []
+             */
+            classes_repointed: string[][];
+            /**
+             * Classes Without Equivalent
+             * @default []
+             */
+            classes_without_equivalent: string[][];
+            /**
+             * Codes Added
+             * @default []
+             */
+            codes_added: string[];
+            /**
+             * Codes Deactivated
+             * @default []
+             */
+            codes_deactivated: string[];
+            /**
+             * Codes Kept Because Referenced
+             * @default []
+             */
+            codes_kept_because_referenced: components["schemas"]["CodeReferrers"][];
+            /**
+             * Codes Reactivated
+             * @default []
+             */
+            codes_reactivated: string[];
+            /**
+             * Counts
+             * @default {}
+             */
+            counts: {
+                [key: string]: unknown;
+            };
+            /**
+             * First Set
+             * @default false
+             */
+            first_set: boolean;
+            /** From Country */
+            from_country?: string | null;
+            /** Mode */
+            mode: string;
+            /** Pack */
+            pack: string;
+            /**
+             * Rules Replaced
+             * @default 0
+             */
+            rules_replaced: number;
+            /**
+             * Sentences
+             * @default []
+             */
+            sentences: string[];
+            /** To Country */
+            to_country: string;
+            /**
+             * Untouched
+             * @default []
+             */
+            untouched: string[];
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: string[];
+        };
+        /**
+         * CountryChangeRequest
+         * @description Ask what changing the country would do, or do it.
+         */
+        CountryChangeRequest: {
+            /** Country */
+            country: string;
+            /**
+             * Mode
+             * @default apply_pack
+             * @enum {string}
+             */
+            mode: "apply_pack" | "country_only";
         };
         /** CreateSuperAdminRequest */
         CreateSuperAdminRequest: {
@@ -5221,6 +5386,76 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TaxCodeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    change_country_company_tax_country_change_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CountryChangeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CountryChangePlanResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_country_change_company_tax_country_change_preview_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CountryChangeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CountryChangePlanResponse"];
                 };
             };
             /** @description Validation Error */

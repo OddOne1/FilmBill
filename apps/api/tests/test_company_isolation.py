@@ -152,6 +152,13 @@ CASES: dict[str, object] = {
     # takes a company context, because `require()` is how an endpoint gets
     # one and an endpoint without one cannot be written here by accident.
     "GET /company/tax/no-tax-categories": {"body": None},
+    # P1b part 0. Both write into whichever company the header names, so the
+    # first check below is the whole point: a user in A must not be able to
+    # move B's country or reinstall B's rates.
+    "POST /company/tax/country-change/preview": {"body": {"country": "DE"}},
+    "POST /company/tax/country-change": {
+        "body": {"country": "DE", "mode": "apply_pack"}
+    },
 }
 
 #: Placeholder -> the key in the `two_companies` fixture holding a row that

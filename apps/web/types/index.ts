@@ -179,6 +179,8 @@ export type TaxRateCreate = Schemas['TaxRateCreate']
 export type TaxRateCreated = Schemas['TaxRateResponse']
 export type TaxNoTaxCaseCreate = Schemas['TaxNoTaxCaseCreate']
 export type NoTaxCategoryOption = Schemas['NoTaxCategoryOption']
+export type CountryChangePlan = Schemas['CountryChangePlanResponse']
+export type CountryChangeRequest = Schemas['CountryChangeRequest']
 
 /** One of the six no-tax categories a user may pick. Never `S` — a rated code
  *  is a RATE, added the other way — and never `L`/`M`, which carry real rates

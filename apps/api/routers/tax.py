@@ -37,6 +37,9 @@ from ..database import get_db
 from ..middleware.company import Membership, require
 from ..models.tax import TaxClass, TaxCode, TaxRule
 from ..schemas.tax import (
+    CodeReferrers,
+    CountryChangePlanResponse,
+    CountryChangeRequest,
     NoTaxCategoryOption,
     TaxClassResponse,
     TaxClassUpdate,
@@ -51,7 +54,7 @@ from ..schemas.tax import (
     TaxWarningResponse,
     TaxWouldHaveAppliedResponse,
 )
-from ..services import audit, tax_references, tax_service
+from ..services import audit, tax_country, tax_references, tax_service
 from ..services.permissions import scoped
 
 router = APIRouter(tags=["tax"])
@@ -275,6 +278,114 @@ def update_tax_code(
     return _code_response(
         row, notices=[RATE_CHANGED_NOTICE] if "rate" in changes else []
     )
+
+
+# ─── Changing the country ───────────────────────────────────────────────────
+
+
+def _plan_response(plan) -> CountryChangePlanResponse:
+    return CountryChangePlanResponse(
+        from_country=plan.from_country,
+        to_country=plan.to_country,
+        pack=plan.pack,
+        mode=plan.mode,
+        first_set=plan.first_set,
+        codes_added=list(plan.codes_added),
+        classes_repointed=[list(entry) for entry in plan.classes_repointed],
+        classes_without_equivalent=[
+            list(entry) for entry in plan.classes_without_equivalent
+        ],
+        classes_added=[list(entry) for entry in plan.classes_added],
+        codes_deactivated=list(plan.codes_deactivated),
+        codes_reactivated=list(plan.codes_reactivated),
+        codes_kept_because_referenced=[
+            CodeReferrers(code=code, referrers=list(referrers))
+            for code, referrers in plan.codes_kept_because_referenced
+        ],
+        untouched=list(plan.untouched),
+        rules_replaced=plan.rules_replaced,
+        warnings=list(plan.warnings),
+        sentences=plan.sentences(),
+        counts=plan.counts(),
+    )
+
+
+@router.post(
+    "/company/tax/country-change/preview",
+    response_model=CountryChangePlanResponse,
+)
+def preview_country_change(
+    body: CountryChangeRequest,
+    db: Session = Depends(get_db),
+    membership: Membership = Depends(require("company.settings.edit")),
+):
+    """What changing the country would do. Writes nothing.
+
+    A preview and not a dry-run flag on the real endpoint, because the thing
+    being previewed touches rates: somebody has to be able to read what will
+    happen to their own edits without the risk of having already done it.
+    """
+    try:
+        plan = tax_country.plan_country_change(
+            db, company=membership.company, country=body.country, mode=body.mode
+        )
+    except tax_country.CountryChangeError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)
+        ) from None
+    return _plan_response(plan)
+
+
+@router.post(
+    "/company/tax/country-change", response_model=CountryChangePlanResponse
+)
+def change_country(
+    body: CountryChangeRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    membership: Membership = Depends(require("company.settings.edit")),
+):
+    """Change the country, and the tax configuration with it. One transaction.
+
+    Non-destructive: nothing is deleted, nothing the user edited is touched,
+    and an old code something still points at stays switched on and is named
+    in the plan. See `services/tax_country` for all five senses of that.
+
+    **Finalized documents are unaffected by design** — a finalized line
+    snapshots the code and rate it used (rule 3) — so nothing here could
+    reach them even if it tried.
+    """
+    company = membership.company
+    before_country = company.address_country
+    try:
+        plan = tax_country.apply_country_change(
+            db, company=company, country=body.country, mode=body.mode
+        )
+    except tax_country.CountryChangeError as error:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)
+        ) from None
+
+    # In the caller's transaction, before the commit, so a failed save leaves
+    # no event (services/audit.record).
+    audit.record(
+        db,
+        audit.actor_from(request, membership=membership),
+        company,
+        "company.tax_country_changed",
+        {"address_country": before_country},
+        {"address_country": plan.to_country},
+        fields=["address_country"],
+        reason=(
+            f"mode={plan.mode}; "
+            + ", ".join(f"{name}={value}" for name, value in plan.counts().items())
+        ),
+    )
+
+    db.commit()
+    db.refresh(company)
+    return _plan_response(plan)
 
 
 # ─── Rates: a class and its code, created together ──────────────────────────

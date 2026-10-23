@@ -28,7 +28,7 @@ from decimal import Decimal
 import pytest
 from sqlalchemy import create_engine, text
 
-from apps.api.models.company import CompanyRole
+from apps.api.models.company import Company, CompanyRole
 from apps.api.models.number_series import NumberSeries
 from apps.api.models.site_settings import SiteSettings
 from apps.api.models.tax import TaxClass, TaxCode, TaxRule
@@ -665,39 +665,67 @@ def test_setting_the_country_for_the_first_time_seeds_the_pack(
     )
 
 
-def test_a_later_country_change_does_not_add_a_second_countrys_rates(
+def test_a_later_country_change_is_refused_by_the_settings_endpoint(
     pg_client, pg_db, country_less_company
 ):
-    """AT → DE is not a re-seed.
+    """`PATCH /company` cannot move the country once tax rows exist.
 
-    Quietly adding Germany's rates to a configured Austrian company is not
-    something a settings save should do, and seeding never overwrites what is
-    there — so the result would be a company holding both. Re-pointing a
-    company at another pack is a deliberate act and has no UI in P1a.
+    It used to accept it and install nothing, which was the bug: a company
+    that corrected DE to AT kept German rates for ever and every invoice
+    carried the wrong one. There must be no path that moves the country
+    without one of the Change-country modes being chosen (Mathias,
+    2026-10-23), so this refuses with a 409 that names the new endpoint.
+
+    The first set is still this endpoint's job, and the test below covers it.
     """
     company = country_less_company["company"]
     headers = auth_headers(country_less_company["owner"], company)
-
     assert (
         pg_client.patch(
             "/company", headers=headers, json={"address_country": "AT"}
         ).status_code
         == 200
     )
+
+    refused = pg_client.patch(
+        "/company", headers=headers, json={"address_country": "DE"}
+    )
+
+    assert refused.status_code == 409, refused.text
+    detail = refused.json()["detail"]
+    assert "/company/tax/country-change" in detail
+    assert "apply_pack" in detail and "country_only" in detail
+    pg_db.expire_all()
+    assert _codes_of(pg_db, company)["AT-20"] is not None
+    assert "DE-19" not in _codes_of(pg_db, company)
+    assert (
+        pg_db.query(Company).filter(Company.id == company.id).one().address_country
+        == "AT"
+    ), "the country moved even though the change was refused"
+
+
+def test_sending_the_same_country_again_is_not_a_change(
+    pg_client, pg_db, country_less_company
+):
+    """A wide settings form re-sends every field it shows, so a PATCH that
+    repeats the country it already has must not trip the guard."""
+    company = country_less_company["company"]
+    headers = auth_headers(country_less_company["owner"], company)
     assert (
         pg_client.patch(
-            "/company", headers=headers, json={"address_country": "DE"}
+            "/company", headers=headers, json={"address_country": "AT"}
         ).status_code
         == 200
     )
 
-    pg_db.expire_all()
-    codes = _codes_of(pg_db, company)
-    assert "AT-20" in codes
-    assert "DE-19" not in codes, (
-        "the company now holds two countries' rates, and which one an item "
-        "gets would depend on its class pointing at the right one"
+    again = pg_client.patch(
+        "/company",
+        headers=headers,
+        json={"address_country": "AT", "trading_name": "YON"},
     )
+
+    assert again.status_code == 200, again.text
+    assert again.json()["trading_name"] == "YON"
 
 
 def test_a_patch_that_does_not_mention_the_country_seeds_nothing(

@@ -10,7 +10,7 @@ import {
 } from '@/components/settings/company-section'
 import { usePermissions } from '@/hooks/use-permissions'
 import { useCompanyStore } from '@/stores/company-store'
-import type { Company, CompanyUpdate } from '@/types'
+import type { Company, CompanyUpdate, CountryChangePlan } from '@/types'
 
 /**
  * Settings → Company → General.
@@ -37,7 +37,6 @@ const FIELDS: { key: keyof CompanyUpdate; label: string; hint?: string }[] = [
   { key: 'address_street', label: 'Street' },
   { key: 'address_zip', label: 'Postcode' },
   { key: 'address_city', label: 'City' },
-  { key: 'address_country', label: 'Country', hint: 'Two-letter ISO code, e.g. AT.' },
   { key: 'email', label: 'Email' },
   { key: 'phone', label: 'Phone' },
   { key: 'website', label: 'Website' },
@@ -72,6 +71,8 @@ export default function CompanyGeneralPage() {
   const [error, setError] = React.useState<string | null>(null)
 
   const allowed = loaded && can('company.settings.edit')
+  const [country, setCountry] = React.useState<string | null>(null)
+  const [changingCountry, setChangingCountry] = React.useState(false)
 
   React.useEffect(() => {
     if (!allowed) return
@@ -86,6 +87,7 @@ export default function CompanyGeneralPage() {
           next[key as string] = typeof value === 'string' ? value : ''
         }
         setValues(next)
+        setCountry(company.address_country ?? null)
         setFiscalMonth(company.fiscal_year_start_month)
       } catch (err) {
         if (!cancelled) {
@@ -157,6 +159,35 @@ export default function CompanyGeneralPage() {
             </Field>
           ))}
 
+          {/* The country is NOT an ordinary text box, because it decides
+              which tax rates this company has. It used to be one, and that
+              was the bug: typing over it changed the country and installed
+              nothing, so a company that corrected DE to AT kept German rates
+              and every invoice carried the wrong one. It now goes through a
+              dialog that shows exactly what will happen first. */}
+          <Field
+            label="Country"
+            hint="Decides which tax rates this company uses, so it is changed through a dialog that shows what will happen."
+          >
+            <div className="flex items-center gap-2">
+              <Input
+                aria-label="Country"
+                value={country ?? ''}
+                placeholder="Not set"
+                readOnly
+                disabled
+              />
+              <button
+                type="button"
+                data-testid="company-change-country"
+                onClick={() => setChangingCountry(true)}
+                className="shrink-0 rounded-md border border-border px-2.5 py-1.5 text-sm text-text-primary hover:bg-bg-hover"
+              >
+                {country ? 'Change…' : 'Set…'}
+              </button>
+            </div>
+          </Field>
+
           <Field
             label="Fiscal year starts"
             hint="January in Austria. April in the UK — hence a setting."
@@ -187,6 +218,224 @@ export default function CompanyGeneralPage() {
 
         <SaveRow saving={saving} saved={saved} error={error} />
       </form>
+
+      {changingCountry && (
+        <ChangeCountryDialog
+          current={country}
+          onClose={() => setChangingCountry(false)}
+          onChanged={async (next) => {
+            setCountry(next)
+            setChangingCountry(false)
+            await reload(activeCompanyId)
+          }}
+        />
+      )}
     </CompanySection>
+  )
+}
+
+/**
+ * Changing the country, with the plan in front of you first.
+ *
+ * **Nothing here decides anything.** The plan, its counts, its warnings and
+ * every sentence shown come from `POST /company/tax/country-change/preview`;
+ * Confirm sends the same country and mode to the real endpoint, which
+ * recomputes the plan server-side and applies that. A dialog that described
+ * the change in its own words would be a second implementation of the
+ * reconciliation, and the one on screen would be the one nobody tested
+ * against real rows.
+ *
+ * The preview is re-fetched when the mode changes, because `country_only`
+ * and `apply_pack` are genuinely different plans and showing one while the
+ * other radio is selected is the worst thing this dialog could do.
+ */
+function ChangeCountryDialog({
+  current,
+  onClose,
+  onChanged,
+}: {
+  current: string | null
+  onClose: () => void
+  onChanged: (country: string) => Promise<void>
+}) {
+  const [next, setNext] = React.useState('')
+  const [mode, setMode] = React.useState<'apply_pack' | 'country_only'>(
+    'apply_pack',
+  )
+  const [plan, setPlan] = React.useState<CountryChangePlan | null>(null)
+  const [error, setError] = React.useState<string | null>(null)
+  const [busy, setBusy] = React.useState(false)
+
+  const ready = next.trim().length === 2
+
+  // Debounced, and keyed on the mode as well as the country.
+  React.useEffect(() => {
+    if (!ready) {
+      setPlan(null)
+      return
+    }
+    const handle = setTimeout(async () => {
+      try {
+        setPlan(
+          await api.post<CountryChangePlan>(
+            '/company/tax/country-change/preview',
+            { country: next.trim().toUpperCase(), mode },
+          ),
+        )
+        setError(null)
+      } catch (err) {
+        setPlan(null)
+        setError(
+          err instanceof ApiError
+            ? err.detail
+            : 'Could not work out what this would change',
+        )
+      }
+    }, 250)
+    return () => clearTimeout(handle)
+  }, [next, mode, ready])
+
+  async function confirm() {
+    setBusy(true)
+    setError(null)
+    try {
+      const applied = await api.post<CountryChangePlan>(
+        '/company/tax/country-change',
+        { country: next.trim().toUpperCase(), mode },
+      )
+      await onChanged(applied.to_country)
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.detail : 'Could not change the country',
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div
+      role="dialog"
+      aria-label="Change country"
+      data-testid="change-country-dialog"
+      className="mt-6 rounded-md border border-accent/40 bg-bg-secondary p-4"
+    >
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-text-primary">
+          {current ? `Change country from ${current}` : 'Set the country'}
+        </h3>
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-md border border-border px-2 py-1 text-xs text-text-secondary hover:bg-bg-hover"
+        >
+          Cancel
+        </button>
+      </div>
+
+      <div className="mt-4 space-y-4">
+        <Field label="New country" hint="Two-letter ISO code, e.g. DE.">
+          <Input
+            aria-label="New country"
+            value={next}
+            maxLength={2}
+            onChange={(event) => setNext(event.target.value.toUpperCase())}
+          />
+        </Field>
+
+        <fieldset className="space-y-2">
+          <legend className="text-xs font-medium text-text-secondary">
+            What to do with the tax configuration
+          </legend>
+          {(
+            [
+              [
+                'apply_pack',
+                'Install the new country’s rates (recommended)',
+                'Adds what is missing, moves the standard and reduced rates to the new country’s codes, and switches off the old country’s unused ones. Nothing is deleted and nothing you edited or created is touched.',
+              ],
+              [
+                'country_only',
+                'Change the country only',
+                'For a company that has already set its rates by hand. The tax configuration is left exactly as it is, which may still be the previous country’s.',
+              ],
+            ] as ['apply_pack' | 'country_only', string, string][]
+          ).map(([value, label, help]) => (
+            <label key={value} className="flex items-start gap-2 text-sm text-text-secondary">
+              <input
+                type="radio"
+                name="country-change-mode"
+                value={value}
+                checked={mode === value}
+                onChange={() => setMode(value)}
+                className="mt-1"
+              />
+              <span>
+                {label}
+                <span className="block text-xs text-text-tertiary">{help}</span>
+              </span>
+            </label>
+          ))}
+        </fieldset>
+
+        {error && (
+          <p
+            role="alert"
+            data-testid="change-country-error"
+            className="rounded-md border border-status-error/40 bg-status-error/10 px-3 py-2 text-sm text-status-error"
+          >
+            {error}
+          </p>
+        )}
+
+        {plan && (
+          <div
+            data-testid="change-country-plan"
+            className="rounded-md border border-border bg-bg-primary px-3 py-2"
+          >
+            <p className="text-xs font-medium uppercase tracking-wide text-text-tertiary">
+              What will happen
+            </p>
+            <ul className="mt-1 space-y-1 text-sm text-text-secondary">
+              {plan.sentences.map((sentence, index) => (
+                <li key={index}>{sentence}</li>
+              ))}
+            </ul>
+            {plan.warnings.length > 0 && (
+              <ul className="mt-2 space-y-1">
+                {plan.warnings.map((warning, index) => (
+                  <li
+                    key={index}
+                    data-testid="change-country-warning"
+                    className="rounded-md border border-status-warning/40 bg-status-warning/10 px-2 py-1 text-xs text-status-warning"
+                  >
+                    {warning}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
+        <p className="text-xs text-text-tertiary">
+          Documents you have already finalised are unaffected: each one keeps
+          a copy of the tax code and rate it was issued with.
+        </p>
+
+        <button
+          type="button"
+          data-testid="change-country-confirm"
+          onClick={() => void confirm()}
+          disabled={busy || !ready || plan === null}
+          className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white disabled:opacity-60"
+        >
+          {busy
+            ? 'Changing…'
+            : plan === null
+              ? 'Enter a country'
+              : `Confirm — change to ${next.trim().toUpperCase()}`}
+        </button>
+      </div>
+    </div>
   )
 }

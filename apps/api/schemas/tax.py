@@ -220,6 +220,65 @@ class NoTaxCategoryOption(BaseModel):
     labels: dict[str, str]
 
 
+class CodeReferrers(BaseModel):
+    """One old code that stays switched on, and what still points at it."""
+
+    code: str
+    referrers: list[str] = []
+
+
+class CountryChangeRequest(BaseModel):
+    """Ask what changing the country would do, or do it."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    country: str = Field(min_length=2, max_length=2)
+    #: `apply_pack` installs the new country's rates non-destructively;
+    #: `country_only` changes the country and nothing else. Required on the
+    #: apply call and ignored by the preview, which previews both.
+    mode: Literal["apply_pack", "country_only"] = "apply_pack"
+
+    @field_validator("country")
+    @classmethod
+    def _upper(cls, value: str) -> str:
+        return value.strip().upper()
+
+
+class CountryChangePlanResponse(BaseModel):
+    """The plan, as counts, lists and sentences.
+
+    The sentences are built by the SERVER (`services/tax_country`) rather
+    than by the dialog, for the same reason a proposal's `reasons` are: the
+    server decided it, so the server says what it decided, and every consumer
+    of this API reads the same wording.
+    """
+
+    from_country: Optional[str] = None
+    to_country: str
+    pack: str
+    mode: str
+    #: True when the company has no tax rows at all. The old first-set path:
+    #: there is nothing to reconcile, so the screen needs no dialog.
+    first_set: bool = False
+
+    codes_added: list[str] = []
+    #: `[class key, old code, new code]`
+    classes_repointed: list[list[str]] = []
+    #: `[class key, code]`
+    classes_without_equivalent: list[list[str]] = []
+    classes_added: list[list[str]] = []
+    codes_deactivated: list[str] = []
+    codes_reactivated: list[str] = []
+    #: `[code, [referrer sentences]]`
+    codes_kept_because_referenced: list[CodeReferrers] = []
+    untouched: list[str] = []
+    rules_replaced: int = 0
+    warnings: list[str] = []
+    #: One line per thing that will happen, in plain words.
+    sentences: list[str] = []
+    counts: JsonObject = {}
+
+
 # ─── Proposing ──────────────────────────────────────────────────────────────
 
 

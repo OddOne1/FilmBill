@@ -68,6 +68,8 @@ POST /company/bank-accounts
 POST /company/members
 POST /company/number-series
 POST /company/number-series/preview
+POST /company/tax/country-change
+POST /company/tax/country-change/preview
 POST /company/tax/no-tax-cases
 POST /company/tax/propose
 POST /company/tax/rates

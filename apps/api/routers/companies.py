@@ -49,7 +49,13 @@ from ..schemas.company import (
     MemberResponse,
     MemberUpdate,
 )
-from ..services import audit, company_service, invite_service, tax_service
+from ..services import (
+    audit,
+    company_service,
+    invite_service,
+    tax_country,
+    tax_service,
+)
 from ..services.auth_service import get_user_by_email
 from ..services.permissions import (
     active_memberships,
@@ -252,6 +258,32 @@ def update_active_company(
     before = audit.snapshot(membership.company, COMPANY_AUDITED)
     had_country = bool(membership.company.address_country)
     changes = body.model_dump(exclude_unset=True)
+
+    # A country change on a company that already has tax rows goes through
+    # `POST /company/tax/country-change`, which plans it first and applies it
+    # non-destructively. Refused here rather than quietly accepted, because
+    # the old behaviour was the bug: this endpoint changed the country and
+    # installed nothing, so a company that corrected DE to AT kept German
+    # rates for ever and every invoice carried the wrong one. There must be
+    # no path that moves the country without one of the two modes being
+    # chosen (Mathias, 2026-10-23).
+    requested_country = changes.get("address_country")
+    if (
+        "address_country" in changes
+        and (requested_country or None) != (membership.company.address_country or None)
+        and tax_country.has_tax_rows(db, company_id=membership.company_id)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "This company already has tax codes, so changing its country "
+                "changes its rates too. Use the Change country action — it "
+                "shows exactly what will happen first, and nothing is "
+                "deleted. POST /company/tax/country-change/preview, then "
+                "POST /company/tax/country-change with "
+                "mode=apply_pack or mode=country_only."
+            ),
+        )
     if "require_2fa_roles" in changes and changes["require_2fa_roles"] is not None:
         # Stored as plain strings so the column stays readable JSON and does
         # not depend on how a particular SQLAlchemy version serialises an
