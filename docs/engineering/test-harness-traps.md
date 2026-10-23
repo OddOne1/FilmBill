@@ -268,3 +268,39 @@ hurry enough to run two things at once.
 runs cannot collide at all. Asserted by running two files at once and
 requiring zero skips from both — a test of the harness, which is the one
 place that is the right subject.
+
+## 18. A mutation that did not fail, because a different guard was holding
+
+FilmBill, P1b part 0, 2026-10-23. The Change-country action is
+non-destructive in five separate senses, and two of them — *an edited rate is
+never touched* and *a user-created rate is never touched* — had a test each,
+with a mutation to prove the test was load-bearing. Both mutations passed.
+The protection was gutted and nothing went red.
+
+Both tests used `AT-13`, the reduced Austrian rate, as the row that must
+survive a switch to Germany. It does survive — but not for the reason under
+test. It survives because the German pack has no key for its tax class, so a
+**third** guard, `classes_without_equivalent`, keeps it. Remove the
+edited-rate check entirely and `AT-13` is still there, still active, still
+carrying the user's edit. The test asserted a true thing about a row that was
+true for an unrelated reason.
+
+This is rule 17b's own mechanism, in the place it is hardest to see: the
+subject was not a double or a source-text match but a **real row in a real
+database, asserted correctly**. What stood in for the subject was the choice
+of row. Any system with several overlapping guards has rows that are
+protected twice, and a test that picks one of those cannot distinguish its
+guard from its neighbour's — which is exactly the thing a mutation is
+supposed to tell you, so the mutation is also the only thing that can.
+
+**The fix**, both halves of it: retarget to `AT-10`, which the switch to
+Germany *frees* — the German pack has an equivalent class, so no other guard
+covers it and only the edited-rate check keeps it. Then assert on the plan's
+own `untouched` and `codes_deactivated` lists rather than only on the row's
+final state, because the plan says *why* a row survived and the row itself
+does not. Both mutations then produced real FAIL lines.
+
+The general form, for the next person writing a mutation against a system
+with layered protections: **pick the row that only the guard under test
+protects, and assert the reason, not just the outcome.** If no such row
+exists, the guard may be unreachable, which is worth knowing too.
