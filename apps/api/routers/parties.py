@@ -876,7 +876,62 @@ def preview_tax(
         warnings=[
             TaxWarningResponse(code=warning.code, text=warning.text)
             for warning in proposal.warnings
-        ],
+        ]
+        + _party_layer_warnings(db, party, inputs),
         blocking=proposal.blocking,
         would_have_applied=would,
     )
+
+
+#: The warning code the web keys its testid on. Named so the string exists
+#: once rather than in the router, the schema and three tests.
+NO_BUSINESS_EVIDENCE = "no_business_evidence"
+
+
+def _party_layer_warnings(
+    db: Session, party: Party, inputs: dict
+) -> list[TaxWarningResponse]:
+    """Warnings the ENGINE cannot produce, added by the party layer.
+
+    **The engine is untouched** (D67). It knows about countries, codes and
+    rules; it does not know whether a human has confirmed a customer's
+    business status, and it should not — that is a fact about our records,
+    not about tax law, and putting it in the engine would make the engine
+    depend on a database.
+
+    So the one warning here is about evidence on file: a business buyer
+    outside the EU, with no identifier a register has confirmed and no
+    current manual confirmation. **A warning, never a block.** The invoice is
+    correct either way; what is missing is the thing a tax advisor would ask
+    to see, and refusing to issue it would be FilmBill inventing a rule
+    nobody asked for.
+    """
+    if inputs["buyer_type"] != "business":
+        return []
+
+    country = (inputs["buyer_country"] or "").upper()
+    if not country:
+        # No country at all is the engine's problem, and it says so.
+        return []
+
+    from ..billing.tax.regions import EU_MEMBER_STATES
+
+    if country in EU_MEMBER_STATES:
+        # Inside the EU the engine's own `buyer_vat_id_not_verified` already
+        # covers it, and two warnings about one thing is one too many.
+        return []
+
+    if party_service.has_business_evidence(db, party):
+        return []
+
+    return [
+        TaxWarningResponse(
+            code=NO_BUSINESS_EVIDENCE,
+            text=(
+                f"Nothing on file shows this {country} customer is a "
+                "business. The tax is unaffected — this is about what you "
+                "could show an auditor. Add an identifier a register can "
+                "confirm, or record a confirmation by hand on the Tax tab."
+            ),
+        )
+    ]

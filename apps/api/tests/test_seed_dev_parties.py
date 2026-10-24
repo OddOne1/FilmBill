@@ -281,3 +281,66 @@ def test_every_seeded_identifier_passes_its_own_format_rules(script):
             assert normalised.value
             seen += 1
     assert seen >= 4, "the identifiers went missing from the seed list"
+
+
+# ─── The dev-only check runner shares the same gates ───────────────────────
+
+
+def test_the_check_runner_refuses_outside_the_dev_stack():
+    """`scripts/dev_tax_id_check.py` imports the gates rather than copying
+    them.
+
+    Asserted by behaviour: the refusal comes back from the runner's own
+    entry point with the server-test environment set. A script that can move
+    check schedules forward and invent registry answers has no business near
+    the LAN instance — and two implementations of "is this the dev stack"
+    would be one too many, because only one of them would get fixed.
+    """
+    import os
+    import subprocess
+
+    env = os.environ.copy()
+    env["DATABASE_URL"] = SERVER_TEST_URL
+    env["FILMBILL_ENV"] = "server-test"
+    result = subprocess.run(
+        ["python", str(REPO_ROOT / "scripts" / "dev_tax_id_check.py"), "--due-now"],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 2, result.stdout
+    assert "refusing to run" in result.stderr
+
+
+def test_the_check_runner_imports_the_gates_rather_than_copying_them():
+    """Structural, because the subject IS the absence of a second copy.
+
+    If somebody re-implements `check_environment` here, the behavioural test
+    above would still pass while the two copies drifted — so this asserts
+    the import, which is the only thing that can say "one implementation".
+    """
+    source = (REPO_ROOT / "scripts" / "dev_tax_id_check.py").read_text()
+
+    assert "from scripts.seed_dev_parties import" in source
+    assert "check_environment" in source
+    # And no second definition of it.
+    assert "def check_environment" not in source
+
+
+def test_the_fake_statuses_cover_every_chip_a_walkthrough_needs():
+    """`--fake` is the only way to make a registry's answer change on
+    demand: nobody can make the Austrian register rename a company to
+    order."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "dev_tax_id_check", REPO_ROOT / "scripts" / "dev_tax_id_check.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    from apps.api.billing.parties.verification import STATUSES
+
+    assert set(module.FAKE_STATUSES) == set(STATUSES)

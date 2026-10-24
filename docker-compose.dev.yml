@@ -261,9 +261,37 @@ services:
       - ./apps/api:/workspace/apps/api
     command: celery -A apps.api.tasks.celery_app worker -Q email_high,email_low -c ${EMAIL_CONCURRENCY:-2} --loglevel=info
 
-  # Scheduler. Its beat_schedule is empty in P0a (see tasks/celery_app.py);
-  # the service exists so a scheduled job never arrives without a process
-  # that runs it — the failure mode FreeFrame hit four times.
+  # Consumes the `maintenance` queue: the periodic tax-identifier re-checks
+  # (P1b-2, D62). Its own container rather than a queue added to one of the
+  # workers above, because a batch of eight-second registry calls must not
+  # sit in front of a PDF somebody is waiting for, and must not delay a
+  # magic code either.
+  #
+  # Concurrency 1 by default, deliberately. VIES publishes concurrency
+  # limits per member state and globally, and blocks addresses that exceed
+  # them (`IP_BLOCKED` is a documented fault) — so the constraint here is
+  # the register's patience, not this machine's CPU.
+  maintenance_worker:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: filmbill_maintenance_worker
+    env_file:
+      - .env
+    environment: *api_env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./apps/api:/workspace/apps/api
+    command: celery -A apps.api.tasks.celery_app worker -Q maintenance -c ${MAINTENANCE_CONCURRENCY:-1} --loglevel=info
+
+  # Scheduler. From P1b-2 its beat_schedule carries the hourly
+  # tax-identifier re-check (see tasks/celery_app.py); the service exists so
+  # a scheduled job never arrives without a process that runs it — the
+  # failure mode FreeFrame hit four times.
   beat:
     build:
       context: .

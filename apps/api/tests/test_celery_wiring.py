@@ -48,6 +48,15 @@ def celery_app():
     """The real app, with its task modules imported so they register."""
     from apps.api.tasks.celery_app import celery_app as app
     import apps.api.tasks.email_tasks  # noqa: F401  (registers its tasks)
+    import apps.api.tasks.tax_id_tasks  # noqa: F401  (same)
+
+    # Every module in the app's own `include` list, imported here. A module
+    # listed there but not imported here would make
+    # `test_every_scheduled_task_exists_and_reaches_a_worker` fail for the
+    # wrong reason — "nothing defines this task" when the truth is "this
+    # test did not look" — which is the opposite of a useful signal.
+    for module in app.conf.include:
+        __import__(module)
 
     return app
 
@@ -143,18 +152,41 @@ def test_every_declared_queue_is_consumed_or_is_the_default(celery_app):
 
 # ── beat ────────────────────────────────────────────────────────────────────
 
-def test_p0a_schedules_nothing_and_says_so(celery_app):
-    """P0a has no scheduled work. Pinned, so adding an entry means facing the
-    two checks below in the same change rather than a year later."""
-    assert celery_app.conf.beat_schedule == {}
+def test_the_schedule_is_exactly_what_is_meant_to_be_scheduled(celery_app):
+    """The pin that replaced `test_p0a_schedules_nothing_and_says_so`.
+
+    That test asserted an empty schedule so that adding the first entry
+    would mean facing the two checks below in the same change rather than a
+    year later. It worked exactly as intended: the P1b-2 hourly tax-ID
+    re-check tripped it, and the two checks below — plus
+    `test_every_declared_queue_is_consumed_or_is_the_default` — then caught
+    that the `maintenance` queue had no consumer in any compose file. Which
+    is the FreeFrame bug, caught before it shipped instead of three times
+    after.
+
+    So the pin stays a pin, now naming what is scheduled. A new entry has to
+    be added here, in the same diff as the worker that consumes it.
+    """
+    assert set(celery_app.conf.beat_schedule) == {"tax-id-checks-run-due"}
+
+    entry = celery_app.conf.beat_schedule["tax-id-checks-run-due"]
+    assert entry["task"] == "tax_id_checks.run_due"
+    # Hourly. Daily would make the initial series' "again after a day" mean
+    # "between one and two days" depending on when the number was entered.
+    assert entry["schedule"] == 3600.0
+    # A missed run expires rather than piling up: 24 identical selections in
+    # a row would only fight over the same locks.
+    assert entry["options"]["expires"] < entry["schedule"]
 
 
 def test_every_scheduled_task_exists_and_reaches_a_worker(celery_app):
     """The check that failed to exist in FreeFrame until three jobs had
     already been silently dead in production.
 
-    Vacuous while the schedule is empty — `test_p0a_schedules_nothing` is
-    what makes that honest — and load-bearing from the first beat entry on.
+    Load-bearing from P1b-2 on: there is a real entry now, and this is what
+    says the task it names exists AND reaches a worker. Both halves have
+    already earned their place — the queue it routes to had no consumer when
+    the entry was first added.
     """
     consumed = _consumed_queues(COMPOSE)
     registered = set(celery_app.tasks)

@@ -13,6 +13,7 @@ celery_app = Celery(
     backend=settings.redis_url,
     include=[
         "apps.api.tasks.email_tasks",
+        "apps.api.tasks.tax_id_tasks",
     ],
 )
 
@@ -58,6 +59,13 @@ celery_app.conf.update(
         # own worker container because a long render must not sit in front
         # of a login code.
         Queue("documents"),
+        # Periodic, network-bound housekeeping: the tax-identifier
+        # re-checks from P1b-2 on. Its own queue and its own small worker,
+        # because a batch of eight-second registry calls must not sit in
+        # front of a PDF a user is waiting for, and must not delay a magic
+        # code either. Low concurrency on purpose — the registers publish
+        # concurrency limits and block addresses that exceed them.
+        Queue("maintenance"),
     ),
     task_default_queue="default",
     # Route tasks to queues.
@@ -75,6 +83,13 @@ celery_app.conf.update(
         "apps.api.tasks.email_tasks.send_backup_email_code_email": {"queue": "email_high"},
         "apps.api.tasks.email_tasks.send_security_notice_email": {"queue": "email_high"},
         "apps.api.tasks.email_tasks.*": {"queue": "email_low"},
+        # Named, not globbed: both tax-ID tasks declare their own `name=`,
+        # and Celery routes on the name — a `apps.api.tasks.tax_id_tasks.*`
+        # glob would never match `tax_id_checks.run_due` and the task would
+        # fall through to `default`, which NO container consumes. That is
+        # the exact bug `tests/test_celery_wiring.py` exists for.
+        "tax_id_checks.run_due": {"queue": "maintenance"},
+        "tax_id_checks.check_one": {"queue": "maintenance"},
     },
     # Rate limiting for email queues (SES limits)
     task_annotations={
@@ -82,11 +97,25 @@ celery_app.conf.update(
     },
 )
 
-# No scheduled tasks in P0a. Dunning runs, recurring invoices and the
-# archive sweeps arrive with the features that need them (SCOPE P6);
+# Scheduled work. Dunning runs, recurring invoices and the archive sweeps
+# arrive with the features that need them (SCOPE P6);
 # tests/test_celery_wiring.py asserts that whatever lands here is routed to
 # a queue some container actually consumes.
-celery_app.conf.beat_schedule = {}
+#
+# The tax-identifier re-check runs hourly and does nothing unless something
+# is due (D62). Hourly rather than daily because the initial series checks a
+# new number again after a day, and a daily task would make "after a day"
+# mean "between one and two days" depending on when the number was entered.
+celery_app.conf.beat_schedule = {
+    "tax-id-checks-run-due": {
+        "task": "tax_id_checks.run_due",
+        "schedule": 3600.0,
+        # Expire a missed run rather than letting it pile up: if beat was
+        # down for a day, running 24 identical selections in a row would
+        # just fight over the same locks.
+        "options": {"expires": 3000},
+    },
+}
 
 
 import threading

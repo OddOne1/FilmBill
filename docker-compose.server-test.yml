@@ -321,6 +321,40 @@ services:
       start_period: 40s
     restart: unless-stopped
 
+  # Consumes the `maintenance` queue: the periodic tax-identifier re-checks
+  # (P1b-2, D62). Its own container for the reason the documents worker has
+  # one — a batch of eight-second registry calls must not sit in front of a
+  # PDF, and must not delay a magic code.
+  #
+  # Concurrency 1: the constraint is the register's published concurrency
+  # limit, not this machine. On the LAN instance there may well be no route
+  # to the internet at all, in which case every result is `unavailable`, the
+  # previous verified state is kept, and nothing breaks — which is a
+  # supported configuration rather than a degraded one.
+  maintenance_worker:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile.prod
+    image: filmbill-v2-maintenance-worker:test
+    container_name: filmbill-v2-maintenance-worker
+    labels: *labels
+    environment: *api_env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: celery -A apps.api.tasks.celery_app worker -Q maintenance -c ${MAINTENANCE_CONCURRENCY:-1} --loglevel=info
+    # Same reason as the workers above: the prod image's HEALTHCHECK is the
+    # API's HTTP probe, and a Celery process serves no HTTP.
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A apps.api.tasks.celery_app inspect ping -d celery@$$HOSTNAME --timeout 10 > /dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
   beat:
     build:
       context: .
