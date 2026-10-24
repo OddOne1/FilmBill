@@ -23,12 +23,22 @@ import type { Party, PartyPage, PartyType } from '@/types'
  * filter would only ever search the page it had already loaded.
  */
 
-const TABS: { key: string; label: string; role?: string; type?: string }[] = [
+const TABS: {
+  key: string
+  label: string
+  role?: string
+  type?: string
+  needsAttention?: boolean
+}[] = [
   { key: 'all', label: 'All' },
   { key: 'customers', label: 'Customers', role: 'customer' },
   { key: 'suppliers', label: 'Suppliers', role: 'supplier' },
   { key: 'partners', label: 'Partners', role: 'partner' },
   { key: 'people', label: 'People', type: 'person' },
+  // Last, and its own tab rather than a filter inside the others: it is a
+  // worklist, not a view of the customer base. Somebody opens it to find
+  // out what changed, and leaves it empty.
+  { key: 'attention', label: 'Needs attention', needsAttention: true },
 ]
 
 const TYPE_CHOICES: { value: PartyType; label: string; help: string }[] = [
@@ -71,6 +81,7 @@ export default function PartiesPage() {
       if (chosen?.role) params.set('role', chosen.role)
       if (chosen?.type) params.set('type', chosen.type)
       if (includeInactive) params.set('include_inactive', 'true')
+      if (chosen?.needsAttention) params.set('needs_attention', 'true')
       try {
         setPage(await api.get<PartyPage>(`/parties?${params.toString()}`))
         setError(null)
@@ -209,7 +220,9 @@ export default function PartiesPage() {
         >
           {search.trim()
             ? `Nothing matches “${search.trim()}”.`
-            : 'No parties yet. Add the first customer with the New button.'}
+            : tab === 'attention'
+              ? 'Nothing needs attention. Every registry answer still says what it said last time.'
+              : 'No parties yet. Add the first customer with the New button.'}
         </p>
       ) : (
         <div className="mt-4 space-y-2">
@@ -254,6 +267,15 @@ function PartyRow({ party }: { party: Party }) {
         {!party.is_active && (
           <Chip tone="warning" testId={`party-chip-archived-${party.id}`}>
             Archived
+          </Chip>
+        )}
+        {/* A registry's answer about one of this party's identifiers changed
+            and nobody has acknowledged it. Shown on every tab, not only the
+            worklist, because somebody looking at a customer for an unrelated
+            reason should see it. */}
+        {party.tax_ids.some((taxId) => taxId.needs_attention) && (
+          <Chip tone="warning" testId={`party-chip-attention-${party.id}`}>
+            Needs attention
           </Chip>
         )}
       </span>

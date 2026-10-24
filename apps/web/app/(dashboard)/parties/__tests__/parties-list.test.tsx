@@ -311,3 +311,70 @@ describe('permissions', () => {
     expect(screen.queryByTestId('parties-new')).not.toBeInTheDocument()
   })
 })
+
+
+// ─── The needs-attention worklist (P1b-2) ──────────────────────────────────
+
+describe('needs attention', () => {
+  it('asks the server for flagged parties, rather than filtering here', async () => {
+    mockApi()
+    render(<PartiesPage />)
+    await screen.findByText('ORF')
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Needs attention' }))
+
+    await waitFor(() => expect(lastPath()).toContain('needs_attention=true'))
+  })
+
+  it('shows a chip on any tab, not only the worklist', async () => {
+    // Somebody opening a customer for an unrelated reason should see that a
+    // registry answer about them changed.
+    mockApi([
+      makeParty({
+        tax_ids: [
+          {
+            id: 't1',
+            kind: 'vat',
+            country: 'DE',
+            value: 'DE123456789',
+            value_as_entered: 'DE123456789',
+            is_primary: true,
+            is_active: true,
+            notes: null,
+            replaces_id: null,
+            verifiable: true,
+            initial_checks_done: 1,
+            next_check_at: null,
+            unavailable_streak: 0,
+            needs_attention: true,
+            needs_attention_reason: 'the registry’s answer changed',
+            latest_check: null,
+            created_at: '2026-10-24T00:00:00Z',
+            updated_at: '2026-10-24T00:00:00Z',
+          },
+        ],
+      }),
+    ])
+    render(<PartiesPage />)
+
+    expect(
+      await screen.findByTestId('party-chip-attention-p1'),
+    ).toHaveTextContent('Needs attention')
+  })
+
+  it('an empty worklist says nothing changed, not “no parties”', async () => {
+    // "No parties yet. Add the first customer" on a worklist would read as
+    // though the customer list were empty.
+    mockApi([])
+    render(<PartiesPage />)
+    await screen.findByTestId('parties-empty')
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Needs attention' }))
+
+    await waitFor(() =>
+      expect(screen.getByTestId('parties-empty')).toHaveTextContent(
+        'Nothing needs attention',
+      ),
+    )
+  })
+})

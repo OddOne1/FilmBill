@@ -9,6 +9,7 @@ import { usePermissions } from '@/hooks/use-permissions'
 import { useCompanyStore } from '@/stores/company-store'
 import type {
   NoTaxCategoryOption,
+  TaxIdCheckPolicy,
   Party,
   PartyPage,
   ResolvedRecipient,
@@ -43,7 +44,7 @@ import { TAX_WARNING_NOTE_NOT_REVIEWED } from '@/types'
  * dead button (rule 17c).
  */
 
-type Tab = 'codes' | 'test'
+type Tab = 'codes' | 'test' | 'id-checks'
 
 /** The override kinds the screen offers, with the sentence that explains each. */
 const OVERRIDE_CHOICES: {
@@ -89,6 +90,7 @@ export default function TaxPage() {
           [
             ['codes', 'Codes'],
             ['test', 'Test a case'],
+            ['id-checks', 'ID checks'],
           ] as [Tab, string][]
         ).map(([value, label]) => (
           <button
@@ -108,7 +110,9 @@ export default function TaxPage() {
         ))}
       </div>
 
-      {tab === 'codes' ? <CodesTab /> : <TestTab />}
+      {tab === 'codes' && <CodesTab />}
+      {tab === 'test' && <TestTab />}
+      {tab === 'id-checks' && <IdChecksTab />}
     </CompanySection>
   )
 }
@@ -1550,6 +1554,201 @@ function ProposalPanel({
             ))}
           </ol>
         </>
+      )}
+    </div>
+  )
+}
+
+
+// ─── How often tax identifiers are re-checked (P1b-2) ──────────────────────
+
+/**
+ * The check policy.
+ *
+ * **The choices and the defaults come from the API**, not from constants
+ * here. A screen offering an interval the server refuses is a form that
+ * fails on save for no visible reason, and a "(default)" label that drifts
+ * from the actual default is worse than none.
+ *
+ * The validation message is shown verbatim. It does the arithmetic for the
+ * one mistake somebody actually makes — an age limit shorter than the
+ * interval — and saying "invalid combination" instead would leave them
+ * guessing which half to change.
+ */
+function IdChecksTab() {
+  const activeCompanyId = useCompanyStore((state) => state.activeCompanyId)
+  const canEdit = usePermissions().can('company.settings.edit')
+
+  const [policy, setPolicy] = React.useState<TaxIdCheckPolicy | null>(null)
+  const [offsets, setOffsets] = React.useState('')
+  const [interval, setInterval] = React.useState<string>('')
+  const [maxAge, setMaxAge] = React.useState('')
+  const [saving, setSaving] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
+  const [saved, setSaved] = React.useState(false)
+
+  const load = React.useCallback(async () => {
+    try {
+      const body = await api.get<TaxIdCheckPolicy>(
+        '/company/tax/id-check-policy',
+      )
+      setPolicy(body)
+      setOffsets(body.initial_check_offsets.join(', '))
+      setInterval(
+        body.recheck_interval_days === null
+          ? 'off'
+          : String(body.recheck_interval_days),
+      )
+      setMaxAge(
+        body.max_check_age_days === null ? '' : String(body.max_check_age_days),
+      )
+      setError(null)
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.detail : 'Could not load the policy',
+      )
+    }
+  }, [])
+
+  React.useEffect(() => {
+    void load()
+  }, [activeCompanyId, load])
+
+  async function save() {
+    setSaving(true)
+    setError(null)
+    setSaved(false)
+    try {
+      const body = await api.patch<TaxIdCheckPolicy>(
+        '/company/tax/id-check-policy',
+        {
+          initial_check_offsets: offsets
+            .split(',')
+            .map((part) => part.trim())
+            .filter(Boolean)
+            .map((part) => Number(part)),
+          recheck_interval_days: interval === 'off' ? null : Number(interval),
+          max_check_age_days: maxAge.trim() ? Number(maxAge) : null,
+        },
+      )
+      setPolicy(body)
+      setSaved(true)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : 'Could not save')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (!policy) {
+    return (
+      <div className="mt-6">
+        {error ? (
+          <p role="alert" data-testid="id-checks-error" className="text-sm text-status-error">
+            {error}
+          </p>
+        ) : (
+          <p className="text-sm text-text-tertiary">Loading…</p>
+        )}
+      </div>
+    )
+  }
+
+  // `defaults` and `interval_choices` are optional in the generated schema
+  // (they have server-side defaults), so they are read defensively. The
+  // first version dereferenced `policy.defaults` directly and the resulting
+  // TypeError was an UNHANDLED error that broke the React tree for the
+  // whole test file — a test two describes away timed out instead, which is
+  // the least helpful possible symptom.
+  const defaults = (policy.defaults ?? {}) as Record<string, unknown>
+  const choices = policy.interval_choices ?? [7, 30, 90, 180, 365, null]
+
+  return (
+    <div className="mt-6 max-w-xl space-y-5" data-testid="id-checks-tab">
+      <p className="text-sm text-text-secondary">
+        A new or changed identifier is checked several times in its first
+        days, then at an interval. The first days matter because a{' '}
+        <strong>newly registered</strong> business is often not in the
+        registry yet, and a single check would record that as a finding about
+        the customer.
+      </p>
+
+      <Field
+        label="Checks in the first days"
+        hint={`Day offsets, comma-separated. Default ${
+          (defaults.initial_check_offsets as number[])?.join(', ') ?? '0, 1, 7'
+        } — when it is entered, again the next day, and again a week later.`}
+      >
+        <Input
+          aria-label="Checks in the first days"
+          value={offsets}
+          disabled={!canEdit}
+          onChange={(event) => setOffsets(event.target.value)}
+        />
+      </Field>
+
+      <Field
+        label="Re-check every"
+        hint={`Default ${defaults.recheck_interval_days ?? 90} days. Off is a legitimate choice: an installation with no outbound internet has nothing to ask.`}
+      >
+        <select
+          aria-label="Re-check every"
+          value={interval}
+          disabled={!canEdit}
+          onChange={(event) => setInterval(event.target.value)}
+          className="w-full rounded-md border border-border bg-bg-primary px-3 py-2 text-sm"
+        >
+          {choices.map((choice) => (
+            <option key={String(choice)} value={choice === null ? 'off' : String(choice)}>
+              {choice === null ? 'Off' : `${choice} days`}
+            </option>
+          ))}
+        </select>
+      </Field>
+
+      <Field
+        label="A check counts for"
+        hint={`Days. Default ${defaults.max_check_age_days ?? 180} — twice the interval, so one missed cycle un-verifies nobody and two do. Empty means for ever.`}
+      >
+        <Input
+          aria-label="A check counts for"
+          value={maxAge}
+          disabled={!canEdit}
+          placeholder="for ever"
+          onChange={(event) => setMaxAge(event.target.value)}
+        />
+      </Field>
+
+      {error && (
+        <p
+          role="alert"
+          data-testid="id-checks-error"
+          className="rounded-md border border-status-error/40 bg-status-error/10 px-3 py-2 text-sm text-status-error"
+        >
+          {error}
+        </p>
+      )}
+      {saved && !error && (
+        <p data-testid="id-checks-saved" className="text-sm text-status-success">
+          Saved.
+        </p>
+      )}
+
+      {canEdit ? (
+        <button
+          type="button"
+          data-testid="id-checks-save"
+          onClick={() => void save()}
+          disabled={saving}
+          className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white disabled:opacity-60"
+        >
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+      ) : (
+        <p className="text-xs text-text-secondary">
+          You can read this but not change it — editing company settings needs
+          the settings permission.
+        </p>
       )}
     </div>
   )

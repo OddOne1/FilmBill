@@ -239,6 +239,19 @@ const CUSTOM_CLASS: TaxClass = {
   is_custom: true,
 }
 
+/** The check policy as the API serves it, choices and defaults included. */
+const POLICY = {
+  initial_check_offsets: [0, 1, 7],
+  recheck_interval_days: 90,
+  max_check_age_days: 180,
+  interval_choices: [7, 30, 90, 180, 365, null],
+  defaults: {
+    initial_check_offsets: [0, 1, 7],
+    recheck_interval_days: 90,
+    max_check_age_days: 180,
+  },
+}
+
 /** What `GET /parties/{id}/resolved` says — values the screen could not have
  *  worked out from the party row it never sees. */
 const RESOLVED_FROM_PARTY = {
@@ -293,6 +306,7 @@ function mockApi({
   proposal = makeProposal(),
   parties = [],
   resolvedRecipient = RESOLVED_FROM_PARTY,
+  policy = POLICY,
 }: {
   codes?: TaxCode[]
   classes?: TaxClass[]
@@ -301,6 +315,7 @@ function mockApi({
   proposal?: TaxProposal
   parties?: { id: string; name: string; type: string }[]
   resolvedRecipient?: unknown
+  policy?: unknown
 } = {}) {
   vi.mocked(api.get).mockImplementation(async (path: string) => {
     if (path === '/company/tax/codes') return codes as never
@@ -309,6 +324,7 @@ function mockApi({
     if (path === '/company/tax/no-tax-categories') return categories as never
     if (path.startsWith('/parties?')) return { parties, total: parties.length, limit: 200, offset: 0 } as never
     if (path.startsWith('/parties/')) return resolvedRecipient as never
+    if (path === '/company/tax/id-check-policy') return policy as never
     throw new Error(`unexpected GET ${path}`)
   })
   vi.mocked(api.post).mockImplementation(async (path: string) => {
@@ -1145,5 +1161,147 @@ describe('taking the buyer from a party', () => {
     // Still the server's code and rate, still from `POST .../propose`.
     expect(await screen.findByText(SERVER_ONLY_CODE)).toBeInTheDocument()
     expect(screen.getByText(`${SERVER_ONLY_RATE} %`)).toBeInTheDocument()
+  })
+})
+
+
+// ─── The ID-checks policy section (P1b-2) ──────────────────────────────────
+
+describe('the ID checks policy', () => {
+  async function openIdChecks() {
+    await screen.findByRole('tab', { name: 'ID checks' })
+    fireEvent.click(screen.getByRole('tab', { name: 'ID checks' }))
+    return screen.findByTestId('id-checks-tab')
+  }
+
+  it('shows the policy with the defaults named', async () => {
+    mockApi()
+    render(<TaxPage />)
+    await openIdChecks()
+
+    expect(screen.getByLabelText('Checks in the first days')).toHaveValue(
+      '0, 1, 7',
+    )
+    expect(screen.getByLabelText('Re-check every')).toHaveValue('90')
+    expect(screen.getByLabelText('A check counts for')).toHaveValue('180')
+    // The default is stated, so a user can tell what they have changed.
+    expect(screen.getByText(/Default 0, 1, 7/)).toBeInTheDocument()
+  })
+
+  it('offers the intervals the API serves, including off', async () => {
+    // Not a hard-coded list: a screen offering an interval the server
+    // refuses is a form that fails on save for no visible reason.
+    mockApi()
+    render(<TaxPage />)
+    await openIdChecks()
+
+    const select = screen.getByLabelText('Re-check every')
+    const values = Array.from(select.querySelectorAll('option')).map(
+      (option) => (option as HTMLOptionElement).value,
+    )
+    expect(values).toEqual(['7', '30', '90', '180', '365', 'off'])
+  })
+
+  it('explains why the first days are checked more than once', async () => {
+    mockApi()
+    render(<TaxPage />)
+    await openIdChecks()
+
+    expect(
+      screen.getByText(/not in the registry yet/),
+    ).toBeInTheDocument()
+  })
+
+  it('saves the three settings together', async () => {
+    mockApi()
+    render(<TaxPage />)
+    await openIdChecks()
+
+    fireEvent.change(screen.getByLabelText('Checks in the first days'), {
+      target: { value: '0, 1, 7' },
+    })
+    fireEvent.change(screen.getByLabelText('Re-check every'), {
+      target: { value: '7' },
+    })
+    fireEvent.change(screen.getByLabelText('A check counts for'), {
+      target: { value: '30' },
+    })
+    fireEvent.click(screen.getByTestId('id-checks-save'))
+
+    await waitFor(() =>
+      expect(vi.mocked(api.patch)).toHaveBeenCalledWith(
+        '/company/tax/id-check-policy',
+        {
+          initial_check_offsets: [0, 1, 7],
+          recheck_interval_days: 7,
+          max_check_age_days: 30,
+        },
+      ),
+    )
+  })
+
+  it('sends null when re-checking is turned off', async () => {
+    mockApi()
+    render(<TaxPage />)
+    await openIdChecks()
+
+    fireEvent.change(screen.getByLabelText('Re-check every'), {
+      target: { value: 'off' },
+    })
+    fireEvent.click(screen.getByTestId('id-checks-save'))
+
+    await waitFor(() =>
+      expect(
+        vi.mocked(api.patch).mock.calls.at(-1)?.[1],
+      ).toMatchObject({ recheck_interval_days: null }),
+    )
+  })
+
+  it('sends null for an empty age limit, meaning for ever', async () => {
+    mockApi()
+    render(<TaxPage />)
+    await openIdChecks()
+
+    fireEvent.change(screen.getByLabelText('A check counts for'), {
+      target: { value: '' },
+    })
+    fireEvent.click(screen.getByTestId('id-checks-save'))
+
+    await waitFor(() =>
+      expect(
+        vi.mocked(api.patch).mock.calls.at(-1)?.[1],
+      ).toMatchObject({ max_check_age_days: null }),
+    )
+  })
+
+  it('shows the server’s validation message, which does the arithmetic', async () => {
+    mockApi()
+    vi.mocked(api.patch).mockRejectedValue(
+      new ApiError(
+        422,
+        'A check would stop counting after 30 days but would only be repeated every 90, so every customer would spend 60 days of each cycle unverified — and an unverified EU business buyer is charged domestic VAT.',
+      ),
+    )
+    render(<TaxPage />)
+    await openIdChecks()
+
+    fireEvent.click(screen.getByTestId('id-checks-save'))
+
+    const error = await screen.findByTestId('id-checks-error')
+    expect(error).toHaveTextContent('60 days of each cycle unverified')
+    expect(error).toHaveTextContent('charged domestic VAT')
+  })
+
+  it('a reader sees the values and no Save, and is told why', async () => {
+    seedCompany(['company.view'])
+    mockApi()
+    render(<TaxPage />)
+    await openIdChecks()
+
+    expect(screen.getByLabelText('Re-check every')).toBeDisabled()
+    expect(screen.queryByTestId('id-checks-save')).not.toBeInTheDocument()
+    expect(
+      screen.getByText(/needs the settings permission/),
+    ).toBeInTheDocument()
   })
 })

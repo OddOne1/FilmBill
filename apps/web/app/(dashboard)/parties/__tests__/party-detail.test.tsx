@@ -349,116 +349,14 @@ describe('the Tax tab shows what the server decided', () => {
     ).toHaveTextContent('inactive')
   })
 
-  it('shows each VIES status as its own chip', async () => {
-    for (const [status, text] of [
-      ['valid', 'Valid'],
-      ['invalid', 'Not valid'],
-      ['unavailable', 'No answer'],
-      ['not_applicable', 'Not checkable in VIES'],
-    ] as [string, string][]) {
-      vi.clearAllMocks()
-      mockApi({
-        party: makeParty({
-          latest_vat_check: {
-            id: 'c1',
-            vat_id: 'ATU16360407',
-            country: 'AT',
-            status: status as never,
-            kind: 'vat',
-            provider: 'vies',
-            trigger_kind: 'manual',
-            qualified: false,
-            response: {},
-            consultation_ref: null,
-            checked_at: '2026-10-23T10:00:00Z',
-            detail: 'A sentence from the server.',
-            trader_name: null,
-            trader_address: null,
-          },
-        }),
-      })
-      const view = render(<PartyDetailPage />)
-      await ready()
-      fireEvent.click(screen.getByRole('tab', { name: 'Tax' }))
-
-      expect(
-        await screen.findByTestId(`party-vat-status-${status}`),
-      ).toHaveTextContent(text)
-      // The server's sentence, verbatim — the screen does not compose one.
-      expect(screen.getByText('A sentence from the server.')).toBeInTheDocument()
-      view.unmount()
-    }
-  })
-
-  it('marks a name VIES holds that differs from the party’s own', async () => {
-    mockApi({
-      party: makeParty({
-        name: 'ORF Enterprise',
-        latest_vat_check: {
-          id: 'c1',
-          vat_id: 'ATU16360407',
-          country: 'AT',
-          status: 'valid',
-          kind: 'vat',
-          provider: 'vies',
-          trigger_kind: 'manual',
-          qualified: true,
-          response: {},
-          consultation_ref: 'WAPIAAAA1',
-          checked_at: '2026-10-23T10:00:00Z',
-          detail: '',
-          trader_name: 'Österreichischer Rundfunk',
-          trader_address: 'Würzburggasse 30, 1136 Wien',
-        },
-      }),
-    })
-    render(<PartyDetailPage />)
-    await ready()
-    fireEvent.click(screen.getByRole('tab', { name: 'Tax' }))
-
-    expect(
-      await screen.findByTestId('party-vies-name-differs'),
-    ).toHaveTextContent('differs from ORF Enterprise')
-    // The registry's own name is shown beside it, never written into the
-    // party: a lookup is evidence, not an instruction to edit somebody's
-    // record.
-    expect(
-      screen.getByText(/Österreichischer Rundfunk/),
-    ).toBeInTheDocument()
-    // And nothing is auto-corrected: the party keeps its own name, and the
-    // number it holds is unchanged.
-    // The heading still says the party's own name (it appears in the
-    // "differs from" marker too, hence the heading role rather than text).
-    expect(
-      screen.getByRole('heading', { name: 'ORF Enterprise' }),
-    ).toBeInTheDocument()
-    expect(screen.getByTestId('party-resolved-tax-id')).toHaveTextContent(
-      'ATU16360407',
-    )
-    expect(screen.getByText(/Consultation reference WAPIAAAA1/)).toBeInTheDocument()
-  })
-
-  it('says what this check is not', async () => {
-    mockApi()
-    render(<PartyDetailPage />)
-    await ready()
-    fireEvent.click(screen.getByRole('tab', { name: 'Tax' }))
-
-    // On the paragraph rather than by text, because the sentence is broken
-    // across elements by the <strong>not</strong> that carries its weight.
-    const disclaimer = await screen.findByTestId('party-vies-disclaimer')
-    expect(disclaimer).toHaveTextContent('VIES lookup of record')
-    expect(disclaimer).toHaveTextContent('qualified confirmation procedure')
-    expect(disclaimer).toHaveTextContent('does not in itself grant an exemption')
-  })
-
-  // `cannot run a check without a VAT ID, and says so on the button` and
-  // `shows the server's sentence when a malformed ID is refused` lived here
-  // until P1b-2 part 1. The Check-now button and the VAT-ID input belong to
-  // the identifier LIST, which arrives in part 5 with its own endpoints —
-  // `POST /parties/{id}/vat-check` no longer exists, so a test clicking a
-  // button for it would be testing a mock of a route that is gone (17b).
-  // Both return in `party-tax-ids.test.tsx`, against the real endpoint.
+  // `shows each VIES status as its own chip`, `marks a name VIES holds
+  // that differs from the party's own` and `says what this check is not`
+  // lived here until P1b-2 part 5. The Tax tab is a LIST of typed
+  // identifiers now, and each chip belongs to one identifier's latest
+  // check rather than to the party — so those tests moved to
+  // `party-tax-ids.test.tsx`, where they cover six states instead of
+  // four and the manual-confirmation case that the party-level version
+  // could not express at all.
 
 })
 

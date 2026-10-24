@@ -3,18 +3,18 @@
 import * as React from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { AlertTriangle, Check, Loader2, ShieldQuestion } from 'lucide-react'
+import { AlertTriangle, Loader2, ShieldQuestion } from 'lucide-react'
 import { api, ApiError } from '@/lib/api'
 import { Input } from '@/components/ui/input'
 import { usePermissions } from '@/hooks/use-permissions'
 import type {
   Party,
+  PartyTaxId,
   PartyVatCheck,
   ResolvedField,
   ResolvedRecipient,
   TaxProposal,
 } from '@/types'
-import { VAT_INVALID, VAT_NOT_APPLICABLE, VAT_VALID } from '@/types'
 
 /**
  * One party: Basics · Addresses · Contacts · Hierarchy · Tax · Banking.
@@ -739,6 +739,87 @@ function HierarchyTab({ party }: { party: Party }) {
   )
 }
 
+/** Status chips for one identifier's latest check.
+ *
+ *  **Six states, and the three that are not findings say so in plain words.**
+ *  `unavailable` is the one that matters: "could not reach the registry" is
+ *  not a statement about somebody's number, and a chip that said "failed" or
+ *  showed a red cross would have users chasing their customers over a
+ *  government service having a bad afternoon. */
+const CHECK_CHIPS: Record<
+  string,
+  { label: string; tone: string; icon?: React.ReactNode }
+> = {
+  valid: { label: 'Confirmed', tone: 'success' },
+  invalid: { label: 'Not valid', tone: 'error' },
+  unavailable: {
+    label: 'No answer',
+    tone: 'warning',
+  },
+  not_configured: { label: 'Not set up', tone: 'neutral' },
+  not_checkable: { label: 'Not checkable', tone: 'neutral' },
+}
+
+const TONES: Record<string, string> = {
+  success: 'border-status-success/40 text-status-success',
+  error: 'border-status-error/40 text-status-error',
+  warning: 'border-status-warning/40 text-status-warning',
+  neutral: 'border-border text-text-tertiary',
+}
+
+/** What each plain-words explanation is, per state. */
+const CHECK_SENTENCES: Record<string, string> = {
+  unavailable:
+    'Could not reach the registry. This is not a finding about the number — it will be tried again.',
+  not_configured:
+    'This registry needs a credential the server has not been given. Nothing about the number is in doubt.',
+  not_checkable:
+    'There is no register FilmBill can query for this kind. Confirm it by hand instead.',
+}
+
+const NAME_MATCH_CHIPS: Record<string, { label: string; tone: string }> = {
+  match: { label: 'Name agrees', tone: 'success' },
+  partial: { label: 'Name is close', tone: 'warning' },
+  mismatch: { label: 'Name differs', tone: 'error' },
+  unknown: { label: 'No name given', tone: 'neutral' },
+}
+
+function Chip({
+  tone,
+  children,
+  testid,
+}: {
+  tone: string
+  children: React.ReactNode
+  testid?: string
+}) {
+  return (
+    <span
+      data-testid={testid}
+      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] ${
+        TONES[tone] ?? TONES.neutral
+      }`}
+    >
+      {children}
+    </span>
+  )
+}
+
+function formatDate(value?: string | null): string {
+  if (!value) return '—'
+  return new Date(value).toLocaleDateString()
+}
+
+/**
+ * The Tax tab: a list of typed identifiers, plus the buyer position.
+ *
+ * **Nothing here decides anything.** `verified` comes from the API's own
+ * flag and never from the chip beside it — those two can legitimately
+ * disagree, and the case where they do is exactly the one that matters: a
+ * manual confirmation on an EU VAT ID shows a green "Confirmed" chip and is
+ * NOT verified for tax purposes (D66). A screen that read the chip would
+ * put a reverse charge on an invoice with nothing behind it.
+ */
 function TaxTab({
   party,
   resolved,
@@ -755,16 +836,12 @@ function TaxTab({
   const [statusNote, setStatusNote] = React.useState(party.tax_status_note ?? '')
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
-  const [check, setCheck] = React.useState<PartyVatCheck | null>(
-    party.latest_vat_check ?? null,
-  )
   const [preview, setPreview] = React.useState<TaxProposal | null>(null)
 
   React.useEffect(() => {
     setTaxCountry(party.tax_country ?? '')
     setBusinessStatus(party.business_status)
     setStatusNote(party.tax_status_note ?? '')
-    setCheck(party.latest_vat_check ?? null)
   }, [party])
 
   React.useEffect(() => {
@@ -798,42 +875,51 @@ function TaxTab({
     }
   }
 
-
-
-  const traderName = check?.trader_name ?? null
-  const traderAddress = check?.trader_address ?? null
-
   return (
-    <div className="space-y-5">
-      <div className="space-y-3">
-        <div>
-          <p className="text-xs font-medium text-text-secondary">
-            Tax identifier a document would use
-          </p>
-          <p className="mt-1 text-sm" data-testid="party-resolved-tax-id">
-            <Inherited
-              field={resolved.vat_id}
-              ownLevel={resolved.own_level}
-              names={resolved.names as Record<string, unknown>}
-            >
-              {resolved.vat_id.value ? (
-                <>
-                  <span className="font-mono">
-                    {String(resolved.vat_id.value)}
+    <div className="space-y-6">
+      {/* ── What a document would use ─────────────────────────────── */}
+      <div>
+        <p className="text-xs font-medium uppercase tracking-wide text-text-tertiary">
+          Tax identifier a document would use
+        </p>
+        <p className="mt-1 text-sm" data-testid="party-resolved-tax-id">
+          <Inherited
+            field={resolved.vat_id}
+            ownLevel={resolved.own_level}
+            names={resolved.names as Record<string, unknown>}
+          >
+            {resolved.vat_id.value ? (
+              <>
+                <span className="font-mono">{String(resolved.vat_id.value)}</span>
+                {resolved.tax_id_kind.value ? (
+                  <span className="ml-2 text-xs text-text-tertiary">
+                    {TAX_ID_LABELS[String(resolved.tax_id_kind.value)] ??
+                      String(resolved.tax_id_kind.value)}
                   </span>
-                  {resolved.tax_id_kind.value ? (
-                    <span className="ml-2 text-xs text-text-tertiary">
-                      {TAX_ID_LABELS[String(resolved.tax_id_kind.value)] ??
-                        String(resolved.tax_id_kind.value)}
-                    </span>
-                  ) : null}
-                </>
-              ) : (
-                'None anywhere in the hierarchy'
-              )}
-            </Inherited>
-          </p>
-        </div>
+                ) : null}
+              </>
+            ) : (
+              'None anywhere in the hierarchy'
+            )}
+          </Inherited>
+        </p>
+        {/* The API's flag, never the chip. A manual confirmation on an EU
+            VAT ID shows a green chip and is not verified (D66). */}
+        <p
+          data-testid="party-verified-flag"
+          className="mt-1 text-xs text-text-tertiary"
+        >
+          {party.vat_verified
+            ? 'Verified for tax purposes: a reverse charge can be proposed.'
+            : 'Not verified for tax purposes.'}
+        </p>
+      </div>
+
+      {/* ── The identifiers ───────────────────────────────────────── */}
+      <TaxIdList party={party} canEdit={canEdit} onChanged={onSaved} />
+
+      {/* ── The buyer position ────────────────────────────────────── */}
+      <div className="space-y-3 border-t border-border pt-5">
         <label className="block text-xs font-medium text-text-secondary">
           Country for tax
           <Input
@@ -881,6 +967,16 @@ function TaxTab({
             like something failed to save.
           </span>
         </label>
+
+        {error && (
+          <p
+            role="alert"
+            data-testid="party-tax-error"
+            className="rounded-md border border-status-error/40 bg-status-error/10 px-3 py-2 text-sm text-status-error"
+          >
+            {error}
+          </p>
+        )}
         {canEdit && (
           <button
             type="button"
@@ -892,76 +988,6 @@ function TaxTab({
             {saving ? 'Saving…' : 'Save'}
           </button>
         )}
-      </div>
-
-      {error && (
-        <p
-          role="alert"
-          data-testid="party-tax-error"
-          className="rounded-md border border-status-error/40 bg-status-error/10 px-3 py-2 text-sm text-status-error"
-        >
-          {error}
-        </p>
-      )}
-
-      <div className="space-y-2 rounded-md border border-border p-3">
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-xs font-medium text-text-secondary">
-            Registry check
-          </p>
-        </div>
-
-        {check ? (
-          <div className="space-y-1">
-            <p data-testid={`party-vat-status-${check.status}`} className="text-sm">
-              <VatChip status={check.status} />{' '}
-              <span className="text-text-tertiary">
-                {new Date(check.checked_at).toLocaleDateString()} · {check.vat_id}
-              </span>
-            </p>
-            {check.detail && (
-              <p className="text-xs text-text-secondary">{check.detail}</p>
-            )}
-            {traderName && (
-              <p className="text-xs text-text-secondary">
-                VIES has: <strong>{traderName}</strong>
-                {party.name !== traderName && (
-                  <span
-                    data-testid="party-vies-name-differs"
-                    className="ml-2 text-status-warning"
-                  >
-                    differs from {party.name}
-                  </span>
-                )}
-              </p>
-            )}
-            {traderAddress && (
-              <p className="text-xs text-text-secondary">
-                VIES address: {traderAddress}
-              </p>
-            )}
-            {check.consultation_ref && (
-              <p className="text-xs text-text-tertiary">
-                Consultation reference {check.consultation_ref}
-              </p>
-            )}
-          </div>
-        ) : (
-          <p className="text-xs text-text-tertiary">
-            Not checked yet. A check is never required to save a party.
-          </p>
-        )}
-
-        <p
-          data-testid="party-vies-disclaimer"
-          className="text-[11px] text-text-tertiary"
-        >
-          This is a VIES lookup of record. It is{' '}
-          <strong>not</strong> the qualified confirmation procedure of a tax
-          authority, and the European Commission&rsquo;s own documentation says
-          a result does not in itself grant an exemption. Ask your tax advisor
-          what your reverse-charge documentation needs.
-        </p>
       </div>
 
       {preview && (
@@ -979,8 +1005,8 @@ function TaxTab({
             </p>
           ) : (
             <p className="mt-1 text-sm text-text-primary">
-              <span className="font-mono">{preview.code}</span> at{' '}
-              {preview.rate} % — {preview.treatment_label}
+              <span className="font-mono">{preview.code}</span> at {preview.rate}{' '}
+              % — {preview.treatment_label}
             </p>
           )}
           {preview.warnings.map((warning) => (
@@ -998,34 +1024,599 @@ function TaxTab({
   )
 }
 
-function VatChip({ status }: { status: string }) {
-  if (status === VAT_VALID) {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full border border-status-success/40 px-2 py-0.5 text-[11px] text-status-success">
-        <Check className="h-3 w-3" /> Valid
-      </span>
-    )
-  }
-  if (status === VAT_INVALID) {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full border border-status-error/40 px-2 py-0.5 text-[11px] text-status-error">
-        <AlertTriangle className="h-3 w-3" /> Not valid
-      </span>
-    )
-  }
-  if (status === VAT_NOT_APPLICABLE) {
-    return (
-      <span className="rounded-full border border-border px-2 py-0.5 text-[11px] text-text-tertiary">
-        Not checkable in VIES
-      </span>
-    )
-  }
+/** The list of identifiers, each with its own state and actions. */
+function TaxIdList({
+  party,
+  canEdit,
+  onChanged,
+}: {
+  party: Party
+  canEdit: boolean
+  onChanged: () => Promise<void>
+}) {
+  const [adding, setAdding] = React.useState(false)
+
   return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-status-warning/40 px-2 py-0.5 text-[11px] text-status-warning">
-      <AlertTriangle className="h-3 w-3" /> No answer
-    </span>
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs font-medium uppercase tracking-wide text-text-tertiary">
+          Tax identifiers
+        </p>
+        {canEdit && (
+          <button
+            type="button"
+            data-testid="tax-id-add"
+            onClick={() => setAdding((open) => !open)}
+            className="rounded-md border border-border px-2.5 py-1.5 text-xs text-text-primary hover:bg-bg-hover"
+          >
+            {adding ? 'Cancel' : 'Add an identifier'}
+          </button>
+        )}
+      </div>
+
+      {adding && (
+        <NewTaxIdPanel
+          party={party}
+          onDone={async () => {
+            setAdding(false)
+            await onChanged()
+          }}
+        />
+      )}
+
+      {party.tax_ids.length === 0 ? (
+        <p data-testid="tax-ids-empty" className="text-sm text-text-tertiary">
+          No tax identifier on file. That is not necessarily wrong — a
+          business below the small-business threshold holds none.
+        </p>
+      ) : (
+        <ul className="space-y-2">
+          {party.tax_ids.map((taxId) => (
+            <li key={taxId.id}>
+              <TaxIdRow
+                party={party}
+                taxId={taxId}
+                canEdit={canEdit}
+                onChanged={onChanged}
+              />
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   )
 }
+
+function TaxIdRow({
+  party,
+  taxId,
+  canEdit,
+  onChanged,
+}: {
+  party: Party
+  taxId: PartyTaxId
+  canEdit: boolean
+  onChanged: () => Promise<void>
+}) {
+  const [busy, setBusy] = React.useState<string | null>(null)
+  const [error, setError] = React.useState<string | null>(null)
+  const [historyOpen, setHistoryOpen] = React.useState(false)
+  const [confirming, setConfirming] = React.useState(false)
+
+  const check = taxId.latest_check
+  const chip = check ? CHECK_CHIPS[check.status] : null
+  const manual = check?.provider === 'manual'
+  const nameChip = check?.name_match
+    ? NAME_MATCH_CHIPS[check.name_match]
+    : null
+
+  async function act(path: string, label: string) {
+    setBusy(label)
+    setError(null)
+    try {
+      await api.post(`/parties/${party.id}/tax-ids/${taxId.id}/${path}`, {})
+      await onChanged()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : `Could not ${label}`)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  return (
+    <div
+      data-testid={`tax-id-${taxId.id}`}
+      className={`rounded-md border border-border p-3 ${
+        taxId.is_active ? '' : 'opacity-60'
+      }`}
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-mono text-sm text-text-primary">{taxId.value}</span>
+        <span className="text-xs text-text-tertiary">
+          {TAX_ID_LABELS[taxId.kind] ?? taxId.kind}
+          {taxId.country && ` · ${taxId.country}`}
+        </span>
+        {taxId.is_primary && (
+          <Chip tone="neutral" testid={`tax-id-primary-${taxId.id}`}>
+            Primary
+          </Chip>
+        )}
+        {!taxId.is_active && (
+          <Chip tone="warning" testid={`tax-id-retired-${taxId.id}`}>
+            Retired
+          </Chip>
+        )}
+        {/* Manual confirmations are their own chip, never the registry's.
+            A green "Confirmed" that turned out to be a colleague's note
+            would be the most expensive kind of mistake here. */}
+        {manual ? (
+          <Chip tone="neutral" testid={`tax-id-status-manual-${taxId.id}`}>
+            Confirmed by hand
+          </Chip>
+        ) : (
+          chip && (
+            <Chip
+              tone={chip.tone}
+              testid={`tax-id-status-${check!.status}-${taxId.id}`}
+            >
+              {chip.label}
+            </Chip>
+          )
+        )}
+        {nameChip && (
+          <Chip
+            tone={nameChip.tone}
+            testid={`tax-id-name-${check!.name_match}-${taxId.id}`}
+          >
+            {nameChip.label}
+          </Chip>
+        )}
+      </div>
+
+      {/* When and when next. */}
+      <p className="mt-1 text-xs text-text-tertiary">
+        {check
+          ? `Checked ${formatDate(check.checked_at)}`
+          : 'Never checked'}
+        {taxId.next_check_at
+          ? ` · next check ${formatDate(taxId.next_check_at)}`
+          : taxId.verifiable
+            ? ' · no further check scheduled'
+            : ' · no register to check it against'}
+        {check?.qualified && ' · qualified consultation'}
+      </p>
+
+      {/* The plain-words explanation, for the states that are not findings. */}
+      {check && CHECK_SENTENCES[check.status] && (
+        <p
+          data-testid={`tax-id-plain-${check.status}-${taxId.id}`}
+          className="mt-1 text-xs text-text-secondary"
+        >
+          {CHECK_SENTENCES[check.status]}
+        </p>
+      )}
+
+      {/* Both names, side by side, so a reviewer can see what differs. */}
+      {check?.registered_name && (
+        <p className="mt-1 text-xs text-text-secondary">
+          <span data-testid={`tax-id-registry-name-${taxId.id}`}>
+            registry says: <strong>{check.registered_name}</strong>
+          </span>
+          {' · '}
+          <span data-testid={`tax-id-party-name-${taxId.id}`}>
+            party says: <strong>{party.name}</strong>
+          </span>
+        </p>
+      )}
+      {check?.consultation_ref && (
+        <p className="mt-1 text-[11px] text-text-tertiary">
+          Consultation reference {check.consultation_ref}
+        </p>
+      )}
+      {manual && check?.manual_note && (
+        <p className="mt-1 text-xs text-text-secondary">
+          “{check.manual_note}”
+          {check.evidence_reference && ` (${check.evidence_reference})`}
+        </p>
+      )}
+
+      {/* A flagged change, with its own acknowledgement. */}
+      {taxId.needs_attention && (
+        <AcknowledgePanel
+          party={party}
+          taxId={taxId}
+          canEdit={canEdit}
+          onDone={onChanged}
+        />
+      )}
+
+      {error && (
+        <p
+          role="alert"
+          data-testid={`tax-id-error-${taxId.id}`}
+          className="mt-2 rounded-md border border-status-error/40 bg-status-error/10 px-2 py-1 text-xs text-status-error"
+        >
+          {error}
+        </p>
+      )}
+
+      <div className="mt-2 flex flex-wrap gap-2">
+        {canEdit && taxId.is_active && (
+          <button
+            type="button"
+            data-testid={`tax-id-check-${taxId.id}`}
+            onClick={() => void act('check', 'check this')}
+            disabled={busy !== null || !taxId.verifiable}
+            className="rounded-md border border-border px-2 py-1 text-xs text-text-primary hover:bg-bg-hover disabled:opacity-50"
+          >
+            {busy === 'check this'
+              ? 'Checking…'
+              : taxId.verifiable
+                ? 'Check now'
+                : 'No register to check'}
+          </button>
+        )}
+        {canEdit && taxId.is_active && !taxId.verifiable && (
+          <button
+            type="button"
+            data-testid={`tax-id-confirm-${taxId.id}`}
+            onClick={() => setConfirming((open) => !open)}
+            className="rounded-md border border-border px-2 py-1 text-xs text-text-primary hover:bg-bg-hover"
+          >
+            {confirming ? 'Cancel' : 'Confirm manually'}
+          </button>
+        )}
+        <button
+          type="button"
+          data-testid={`tax-id-history-${taxId.id}`}
+          onClick={() => setHistoryOpen((open) => !open)}
+          className="rounded-md border border-border px-2 py-1 text-xs text-text-secondary hover:bg-bg-hover"
+        >
+          {historyOpen ? 'Hide history' : 'History'}
+        </button>
+        {canEdit && (
+          <button
+            type="button"
+            data-testid={`tax-id-retire-${taxId.id}`}
+            onClick={() =>
+              void act(
+                taxId.is_active ? 'retire' : 'reactivate',
+                taxId.is_active ? 'retire this' : 'use this again',
+              )
+            }
+            disabled={busy !== null}
+            className="rounded-md border border-border px-2 py-1 text-xs text-text-secondary hover:bg-bg-hover disabled:opacity-50"
+          >
+            {taxId.is_active ? 'Retire' : 'Use again'}
+          </button>
+        )}
+      </div>
+
+      {confirming && (
+        <ManualConfirmPanel
+          party={party}
+          taxId={taxId}
+          onDone={async () => {
+            setConfirming(false)
+            await onChanged()
+          }}
+        />
+      )}
+      {historyOpen && <HistoryDrawer party={party} taxId={taxId} />}
+    </div>
+  )
+}
+
+function AcknowledgePanel({
+  party,
+  taxId,
+  canEdit,
+  onDone,
+}: {
+  party: Party
+  taxId: PartyTaxId
+  canEdit: boolean
+  onDone: () => Promise<void>
+}) {
+  const [note, setNote] = React.useState('')
+  const [busy, setBusy] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
+
+  async function go() {
+    setBusy(true)
+    setError(null)
+    try {
+      await api.post(
+        `/parties/${party.id}/tax-ids/${taxId.id}/checks/${taxId.latest_check?.id}/acknowledge`,
+        { note },
+      )
+      await onDone()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : 'Could not acknowledge')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div
+      data-testid={`tax-id-attention-${taxId.id}`}
+      className="mt-2 space-y-2 rounded-md border border-status-warning/40 bg-status-warning/10 p-2"
+    >
+      <p className="flex items-start gap-2 text-xs text-status-warning">
+        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+        {taxId.needs_attention_reason}
+      </p>
+      {canEdit && (
+        <>
+          <Input
+            aria-label="Acknowledgement note"
+            value={note}
+            placeholder="What did you find out?"
+            onChange={(event) => setNote(event.target.value)}
+          />
+          {error && (
+            <p role="alert" className="text-xs text-status-error">
+              {error}
+            </p>
+          )}
+          <button
+            type="button"
+            data-testid={`tax-id-acknowledge-${taxId.id}`}
+            onClick={() => void go()}
+            disabled={busy || note.trim().length < 3}
+            className="rounded-md bg-accent px-2.5 py-1 text-xs font-medium text-white disabled:opacity-60"
+          >
+            {busy
+              ? 'Saving…'
+              : note.trim().length < 3
+                ? 'Add a note first'
+                : 'Acknowledge'}
+          </button>
+        </>
+      )}
+    </div>
+  )
+}
+
+function ManualConfirmPanel({
+  party,
+  taxId,
+  onDone,
+}: {
+  party: Party
+  taxId: PartyTaxId
+  onDone: () => Promise<void>
+}) {
+  const [note, setNote] = React.useState('')
+  const [reference, setReference] = React.useState('')
+  const [busy, setBusy] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
+
+  async function go() {
+    setBusy(true)
+    setError(null)
+    try {
+      await api.post(
+        `/parties/${party.id}/tax-ids/${taxId.id}/manual-confirmation`,
+        { note, evidence_reference: reference || null },
+      )
+      await onDone()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : 'Could not record that')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div
+      data-testid={`tax-id-confirm-panel-${taxId.id}`}
+      className="mt-2 space-y-2 rounded-md border border-border bg-bg-secondary p-2"
+    >
+      <p className="text-xs text-text-secondary">
+        Recording your own confirmation. It is stored as exactly that — who,
+        when, and what you wrote — and is never shown as a registry check.
+      </p>
+      <Input
+        aria-label="Confirmation note"
+        value={note}
+        placeholder="How did you confirm it?"
+        onChange={(event) => setNote(event.target.value)}
+      />
+      <Input
+        aria-label="Evidence reference"
+        value={reference}
+        placeholder="Where the evidence is filed (optional)"
+        onChange={(event) => setReference(event.target.value)}
+      />
+      {error && (
+        <p role="alert" className="text-xs text-status-error">
+          {error}
+        </p>
+      )}
+      <button
+        type="button"
+        data-testid={`tax-id-confirm-submit-${taxId.id}`}
+        onClick={() => void go()}
+        disabled={busy || note.trim().length < 3}
+        className="rounded-md bg-accent px-2.5 py-1 text-xs font-medium text-white disabled:opacity-60"
+      >
+        {busy
+          ? 'Saving…'
+          : note.trim().length < 3
+            ? 'Say how you confirmed it'
+            : 'Record confirmation'}
+      </button>
+    </div>
+  )
+}
+
+/** Every check of one identifier, with what came back. */
+function HistoryDrawer({
+  party,
+  taxId,
+}: {
+  party: Party
+  taxId: PartyTaxId
+}) {
+  const [rows, setRows] = React.useState<PartyVatCheck[] | null>(null)
+  const [error, setError] = React.useState<string | null>(null)
+
+  React.useEffect(() => {
+    void (async () => {
+      try {
+        setRows(
+          await api.get<PartyVatCheck[]>(
+            `/parties/${party.id}/tax-ids/${taxId.id}/checks`,
+          ),
+        )
+      } catch (err) {
+        setError(err instanceof ApiError ? err.detail : 'Could not load the history')
+      }
+    })()
+  }, [party.id, taxId.id])
+
+  if (error) {
+    return (
+      <p role="alert" className="mt-2 text-xs text-status-error">
+        {error}
+      </p>
+    )
+  }
+  if (rows === null) {
+    return (
+      <p className="mt-2 text-xs text-text-tertiary">Loading the history…</p>
+    )
+  }
+  if (rows.length === 0) {
+    return (
+      <p
+        data-testid={`tax-id-history-empty-${taxId.id}`}
+        className="mt-2 text-xs text-text-tertiary"
+      >
+        Nothing has been checked or confirmed yet.
+      </p>
+    )
+  }
+
+  return (
+    <ul
+      data-testid={`tax-id-history-list-${taxId.id}`}
+      className="mt-2 space-y-1 border-t border-border pt-2"
+    >
+      {rows.map((row) => (
+        <li key={row.id} className="text-xs text-text-secondary">
+          <span className="text-text-tertiary">{formatDate(row.checked_at)}</span>{' '}
+          <strong>
+            {row.provider === 'manual'
+              ? 'confirmed by hand'
+              : (CHECK_CHIPS[row.status]?.label ?? row.status)}
+          </strong>{' '}
+          <span className="text-text-tertiary">
+            · {row.provider} · {row.trigger_kind} ·{' '}
+            {row.qualified ? 'qualified' : 'simple'}
+          </span>
+          {row.consultation_ref && (
+            <span className="text-text-tertiary"> · {row.consultation_ref}</span>
+          )}
+          {row.registered_name && (
+            <span className="text-text-tertiary">
+              {' '}
+              · registry: {row.registered_name}
+            </span>
+          )}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function NewTaxIdPanel({
+  party,
+  onDone,
+}: {
+  party: Party
+  onDone: () => Promise<void>
+}) {
+  const [kind, setKind] = React.useState('vat')
+  const [value, setValue] = React.useState('')
+  const [country, setCountry] = React.useState('')
+  const [busy, setBusy] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
+
+  async function go() {
+    setBusy(true)
+    setError(null)
+    try {
+      await api.post(`/parties/${party.id}/tax-ids`, {
+        kind,
+        value,
+        country: country || null,
+      })
+      setValue('')
+      await onDone()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : 'Could not add that')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div
+      data-testid="tax-id-new-panel"
+      className="space-y-2 rounded-md border border-border p-3"
+    >
+      <select
+        aria-label="Kind of identifier"
+        value={kind}
+        onChange={(event) => setKind(event.target.value)}
+        className="w-full rounded-md border border-border bg-bg-primary px-3 py-2 text-sm"
+      >
+        {Object.entries(TAX_ID_LABELS).map(([key, label]) => (
+          <option key={key} value={key}>
+            {label}
+          </option>
+        ))}
+      </select>
+      <div className="flex gap-2">
+        <Input
+          aria-label="Identifier"
+          value={value}
+          placeholder="ATU12345678"
+          onChange={(event) => setValue(event.target.value)}
+        />
+        <Input
+          aria-label="Identifier country"
+          value={country}
+          maxLength={2}
+          placeholder="AT"
+          onChange={(event) => setCountry(event.target.value.toUpperCase())}
+        />
+      </div>
+      {error && (
+        <p
+          role="alert"
+          data-testid="tax-id-new-error"
+          className="rounded-md border border-status-error/40 bg-status-error/10 px-2 py-1 text-xs text-status-error"
+        >
+          {error}
+        </p>
+      )}
+      <button
+        type="button"
+        data-testid="tax-id-new-submit"
+        onClick={() => void go()}
+        disabled={busy || !value.trim()}
+        className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white disabled:opacity-60"
+      >
+        {busy ? 'Adding…' : 'Add'}
+      </button>
+    </div>
+  )
+}
+
 
 function BankingTab({
   party,

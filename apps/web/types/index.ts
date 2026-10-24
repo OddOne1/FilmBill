@@ -219,6 +219,11 @@ export type PartyContactPointWrite = Schemas['PartyContactPointWrite']
 export type PartyBankAccount = Schemas['PartyBankAccountResponse']
 export type PartyBankAccountWrite = Schemas['PartyBankAccountWrite']
 export type PartyVatCheck = Schemas['PartyVatCheckResponse']
+export type PartyTaxId = Schemas['PartyTaxIdResponse']
+export type PartyTaxIdCreate = Schemas['PartyTaxIdCreate']
+export type PartyTaxIdUpdate = Schemas['PartyTaxIdUpdate']
+export type TaxIdCheckPolicy = Schemas['TaxIdCheckPolicyResponse']
+export type TaxIdCheckPolicyUpdate = Schemas['TaxIdCheckPolicyUpdate']
 export type ResolvedRecipient = Schemas['ResolvedRecipientResponse']
 export type ResolvedField = Schemas['ResolvedFieldResponse']
 export type DuplicateWarning = Schemas['DuplicateWarning']
@@ -238,6 +243,17 @@ export const VAT_VALID = 'valid'
 export const VAT_INVALID = 'invalid'
 export const VAT_UNAVAILABLE = 'unavailable'
 export const VAT_NOT_APPLICABLE = 'not_applicable'
+/** P1b-2. Neither is a shade of `invalid`: `not_configured` says the server
+ *  lacks a credential this registry needs, and `not_checkable` that no
+ *  register exists for this kind at all. Both are facts about us or the
+ *  world, not about somebody's number. */
+export const VAT_NOT_CONFIGURED = 'not_configured'
+export const VAT_NOT_CHECKABLE = 'not_checkable'
+
+/** `vat` | `uid_ch` | `abn` | `ein` | `tax_number` | `company_register` |
+ *  `other`. From the generated schema, so a kind added on the server cannot
+ *  be missed here. */
+export type TaxIdKind = PartyTaxIdCreate['kind']
 
 // ════════════════════════════════════════════════════════════════════════════
 // Hand-written, deliberately
