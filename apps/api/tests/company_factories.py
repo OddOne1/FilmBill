@@ -317,9 +317,11 @@ def make_party(
     is_customer: bool = False,
     is_supplier: bool = False,
     vat_id: Optional[str] = None,
+    tax_id_kind: str = "vat",
     tax_country: Optional[str] = None,
     business_status: str = "auto",
     tax_override: Optional[dict] = None,
+    tax_status_note: Optional[str] = None,
     party_number: Optional[str] = None,
     is_active: bool = True,
 ):
@@ -328,8 +330,15 @@ def make_party(
     Directly rather than through `POST /parties`, for the same reason `grant`
     does not use the members endpoint: a test about scoping or inheritance
     must not be able to pass because the endpoint happened to behave.
+
+    `vat_id` keeps its name through P1b-2 although the column is gone: it
+    creates a real primary `party_tax_ids` row, so the parameter still means
+    what it says — "a party with this number" — and every test that used it
+    still exercises the live path rather than a column that no longer
+    exists. `tax_id_kind` picks which kind it is, for the Swiss and
+    Australian cases.
     """
-    from apps.api.models.party import Party
+    from apps.api.models.party import Party, PartyTaxId
 
     row = Party(
         company_id=company.id,
@@ -338,14 +347,72 @@ def make_party(
         parent_id=parent.id if parent is not None else None,
         is_customer=is_customer,
         is_supplier=is_supplier,
-        vat_id=vat_id,
         tax_country=tax_country,
         business_status=business_status,
         tax_override=tax_override,
+        tax_status_note=tax_status_note,
         party_number=party_number,
         is_active=is_active,
         tags=[],
         einvoice_routing={},
+    )
+    db.add(row)
+    db.flush()
+
+    if vat_id:
+        db.add(
+            PartyTaxId(
+                company_id=company.id,
+                party_id=row.id,
+                kind=tax_id_kind,
+                # The country as the number declares it, which is what a
+                # check must use — not the party's `tax_country`, which can
+                # differ (a German company VAT-registered in Austria).
+                country=(
+                    "CH"
+                    if tax_id_kind == "uid_ch"
+                    else "AU"
+                    if tax_id_kind == "abn"
+                    else vat_id[:2]
+                    if len(vat_id) >= 2 and vat_id[:2].isalpha()
+                    else tax_country
+                ),
+                value=vat_id,
+                value_as_entered=vat_id,
+                is_primary=True,
+                is_active=True,
+            )
+        )
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def make_party_tax_id(
+    db,
+    company: Company,
+    party,
+    *,
+    kind: str = "vat",
+    value: str = "ATU16360407",
+    country: Optional[str] = None,
+    is_primary: bool = False,
+    is_active: bool = True,
+    notes: Optional[str] = None,
+):
+    """A second (or third) identifier on a party, written directly."""
+    from apps.api.models.party import PartyTaxId
+
+    row = PartyTaxId(
+        company_id=company.id,
+        party_id=party.id,
+        kind=kind,
+        value=value,
+        value_as_entered=value,
+        country=country,
+        is_primary=is_primary,
+        is_active=is_active,
+        notes=notes,
     )
     db.add(row)
     db.commit()

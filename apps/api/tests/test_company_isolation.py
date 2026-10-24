@@ -192,7 +192,6 @@ CASES: dict[str, object] = {
         "body": {"iban": "AT61 1904 3002 3457 3201"}
     },
     "GET /parties/{party_id}/resolved": {"body": None},
-    "POST /parties/{party_id}/vat-check": {"body": None},
     "GET /parties/{party_id}/vat-checks": {"body": None},
     "POST /parties/{party_id}/tax-preview": {"body": {"supply_kind": "services"}},
 }

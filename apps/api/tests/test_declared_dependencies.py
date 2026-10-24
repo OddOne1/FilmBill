@@ -38,7 +38,8 @@ STDLIB = {
     "pprint", "queue", "random", "re", "secrets", "shlex", "shutil", "signal",
     "smtplib", "socket", "ssl", "statistics", "string", "struct",
     "subprocess", "sys", "tempfile", "textwrap", "threading", "time",
-    "traceback", "types", "typing", "unittest", "urllib", "uuid", "warnings",
+    "traceback", "types", "typing", "unicodedata", "unittest", "urllib",
+    "uuid", "warnings",
     "xml", "zipfile", "zlib",
     # Stdlib since 3.9. The `tzdata` PyPI package in requirements.txt is NOT
     # this module: it is the data zoneinfo reads when the host has no system

@@ -164,10 +164,21 @@ def test_the_seed_list_covers_every_buyer_case_the_acceptance_walks_through(
     countries = {
         entry[3].get("tax_country") for entry in script.PARTIES
     } - {None}
+    kinds = {
+        kind for entry in script.PARTIES for kind, _, _ in entry[5]
+    }
 
     assert types.count("organisation") >= 4
     assert "department" in types and "person" in types
-    assert {"AT", "DE", "CH", "US"} <= countries
+    assert {"AT", "DE", "CH", "US", "AU"} <= countries
+    # One of each kind that has a provider, one that has none, and one party
+    # with no identifier at all — so the walkthrough can see every chip
+    # state without inventing data (D59, D61).
+    assert {"vat", "uid_ch", "abn", "ein"} <= kinds
+    assert any(
+        entry[3].get("business_status") == "business" and not entry[5]
+        for entry in script.PARTIES
+    ), "no Kleinunternehmer: a business with no number at all"
     # Every name says it is seed data, so nobody mistakes one for a real
     # customer on the LAN instance if a dump ever travels.
     assert all("(seed)" in entry[1] for entry in script.PARTIES)
@@ -249,3 +260,24 @@ def test_the_seeded_chain_resolves_the_way_the_acceptance_expects(
     assert resolved.billing_address.value.city == "Wien"
     assert resolved.vat_id.value == "ATU16360407"
     assert resolved.vat_id.source == "organisation"
+    assert resolved.tax_id_kind.value == "vat"
+
+
+def test_every_seeded_identifier_passes_its_own_format_rules(script):
+    """The seed data is held to the rules a user's input is.
+
+    This caught a real one: the Swiss party used to carry `CHE123456789`,
+    which fails the eCH-0097 check digit. A placeholder that cannot be a real
+    number has no business sitting in the dev database looking like one — it
+    would make the acceptance walkthrough's "add a Swiss UID and check it"
+    step prove nothing.
+    """
+    from apps.api.billing.parties.tax_ids import normalise
+
+    seen = 0
+    for entry in script.PARTIES:
+        for kind, value, country in entry[5]:
+            normalised = normalise(kind, value, country=country)
+            assert normalised.value
+            seen += 1
+    assert seen >= 4, "the identifiers went missing from the seed list"

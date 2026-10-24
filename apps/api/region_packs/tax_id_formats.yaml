@@ -1,0 +1,137 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Tax-identifier formats for the kinds that are NOT an EU VAT ID.
+#
+# Data, not code (CLAUDE.md rule 7). EU VAT formats stay in
+# `vat_formats.yaml`, which has its own header about how little of it is
+# officially sourced. This file is the opposite case and says so entry by
+# entry: both check-digit algorithms below come from the issuing authority's
+# own published document, read on 2026-10-24, and each entry names it.
+#
+# A kind with `check: none` is accepted as free text. That is not laziness:
+# a US EIN has no public register we may query and no published check digit,
+# so a pattern that guessed at one would reject real numbers while proving
+# nothing. For those kinds the route to evidence is a human confirmation
+# (`manual-confirmation`), recorded as a human confirmation and never
+# dressed up as a registry answer.
+# ─────────────────────────────────────────────────────────────────────────────
+
+kinds:
+  vat:
+    label_en: VAT identification number
+    label_de: Umsatzsteuer-Identifikationsnummer (UID)
+    # Delegated to vat_formats.yaml, which is per country.
+    check: eu_vat_per_country
+    verifiable: true
+
+  uid_ch:
+    label_en: Swiss business identification number (UID)
+    label_de: Schweizer Unternehmens-Identifikationsnummer (UID)
+    # CHE (companies) or ADM (administrative units) + 9 digits. The display
+    # form groups them 3.3.3 and may carry a VAT-register suffix.
+    #
+    # Source for the structure AND the check digit: eCH-0097
+    # "Datenstandard Unternehmensidentifikation" V5.2.0, section 2.4.2,
+    # page 8, published by the eCH association (the Swiss e-government
+    # standards body) and downloaded from
+    # https://www.ech.ch/de/ech/ech-0097 on 2026-10-24.
+    #
+    # Caveat recorded deliberately: that document is stamped
+    # "Aufgehoben / 2021-07-02" (withdrawn) and is nonetheless the newest
+    # version eCH publishes. So this is the best official source available,
+    # not a current one, and a number this rejects deserves a second look
+    # before the user is told it is wrong.
+    pattern: '^(CHE|ADM)[0-9]{9}$'
+    prefixes: [CHE, ADM]
+    # eCH-0097 §2.4.2, verbatim: "Die Prüfziffer wird nach dem Modulo 11
+    # berechnet", multipliers by position 1→8 as below, products summed,
+    # "Der verbleibende Rest (Modulo 11) wird von 11 subtrahiert und die
+    # daraus resultierende Zahl ist die Prüfziffer." A result of 10 is never
+    # issued; no remainder means the check digit is 0.
+    check: mod11_ech0097
+    check_weights: [5, 4, 3, 2, 7, 6, 5, 4]
+    check_modulus: 11
+    # The standard's own worked example, kept here so the data file carries
+    # the proof and a test can assert against the authority's arithmetic
+    # rather than against our reading of it:
+    #   10932255 → 5+0+27+6+14+12+25+20 = 109 → 109 mod 11 = 10 → 11-10 = 1
+    example_valid: CHE109322551
+    example_source: 'eCH-0097 V5.2.0 section 2.4.2 worked example'
+    # The VAT-register suffix. Not part of eCH-0097 (it is the VAT register's
+    # own addition), so it is stripped on normalisation rather than
+    # validated, and kept in `notes` if the user typed it.
+    vat_suffixes: [MWST, TVA, IVA]
+    # **No provider.** See D61: no official programmatic interface to the UID
+    # register could be found, and no terms of use for automated querying are
+    # published. Format checking yes, lookup no.
+    verifiable: false
+
+  abn:
+    label_en: Australian Business Number
+    label_de: Australische Unternehmensnummer (ABN)
+    # 11 digits. Source for the structure and the check digit:
+    # https://abr.business.gov.au/Help/AbnFormat (Australian Business
+    # Register, read 2026-10-24), verbatim: "structured as a 9 digit
+    # identifier with two leading check digits", "The leading check digits
+    # are derived using a modulus 89 (remainder after dividing by 89)
+    # calculation."
+    pattern: '^[0-9]{11}$'
+    # The ABR's five documented steps: subtract 1 from the first digit,
+    # multiply each digit by its positional weight, sum, divide by 89, and
+    # "If the remainder is zero the number is a valid ABN".
+    check: mod89_abr
+    check_weights: [10, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19]
+    check_modulus: 89
+    check_subtract_one_from_first: true
+    # The ABR's own worked example, same reasoning as the Swiss one:
+    #   51824753556 → 41824753556 → 40+1+24+10+28+63+55+39+75+85+114 = 534
+    #   → 534 mod 89 = 0 → valid
+    example_valid: '51824753556'
+    example_source: 'https://abr.business.gov.au/Help/AbnFormat worked example'
+    verifiable: true
+
+  ein:
+    label_en: US Employer Identification Number
+    label_de: US-Arbeitgeber-Identifikationsnummer (EIN)
+    # Nine digits, conventionally written NN-NNNNNNN. The IRS publishes
+    # prefix ranges by issuing campus but NO check digit, and there is no
+    # public register anyone may query for a third party's EIN. So: shape
+    # only, no check, no provider. Confirming one is a human act.
+    pattern: '^[0-9]{9}$'
+    check: none
+    verifiable: false
+
+  tax_number:
+    label_en: Domestic tax number
+    label_de: Steuernummer
+    # Austria's Steuernummer, Germany's Steuernummer, and every other
+    # domestic number that is not a VAT ID. Formats differ per federal state
+    # and per country, several are deliberately not publicly checkable, and
+    # a company's own accountant is the authority on whether one is right.
+    # Free text with a length bound.
+    check: none
+    verifiable: false
+
+  company_register:
+    label_en: Company register number
+    label_de: Firmenbuch- / Handelsregisternummer
+    # Austria's FN, Germany's HRB, Switzerland's CH-xxx. Useful as evidence
+    # of business status for a buyer with no VAT ID at all — which is the
+    # Kleinunternehmer case this file exists for.
+    check: none
+    verifiable: false
+
+  other:
+    label_en: Other identifier
+    label_de: Andere Kennung
+    check: none
+    verifiable: false
+
+#: Kinds that can carry the buyer's identity for tax purposes, in the order
+#: the resolver prefers them. "VAT-like" in the prompt's words: exactly one
+#: of these may be the primary active ID of a party, because the engine takes
+#: ONE buyer VAT ID and a second primary would make which one silent.
+vat_like_kinds: [vat, uid_ch, abn]
+
+#: Length bound for every free-text kind. Generous — the point is to stop a
+#: pasted paragraph, not to second-guess a foreign format.
+free_text_max_length: 64

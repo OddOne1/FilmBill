@@ -35,6 +35,7 @@ from ..models.party import (
     PartyAddress,
     PartyBankAccount,
     PartyContactPoint,
+    PartyTaxId,
     PartyVatCheck,
 )
 from ..schemas.party import (
@@ -67,8 +68,13 @@ router = APIRouter(tags=["parties"])
 PARTY_AUDITED = (
     "name",
     "trading_name",
-    "vat_id",
+    # `vat_id` is gone from here with the column (D59). A change to an
+    # identifier is audited on the identifier itself, under
+    # `party_tax_id.*`, which is strictly more informative: it says which
+    # KIND changed and keeps the old value as a retired row.
     "tax_country",
+    "tax_status_note",
+    "recheck_interval_days",
     "business_status",
     "tax_override",
     "is_customer",
@@ -123,6 +129,18 @@ def _latest_check(db: Session, party: Party) -> Optional[PartyVatCheck]:
     )
 
 
+def _primary_value(db: Session, party: Party) -> Optional[str]:
+    """The party's primary VAT-like identifier's value, or None.
+
+    A thin wrapper so the duplicate check and the response builder ask the
+    service the same question rather than each writing their own query —
+    "which number stands for this party" has exactly one right answer and it
+    lives in `party_service.primary_tax_id`.
+    """
+    row = party_service.primary_tax_id(db, party)
+    return row.value if row else None
+
+
 def _check_response(row: PartyVatCheck, detail: str = "") -> PartyVatCheckResponse:
     response = dict(row.response or {})
     return PartyVatCheckResponse(
@@ -165,7 +183,8 @@ def _party_response(
                 "is_customer", "is_supplier", "is_partner", "party_number",
                 "language", "default_currency", "payment_terms_days",
                 "payment_terms_text", "po_reference", "notes",
-                "business_status", "tax_country", "vat_id", "tax_override",
+                "business_status", "tax_country", "tax_override",
+                "tax_status_note", "recheck_interval_days",
                 "is_active", "created_at", "updated_at",
             )
         },
@@ -218,19 +237,13 @@ def _normalised_vat(party_or_body, raw: Optional[str], country: Optional[str]):
 
 
 def _apply(db: Session, membership: Membership, party: Party, changes: dict) -> None:
-    """Write `changes` onto `party`, with the VAT ID normalised.
+    """Write `changes` onto `party`.
 
-    Shared by create and update so the normalisation cannot be applied on one
-    path and forgotten on the other.
+    No VAT-ID normalisation here any more: identifiers are their own rows
+    with their own endpoints, and each kind normalises differently (D59).
+    A party PATCH that could still set a number would be a second write path
+    for the thing the whole of P1b-2 exists to give one.
     """
-    if "vat_id" in changes:
-        normalised = _normalised_vat(
-            party,
-            changes["vat_id"],
-            changes.get("tax_country") or party.tax_country,
-        )
-        changes["vat_id"] = normalised.full if normalised else None
-
     for field, value in changes.items():
         if field == "parent_id":
             continue
@@ -285,13 +298,25 @@ def list_parties(
             )
             .subquery()
         )
+        # Tax identifiers are rows now, so searching them is a subquery like
+        # the emails beside it. Every kind, and retired ones too: somebody
+        # searching a number they have on a piece of paper wants the party it
+        # belonged to, whether or not the number is still current.
+        tax_ids = (
+            db.query(PartyTaxId.party_id)
+            .filter(
+                PartyTaxId.company_id == membership.company_id,
+                func.lower(PartyTaxId.value).like(needle),
+            )
+            .subquery()
+        )
         query = query.filter(
             or_(
                 func.lower(Party.name).like(needle),
                 func.lower(Party.trading_name).like(needle),
                 func.lower(Party.party_number).like(needle),
-                func.lower(Party.vat_id).like(needle),
                 Party.id.in_(db.query(emails.c.party_id)),
+                Party.id.in_(db.query(tax_ids.c.party_id)),
             )
         )
 
@@ -358,7 +383,7 @@ def create_party(
         db,
         company_id=membership.company_id,
         name=party.name,
-        vat_id=party.vat_id,
+        vat_id=_primary_value(db, party),
         zip_code=None,
         exclude_id=party.id,
     )
@@ -435,7 +460,7 @@ def update_party(
         db,
         company_id=membership.company_id,
         name=party.name,
-        vat_id=party.vat_id,
+        vat_id=_primary_value(db, party),
         exclude_id=party.id,
     )
     db.commit()
@@ -749,78 +774,14 @@ def read_resolved(
             name: _field(name)
             for name in (
                 "contact_name", "invoice_name", "billing_address", "vat_id",
-                "vat_verified", "tax_country", "business_status",
+                "vat_verified", "tax_id_kind", "tax_status_note",
+                "tax_id_evidence", "tax_country", "business_status",
                 "tax_override", "language", "default_currency",
                 "payment_terms_days", "payment_terms_text", "po_reference",
                 "email", "phone", "einvoice_routing",
             )
         },
     )
-
-
-@router.post(
-    "/parties/{party_id}/vat-check", response_model=PartyVatCheckResponse
-)
-def check_vat(
-    party_id: uuid.UUID,
-    request: Request,
-    db: Session = Depends(get_db),
-    membership: Membership = Depends(require("parties.edit")),
-):
-    """Look this party's current VAT ID up in VIES and record the answer.
-
-    Append-only history: the row is the evidence for a reverse charge. A
-    failure to obtain an answer is recorded as `unavailable` and never as
-    `invalid`, and the party stays usable either way — no check is ever
-    required to save one.
-    """
-    party = _party_or_404(db, membership, party_id)
-    if not party.vat_id:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=(
-                "This party has no VAT ID, so there is nothing to check. Add "
-                "one on the Tax tab first."
-            ),
-        )
-
-    try:
-        result = vies.check_vat(party.vat_id, default_country=party.tax_country)
-    except VatFormatError as error:
-        _refuse(error, status.HTTP_422_UNPROCESSABLE_ENTITY)
-
-    stored = dict(result.raw)
-    # Lifted out of the raw body so the screen does not have to know VIES's
-    # field names, and kept BESIDE it rather than instead of it.
-    stored["_trader_name"] = result.trader_name
-    stored["_trader_address"] = result.trader_address
-
-    row = PartyVatCheck(
-        company_id=membership.company_id,
-        party_id=party.id,
-        vat_id=result.vat_id,
-        country=result.country,
-        status=result.status,
-        response=stored,
-        consultation_ref=result.consultation_ref,
-        checked_by=getattr(membership.user, "id", None),
-    )
-    db.add(row)
-    db.flush()
-
-    audit.record(
-        db,
-        audit.actor_from(request, membership=membership),
-        party,
-        "party.vat_checked",
-        None,
-        {"vat_id": result.vat_id, "status": result.status},
-        fields=["vat_id", "status"],
-        reason=result.detail,
-    )
-    db.commit()
-    db.refresh(row)
-    return _check_response(row, detail=result.detail)
 
 
 @router.get(

@@ -71,7 +71,8 @@ function makeParty(overrides: Partial<Party> = {}): Party {
     notes: null,
     business_status: 'auto',
     tax_country: null,
-    vat_id: null,
+    tax_status_note: null,
+    recheck_interval_days: null,
     tax_override: null,
     einvoice_routing: {},
     is_active: true,
@@ -117,6 +118,9 @@ function makeResolved(overrides: Partial<ResolvedRecipient> = {}): ResolvedRecip
     ),
     vat_id: field('ATU16360407', 'organisation'),
     vat_verified: field(true, 'organisation'),
+    tax_id_kind: field('vat', 'organisation'),
+    tax_status_note: field(null, null),
+    tax_id_evidence: field(null, null),
     tax_country: field('AT', 'organisation'),
     business_status: field('auto', 'person'),
     tax_override: field(null, null),
@@ -354,12 +358,15 @@ describe('the Tax tab shows what the server decided', () => {
       vi.clearAllMocks()
       mockApi({
         party: makeParty({
-          vat_id: 'ATU16360407',
           latest_vat_check: {
             id: 'c1',
             vat_id: 'ATU16360407',
             country: 'AT',
             status: status as never,
+            kind: 'vat',
+            provider: 'vies',
+            trigger_kind: 'manual',
+            qualified: false,
             response: {},
             consultation_ref: null,
             checked_at: '2026-10-23T10:00:00Z',
@@ -386,12 +393,15 @@ describe('the Tax tab shows what the server decided', () => {
     mockApi({
       party: makeParty({
         name: 'ORF Enterprise',
-        vat_id: 'ATU16360407',
         latest_vat_check: {
           id: 'c1',
           vat_id: 'ATU16360407',
           country: 'AT',
           status: 'valid',
+          kind: 'vat',
+          provider: 'vies',
+          trigger_kind: 'manual',
+          qualified: true,
           response: {},
           consultation_ref: 'WAPIAAAA1',
           checked_at: '2026-10-23T10:00:00Z',
@@ -408,8 +418,22 @@ describe('the Tax tab shows what the server decided', () => {
     expect(
       await screen.findByTestId('party-vies-name-differs'),
     ).toHaveTextContent('differs from ORF Enterprise')
-    // And nothing is auto-corrected: the party keeps its own name.
-    expect(screen.getByLabelText('VAT ID')).toHaveValue('ATU16360407')
+    // The registry's own name is shown beside it, never written into the
+    // party: a lookup is evidence, not an instruction to edit somebody's
+    // record.
+    expect(
+      screen.getByText(/Österreichischer Rundfunk/),
+    ).toBeInTheDocument()
+    // And nothing is auto-corrected: the party keeps its own name, and the
+    // number it holds is unchanged.
+    // The heading still says the party's own name (it appears in the
+    // "differs from" marker too, hence the heading role rather than text).
+    expect(
+      screen.getByRole('heading', { name: 'ORF Enterprise' }),
+    ).toBeInTheDocument()
+    expect(screen.getByTestId('party-resolved-tax-id')).toHaveTextContent(
+      'ATU16360407',
+    )
     expect(screen.getByText(/Consultation reference WAPIAAAA1/)).toBeInTheDocument()
   })
 
@@ -427,39 +451,14 @@ describe('the Tax tab shows what the server decided', () => {
     expect(disclaimer).toHaveTextContent('does not in itself grant an exemption')
   })
 
-  it('cannot run a check without a VAT ID, and says so on the button', async () => {
-    mockApi({ party: makeParty({ vat_id: null }) })
-    render(<PartyDetailPage />)
-    await ready()
-    fireEvent.click(screen.getByRole('tab', { name: 'Tax' }))
+  // `cannot run a check without a VAT ID, and says so on the button` and
+  // `shows the server's sentence when a malformed ID is refused` lived here
+  // until P1b-2 part 1. The Check-now button and the VAT-ID input belong to
+  // the identifier LIST, which arrives in part 5 with its own endpoints —
+  // `POST /parties/{id}/vat-check` no longer exists, so a test clicking a
+  // button for it would be testing a mock of a route that is gone (17b).
+  // Both return in `party-tax-ids.test.tsx`, against the real endpoint.
 
-    // Rule 17c: disabled, with the reason in its own label.
-    const button = await screen.findByTestId('party-vat-check')
-    expect(button).toBeDisabled()
-    expect(button).toHaveTextContent('Add a VAT ID first')
-  })
-
-  it('shows the server’s sentence when a malformed ID is refused', async () => {
-    mockApi({ party: makeParty({ vat_id: 'ATU123' }) })
-    vi.mocked(api.post).mockImplementation(async (path: string) => {
-      if (path.endsWith('/tax-preview')) return makePreview() as never
-      throw new ApiError(
-        422,
-        "'ATU123' does not look like a AT VAT ID. AT numbers match U[0-9]{8} after the country prefix.",
-      )
-    })
-    render(<PartyDetailPage />)
-    await ready()
-    fireEvent.click(screen.getByRole('tab', { name: 'Tax' }))
-    fireEvent.click(await screen.findByTestId('party-vat-check'))
-
-    // On its own paragraph: the Tax tab used to set this error and never
-    // render it, which is the dead-and-silent state rule 17c forbids — this
-    // test is what found that.
-    expect(await screen.findByTestId('party-tax-error')).toHaveTextContent(
-      'does not look like a AT VAT ID',
-    )
-  })
 })
 
 describe('hierarchy and archiving', () => {
@@ -554,8 +553,15 @@ describe('a member who may read but not edit', () => {
     expect(screen.queryByTestId('party-basics-save')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('tab', { name: 'Tax' }))
+    // The values are all readable — a reader who cannot see the tax position
+    // cannot answer a question about an invoice.
     expect(await screen.findByTestId('party-buyer-type')).toBeInTheDocument()
-    expect(screen.queryByTestId('party-vat-check')).not.toBeInTheDocument()
-    expect(screen.getByLabelText('VAT ID')).toBeDisabled()
+    expect(screen.getByTestId('party-resolved-tax-id')).toHaveTextContent(
+      'ATU16360407',
+    )
+    // And nothing is editable.
+    expect(screen.queryByTestId('party-tax-save')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Country for tax')).toBeDisabled()
+    expect(screen.getByLabelText('Tax status note')).toBeDisabled()
   })
 })

@@ -1811,31 +1811,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/parties/{party_id}/vat-check": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Check Vat
-         * @description Look this party's current VAT ID up in VIES and record the answer.
-         *
-         *     Append-only history: the row is the evidence for a reverse charge. A
-         *     failure to obtain an answer is recorded as `unavailable` and never as
-         *     `invalid`, and the party stays usable either way — no check is ever
-         *     required to save one.
-         */
-        post: operations["check_vat_parties__party_id__vat_check_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/parties/{party_id}/vat-checks": {
         parameters: {
             query?: never;
@@ -3414,6 +3389,8 @@ export interface components {
             po_reference?: string | null;
             /** Position */
             position?: string | null;
+            /** Recheck Interval Days */
+            recheck_interval_days?: number | null;
             /** Register Court */
             register_court?: string | null;
             /** Register Number */
@@ -3426,6 +3403,8 @@ export interface components {
             tax_override?: {
                 [key: string]: unknown;
             } | null;
+            /** Tax Status Note */
+            tax_status_note?: string | null;
             /** Title */
             title?: string | null;
             /** Trading Name */
@@ -3435,8 +3414,6 @@ export interface components {
              * @enum {string}
              */
             type: "organisation" | "department" | "person";
-            /** Vat Id */
-            vat_id?: string | null;
         };
         /**
          * PartyPage
@@ -3548,6 +3525,8 @@ export interface components {
             po_reference?: string | null;
             /** Position */
             position?: string | null;
+            /** Recheck Interval Days */
+            recheck_interval_days?: number | null;
             /** Register Court */
             register_court?: string | null;
             /** Register Number */
@@ -3563,6 +3542,8 @@ export interface components {
             tax_override?: {
                 [key: string]: unknown;
             } | null;
+            /** Tax Status Note */
+            tax_status_note?: string | null;
             /** Title */
             title?: string | null;
             /** Trading Name */
@@ -3574,8 +3555,6 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            /** Vat Id */
-            vat_id?: string | null;
             /**
              * Vat Verified
              * @default false
@@ -3617,6 +3596,12 @@ export interface components {
          * @description One VIES lookup, as stored. Append-only, so this never changes.
          */
         PartyVatCheckResponse: {
+            /** Address Match */
+            address_match?: string | null;
+            /** Change Detected */
+            change_detected?: {
+                [key: string]: unknown;
+            } | null;
             /**
              * Checked At
              * Format: date-time
@@ -3625,17 +3610,46 @@ export interface components {
             /** Consultation Ref */
             consultation_ref?: string | null;
             /** Country */
-            country: string;
+            country?: string | null;
             /**
              * Detail
              * @default
              */
             detail: string;
+            /** Evidence Reference */
+            evidence_reference?: string | null;
+            /** Gst Registered */
+            gst_registered?: boolean | null;
             /**
              * Id
              * Format: uuid
              */
             id: string;
+            /**
+             * Kind
+             * @default vat
+             */
+            kind: string;
+            /** Manual Note */
+            manual_note?: string | null;
+            /** Name Match */
+            name_match?: string | null;
+            /**
+             * Provider
+             * @default vies
+             */
+            provider: string;
+            /**
+             * Qualified
+             * @default false
+             */
+            qualified: boolean;
+            /** Registered Address */
+            registered_address?: string | null;
+            /** Registered Name */
+            registered_name?: string | null;
+            /** Registration Active */
+            registration_active?: boolean | null;
             /**
              * Response
              * @default {}
@@ -3647,11 +3661,20 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status: "valid" | "invalid" | "unavailable" | "not_applicable";
+            status: "valid" | "invalid" | "unavailable" | "not_applicable" | "not_configured" | "not_checkable";
+            /** Tax Id Id */
+            tax_id_id?: string | null;
             /** Trader Address */
             trader_address?: string | null;
             /** Trader Name */
             trader_name?: string | null;
+            /**
+             * Trigger Kind
+             * @default manual
+             */
+            trigger_kind: string;
+            /** Valid Until */
+            valid_until?: string | null;
             /** Vat Id */
             vat_id: string;
         };
@@ -3699,6 +3722,8 @@ export interface components {
             po_reference?: string | null;
             /** Position */
             position?: string | null;
+            /** Recheck Interval Days */
+            recheck_interval_days?: number | null;
             /** Register Court */
             register_court?: string | null;
             /** Register Number */
@@ -3711,12 +3736,12 @@ export interface components {
             tax_override?: {
                 [key: string]: unknown;
             } | null;
+            /** Tax Status Note */
+            tax_status_note?: string | null;
             /** Title */
             title?: string | null;
             /** Trading Name */
             trading_name?: string | null;
-            /** Vat Id */
-            vat_id?: string | null;
         };
         /**
          * PasswordPolicyResponse
@@ -3808,7 +3833,10 @@ export interface components {
             phone: components["schemas"]["ResolvedFieldResponse"];
             po_reference: components["schemas"]["ResolvedFieldResponse"];
             tax_country: components["schemas"]["ResolvedFieldResponse"];
+            tax_id_evidence: components["schemas"]["ResolvedFieldResponse"];
+            tax_id_kind: components["schemas"]["ResolvedFieldResponse"];
             tax_override: components["schemas"]["ResolvedFieldResponse"];
+            tax_status_note: components["schemas"]["ResolvedFieldResponse"];
             vat_id: components["schemas"]["ResolvedFieldResponse"];
             vat_verified: components["schemas"]["ResolvedFieldResponse"];
         };
@@ -7155,39 +7183,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TaxProposalResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    check_vat_parties__party_id__vat_check_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-Company-Id"?: string | null;
-            };
-            path: {
-                party_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PartyVatCheckResponse"];
                 };
             };
             /** @description Validation Error */

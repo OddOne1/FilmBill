@@ -44,10 +44,23 @@ const TABS: [Tab, string][] = [
 ]
 
 /** The sentence beside each derivation reason, in the server's own terms. */
+/** What each kind of identifier is called, in words. */
+const TAX_ID_LABELS: Record<string, string> = {
+  vat: 'VAT identification number',
+  uid_ch: 'Swiss UID',
+  abn: 'Australian Business Number',
+  ein: 'US EIN',
+  tax_number: 'tax number',
+  company_register: 'company register number',
+  other: 'identifier',
+}
+
 const BUYER_REASONS: Record<string, string> = {
   explicit: 'set by hand on this party',
   organisation: 'an organisation, or somebody inside one',
   person_with_vat_id: 'a person with a VAT ID — a sole trader',
+  explicit_without_tax_id:
+    'set explicitly as a business, with no tax identifier on file',
   person: 'a person with no VAT ID',
 }
 
@@ -737,11 +750,10 @@ function TaxTab({
   canEdit: boolean
   onSaved: () => Promise<void>
 }) {
-  const [vatId, setVatId] = React.useState(party.vat_id ?? '')
   const [taxCountry, setTaxCountry] = React.useState(party.tax_country ?? '')
   const [businessStatus, setBusinessStatus] = React.useState(party.business_status)
+  const [statusNote, setStatusNote] = React.useState(party.tax_status_note ?? '')
   const [saving, setSaving] = React.useState(false)
-  const [checking, setChecking] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [check, setCheck] = React.useState<PartyVatCheck | null>(
     party.latest_vat_check ?? null,
@@ -749,9 +761,9 @@ function TaxTab({
   const [preview, setPreview] = React.useState<TaxProposal | null>(null)
 
   React.useEffect(() => {
-    setVatId(party.vat_id ?? '')
     setTaxCountry(party.tax_country ?? '')
     setBusinessStatus(party.business_status)
+    setStatusNote(party.tax_status_note ?? '')
     setCheck(party.latest_vat_check ?? null)
   }, [party])
 
@@ -774,9 +786,9 @@ function TaxTab({
     setError(null)
     try {
       await api.patch(`/parties/${party.id}`, {
-        vat_id: vatId || null,
         tax_country: taxCountry || null,
         business_status: businessStatus,
+        tax_status_note: statusNote || null,
       })
       await onSaved()
     } catch (err) {
@@ -786,18 +798,7 @@ function TaxTab({
     }
   }
 
-  async function runCheck() {
-    setChecking(true)
-    setError(null)
-    try {
-      setCheck(await api.post<PartyVatCheck>(`/parties/${party.id}/vat-check`, {}))
-      await onSaved()
-    } catch (err) {
-      setError(err instanceof ApiError ? err.detail : 'Could not run the check')
-    } finally {
-      setChecking(false)
-    }
-  }
+
 
   const traderName = check?.trader_name ?? null
   const traderAddress = check?.trader_address ?? null
@@ -805,25 +806,34 @@ function TaxTab({
   return (
     <div className="space-y-5">
       <div className="space-y-3">
-        <label className="block text-xs font-medium text-text-secondary">
-          VAT ID
-          <Input
-            aria-label="VAT ID"
-            value={vatId}
-            disabled={!canEdit}
-            onChange={(event) => setVatId(event.target.value)}
-            className="mt-1"
-          />
-        </label>
-        <p className="text-xs text-text-tertiary">
-          <Inherited
-            field={resolved.vat_id}
-            ownLevel={resolved.own_level}
-            names={resolved.names as Record<string, unknown>}
-          >
-            A document would use {String(resolved.vat_id.value ?? 'none')}
-          </Inherited>
-        </p>
+        <div>
+          <p className="text-xs font-medium text-text-secondary">
+            Tax identifier a document would use
+          </p>
+          <p className="mt-1 text-sm" data-testid="party-resolved-tax-id">
+            <Inherited
+              field={resolved.vat_id}
+              ownLevel={resolved.own_level}
+              names={resolved.names as Record<string, unknown>}
+            >
+              {resolved.vat_id.value ? (
+                <>
+                  <span className="font-mono">
+                    {String(resolved.vat_id.value)}
+                  </span>
+                  {resolved.tax_id_kind.value ? (
+                    <span className="ml-2 text-xs text-text-tertiary">
+                      {TAX_ID_LABELS[String(resolved.tax_id_kind.value)] ??
+                        String(resolved.tax_id_kind.value)}
+                    </span>
+                  ) : null}
+                </>
+              ) : (
+                'None anywhere in the hierarchy'
+              )}
+            </Inherited>
+          </p>
+        </div>
         <label className="block text-xs font-medium text-text-secondary">
           Country for tax
           <Input
@@ -855,6 +865,22 @@ function TaxTab({
             party.buyer_type_reason}
           .
         </p>
+        <label className="block text-xs font-medium text-text-secondary">
+          Why there is no number, if there is none
+          <Input
+            aria-label="Tax status note"
+            value={statusNote}
+            disabled={!canEdit}
+            placeholder="Kleinunternehmer, keine UID"
+            onChange={(event) => setStatusNote(event.target.value)}
+            className="mt-1"
+          />
+          <span className="mt-1 block text-[11px] font-normal text-text-tertiary">
+            A business below the small-business threshold holds no VAT ID.
+            Saying so here is better than leaving an empty field that looks
+            like something failed to save.
+          </span>
+        </label>
         {canEdit && (
           <button
             type="button"
@@ -881,23 +907,8 @@ function TaxTab({
       <div className="space-y-2 rounded-md border border-border p-3">
         <div className="flex items-center justify-between gap-3">
           <p className="text-xs font-medium text-text-secondary">
-            VIES check
+            Registry check
           </p>
-          {canEdit && (
-            <button
-              type="button"
-              data-testid="party-vat-check"
-              onClick={() => void runCheck()}
-              disabled={checking || !party.vat_id}
-              className="rounded-md border border-border px-2.5 py-1.5 text-xs text-text-primary hover:bg-bg-hover disabled:opacity-50"
-            >
-              {checking
-                ? 'Checking…'
-                : party.vat_id
-                  ? 'Check with VIES'
-                  : 'Add a VAT ID first'}
-            </button>
-          )}
         </div>
 
         {check ? (

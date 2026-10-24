@@ -16,6 +16,7 @@ The translation layer between `models/party.py` and
 """
 
 import uuid
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from sqlalchemy import func
@@ -40,7 +41,13 @@ from ..models.party import (
     Party,
     PartyAddress,
     PartyContactPoint,
+    PartyTaxId,
     PartyVatCheck,
+    PROVIDER_MANUAL,
+    TAX_ID_VAT,
+    VAT_LIKE_KINDS,
+    VAT_NOT_CONFIGURED,
+    VAT_UNAVAILABLE,
 )
 
 #: The tree is three deep and no deeper. Not a configuration: the resolver
@@ -211,35 +218,171 @@ def _primary_contact(db: Session, party_id: uuid.UUID, kind: str) -> Optional[st
     return rows[0].value if rows else None
 
 
-def vat_is_verified(db: Session, party: Party) -> bool:
-    """Whether the latest check for the party's CURRENT VAT ID said `valid`.
+def primary_tax_id(db: Session, party: Party):
+    """The party's primary active VAT-like identifier, or None.
 
-    The definition of `buyer_vat_verified` (D56), and the two halves matter
-    equally:
+    One place answers "which of this party's numbers is THE number", because
+    the engine takes one and a second answer would be a wrong invoice nobody
+    could explain. The database enforces that at most one exists
+    (`uq_party_tax_ids_primary_vat_like`); this is the read side of it.
 
-      * **latest**: an older `valid` followed by an `invalid` is not verified;
-      * **current**: a check of a different number is not evidence about this
-        one, so changing the VAT ID resets the flag without anything having
-        to remember to clear it. The check row stores the number it checked
-        for exactly this reason.
+    When nothing is marked primary but exactly one VAT-like ID is active,
+    that one is it. Being tidy about a flag is not something a user should
+    have to do before their invoice is right — and the index means "exactly
+    one active" is unambiguous.
     """
-    if not party.vat_id:
-        return False
-    latest = (
+    rows = (
+        db.query(PartyTaxId)
+        .filter(
+            PartyTaxId.party_id == party.id,
+            PartyTaxId.is_active.is_(True),
+            PartyTaxId.kind.in_(VAT_LIKE_KINDS),
+        )
+        .order_by(PartyTaxId.is_primary.desc(), PartyTaxId.created_at)
+        .all()
+    )
+    if not rows:
+        return None
+    for row in rows:
+        if row.is_primary:
+            return row
+    return rows[0] if len(rows) == 1 else rows[0]
+
+
+def latest_completed_check(db: Session, tax_id) -> Optional[PartyVatCheck]:
+    """The newest check of this identifier that actually reached an answer.
+
+    **`unavailable` is not an answer** (D62). A row saying "we could not
+    reach the registry" must not displace the `valid` from last week, or a
+    government service having a bad afternoon would un-verify every customer
+    at once. Same for `not_configured`: the operator has not supplied a
+    credential, which says nothing about the number.
+    """
+    return (
         db.query(PartyVatCheck)
         .filter(
-            PartyVatCheck.party_id == party.id,
-            PartyVatCheck.vat_id == party.vat_id,
+            PartyVatCheck.tax_id_id == tax_id.id,
+            PartyVatCheck.status.notin_(
+                (VAT_UNAVAILABLE, VAT_NOT_CONFIGURED)
+            ),
         )
         .order_by(PartyVatCheck.checked_at.desc())
         .first()
     )
-    return latest is not None and latest.status == VAT_VALID
+
+
+def vat_is_verified(db: Session, party: Party) -> bool:
+    """Whether the party's primary VAT-like ID is currently verified.
+
+    The definition of `buyer_vat_verified` (D56, extended by D62). Four
+    halves now, each of which has cost somebody a wrong invoice somewhere:
+
+      * **latest**: an older `valid` followed by an `invalid` is not verified;
+      * **current**: a check of a different number is not evidence about this
+        one. Now structural rather than remembered — the check points at the
+        identifier row, and changing a value retires that row and creates a
+        new one, so an old check cannot follow a new number;
+      * **completed**: `unavailable` and `not_configured` do not count as
+        answers and do not displace an earlier verdict;
+      * **fresh**: a `valid` older than the company's `max_check_age_days` is
+        no longer relied on (D62). A verification from 2019 is a historical
+        fact, not a current one.
+
+    A **manual confirmation never verifies an EU VAT ID** (D66). It is how a
+    human records evidence for a number no register will answer about; for a
+    `vat` the registry is reachable, so a human saying "trust me" in its
+    place would put a reverse charge on an invoice with nothing behind it.
+    """
+    tax_id = primary_tax_id(db, party)
+    if tax_id is None:
+        return False
+    latest = latest_completed_check(db, tax_id)
+    if latest is None or latest.status != VAT_VALID:
+        return False
+    if latest.provider == PROVIDER_MANUAL and tax_id.kind == TAX_ID_VAT:
+        return False
+    return not _check_is_stale(db, party, latest)
+
+
+def _check_is_stale(db: Session, party: Party, check: PartyVatCheck) -> bool:
+    """Whether a check is older than the company's policy allows."""
+    from .tax_id_policy import load_policy
+
+    policy = load_policy(db, company_id=party.company_id)
+    max_age = policy.max_check_age_days
+    if not max_age:
+        return False
+    checked_at = check.checked_at
+    if checked_at.tzinfo is None:
+        checked_at = checked_at.replace(tzinfo=timezone.utc)
+    return checked_at < datetime.now(timezone.utc) - timedelta(days=max_age)
+
+
+def tax_id_evidence(db: Session, party: Party) -> Optional[dict]:
+    """The check `vat_is_verified` relied on, as plain data, or None.
+
+    For P2 to snapshot onto a finalized document (D64): an invoice claiming
+    a reverse charge should be able to say which lookup, on which day, with
+    which consultation reference, it rested on. Returns None whenever
+    `vat_is_verified` is False, so the evidence and the flag can never
+    disagree — they are computed from the same two reads.
+    """
+    tax_id = primary_tax_id(db, party)
+    if tax_id is None:
+        return None
+    latest = latest_completed_check(db, tax_id)
+    if latest is None or latest.status != VAT_VALID:
+        return None
+    if latest.provider == PROVIDER_MANUAL and tax_id.kind == TAX_ID_VAT:
+        return None
+    if _check_is_stale(db, party, latest):
+        return None
+    return {
+        "tax_id_id": str(tax_id.id),
+        "kind": tax_id.kind,
+        "value": tax_id.value,
+        "check_id": str(latest.id),
+        "status": latest.status,
+        "qualified": bool(latest.qualified),
+        "checked_at": latest.checked_at.isoformat(),
+        "consultation_ref": latest.consultation_ref,
+        "provider": latest.provider,
+    }
+
+
+def has_business_evidence(db: Session, party: Party) -> bool:
+    """Whether anything on file shows this party is a business.
+
+    Used only for the non-EU warning (D67), never to block. A valid registry
+    answer counts; so does a current manual confirmation, which for a US or
+    Swiss party is the only kind of evidence obtainable at all. A company
+    register number on its own does not — it says the entity exists, which
+    nobody doubted.
+    """
+    rows = (
+        db.query(PartyTaxId)
+        .filter(PartyTaxId.party_id == party.id, PartyTaxId.is_active.is_(True))
+        .all()
+    )
+    now = datetime.now(timezone.utc)
+    for row in rows:
+        latest = latest_completed_check(db, row)
+        if latest is None or latest.status != VAT_VALID:
+            continue
+        if latest.valid_until is not None:
+            until = latest.valid_until
+            if until.tzinfo is None:
+                until = until.replace(tzinfo=timezone.utc)
+            if until < now:
+                continue
+        return True
+    return False
 
 
 def _level_of(db: Session, party: Party) -> PartyLevel:
     billing = _default_address(db, party.id, "billing")
     postal = _default_address(db, party.id, "postal")
+    primary = primary_tax_id(db, party)
     return PartyLevel(
         level=party.type,
         id=party.id,
@@ -247,7 +390,14 @@ def _level_of(db: Session, party: Party) -> PartyLevel:
         trading_name=party.trading_name,
         billing_address=_address_value(billing),
         postal_address=_address_value(postal),
-        vat_id=party.vat_id,
+        # The primary VAT-like identifier, not a column. `vat_id` keeps its
+        # name in the resolver because its CONTRACT is unchanged — "the one
+        # number that stands for this level" — and renaming it would have
+        # churned every golden fixture for no gain.
+        vat_id=primary.value if primary else None,
+        tax_id_kind=primary.kind if primary else None,
+        tax_status_note=party.tax_status_note,
+        tax_id_evidence=tax_id_evidence(db, party),
         tax_country=party.tax_country,
         business_status=party.business_status,
         tax_override=dict(party.tax_override) if party.tax_override else None,
@@ -391,15 +541,21 @@ def find_duplicates(
         )
 
     if vat_id:
-        for row in (
-            db.query(Party)
-            .filter(Party.company_id == company_id, Party.vat_id == vat_id)
+        # Across every kind and including retired identifiers: if somebody
+        # retired a number and is now adding it to a different party, that is
+        # exactly the mix-up this warning exists to catch.
+        for row, tax_id in (
+            db.query(Party, PartyTaxId)
+            .join(PartyTaxId, PartyTaxId.party_id == Party.id)
+            .filter(Party.company_id == company_id, PartyTaxId.value == vat_id)
             .all()
         ):
             _add(
                 row,
                 "vat_id",
-                f"{row.name} already has the VAT ID {vat_id}.",
+                f"{row.name} already has the {tax_id.kind} identifier "
+                f"{vat_id}."
+                + ("" if tax_id.is_active else " (retired, but still on file.)"),
             )
 
     if email:

@@ -31,6 +31,7 @@ from .company_factories import (
     make_company,
     make_party,
     make_party_address,
+    make_party_tax_id,
     make_user,
 )
 
@@ -506,12 +507,35 @@ def test_the_same_iban_twice_on_one_party_is_refused(pg_db, company):
 # ─── The VAT-check history is append-only ───────────────────────────────────
 
 
-def _a_check(pg_db, company, party, status="valid", vat_id="ATU16360407"):
+def _a_check(
+    pg_db,
+    company,
+    party,
+    status="valid",
+    vat_id="ATU16360407",
+    *,
+    tax_id=None,
+    provider="vies",
+):
+    """One check row, pointed at the identifier it is a check OF.
+
+    `tax_id_id` is not optional in practice, and this helper learned that the
+    hard way: while it left the column NULL, every test asserting
+    "not verified" passed because no check could be FOUND, not because the
+    check said no. That is trap 18 — a row protected by the wrong guard —
+    and it is why the parameter defaults to the party's primary identifier
+    rather than to None.
+    """
+    if tax_id is None:
+        tax_id = party_service.primary_tax_id(pg_db, party)
     row = PartyVatCheck(
         company_id=company.id,
         party_id=party.id,
+        tax_id_id=tax_id.id if tax_id is not None else None,
         vat_id=vat_id,
         country="AT",
+        kind=tax_id.kind if tax_id is not None else "vat",
+        provider=provider,
         status=status,
         response={"valid": status == "valid"},
     )
@@ -619,21 +643,42 @@ def test_a_later_invalid_check_un_verifies(pg_db, company):
     assert party_service.vat_is_verified(pg_db, party) is False
 
 
-def test_changing_the_vat_id_resets_the_flag_without_anything_clearing_it(
-    pg_db, company
-):
-    """The check row stores the number it checked, so a check of a different
-    number is simply not evidence about this one. Nothing has to remember to
-    clear a flag, which is the point — a reset that depends on being
-    remembered is a reset that eventually is not."""
+def test_a_new_identifier_is_not_verified_by_the_old_ones_check(pg_db, company):
+    """Changing the number resets verification, and P1b-2 makes that
+    structural rather than remembered.
+
+    In P1b the check row stored the number it checked and the service
+    compared strings. Now the check POINTS AT the identifier row, and
+    changing a value retires that row and creates a new one — so an old
+    check cannot follow a new number even in principle. There is no
+    comparison left to get wrong, which is the stronger version of the same
+    guarantee: a reset that depends on being remembered is one that
+    eventually is not.
+    """
     party = make_party(pg_db, company, name="ORF", vat_id="ATU16360407")
+    old_id = party_service.primary_tax_id(pg_db, party)
     _a_check(pg_db, company, party, status="valid", vat_id="ATU16360407")
     assert party_service.vat_is_verified(pg_db, party) is True
 
-    party.vat_id = "ATU99999999"
+    # What the endpoint does on a value change: retire, then create.
+    old_id.is_primary = False
+    old_id.is_active = False
+    new_id = make_party_tax_id(
+        pg_db,
+        company,
+        party,
+        kind="vat",
+        value="ATU99999999",
+        country="AT",
+        is_primary=True,
+    )
     pg_db.commit()
 
     assert party_service.vat_is_verified(pg_db, party) is False
+    # And the old check is still there, still attached to the number it was
+    # about — it is the evidence for invoices already issued (D59).
+    assert party_service.latest_completed_check(pg_db, old_id).status == "valid"
+    assert party_service.latest_completed_check(pg_db, new_id) is None
 
 
 def test_an_unavailable_check_is_not_verified(pg_db, company):

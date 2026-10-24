@@ -42,6 +42,14 @@ BUYER_REASONS = (
     "person_with_vat_id",
     #: A person without one.
     "person",
+    #: Set to `business` by hand, with no tax identifier anywhere in the
+    #: chain. The Austrian Kleinunternehmer (D65): a real business, below the
+    #: small-business threshold, holding no UID at all. It needs its own
+    #: reason rather than borrowing `explicit`, because the screen must be
+    #: able to say "business, and we know there is no number" — otherwise a
+    #: user looking at an empty VAT field assumes something failed to save
+    #: and invents a number to make the form look right.
+    "explicit_without_tax_id",
 )
 
 
@@ -99,6 +107,19 @@ class PartyLevel:
     #: flag that travelled separately from its number is a flag that
     #: eventually describes a different number.
     vat_verified: bool = False
+    #: Which KIND of identifier `vat_id` holds — `vat`, `uid_ch` or `abn`
+    #: (P1b-2, D59). The resolver carries it so a screen and the engine's
+    #: caller can tell an EU VAT ID from a Swiss UID without re-deriving it
+    #: from the string, which would mean guessing.
+    tax_id_kind: Optional[str] = None
+    #: The free-text explanation of a business with no number (D65).
+    tax_status_note: Optional[str] = None
+    #: The check `vat_verified` was computed from, as plain data, or None.
+    #: Carried so P2 can snapshot the evidence on a finalized document: an
+    #: invoice that claims a reverse charge should be able to say which
+    #: lookup, on which day, with which consultation reference, it relied on
+    #: (D64). The resolver does not interpret it.
+    tax_id_evidence: Optional[Mapping[str, Any]] = None
 
 
 @dataclass(frozen=True)
@@ -133,6 +154,14 @@ class ResolvedRecipient:
     billing_address: ResolvedField = field(default_factory=ResolvedField)
     vat_id: ResolvedField = field(default_factory=ResolvedField)
     vat_verified: ResolvedField = field(default_factory=ResolvedField)
+    #: Which kind of identifier `vat_id` holds (D59), from the same level.
+    tax_id_kind: ResolvedField = field(default_factory=ResolvedField)
+    #: Why there is no number, when a business has none (D65).
+    tax_status_note: ResolvedField = field(default_factory=ResolvedField)
+    #: The check behind `vat_verified`, for P2 to snapshot (D64). A plain
+    #: mapping, not a model: this object is detached and immutable, and an
+    #: ORM row hiding inside it would re-attach a session to a snapshot.
+    tax_id_evidence: ResolvedField = field(default_factory=ResolvedField)
     tax_country: ResolvedField = field(default_factory=ResolvedField)
     business_status: ResolvedField = field(default_factory=ResolvedField)
     tax_override: ResolvedField = field(default_factory=ResolvedField)
@@ -238,6 +267,21 @@ def resolve_recipient(chain: Sequence[PartyLevel]) -> ResolvedRecipient:
         value=bool(verified_source.vat_verified) if verified_source else False,
         source=vat.source,
     )
+    # The kind and the evidence travel with the number too, from the same
+    # level and for the same reason: a kind resolved independently could end
+    # up describing one level's number while the value came from another.
+    tax_id_kind = ResolvedField(
+        value=verified_source.tax_id_kind if verified_source else None,
+        source=vat.source,
+    )
+    tax_id_evidence = ResolvedField(
+        value=(
+            dict(verified_source.tax_id_evidence)
+            if verified_source and verified_source.tax_id_evidence
+            else None
+        ),
+        source=vat.source,
+    )
 
     return ResolvedRecipient(
         own_level=own.level,
@@ -248,6 +292,12 @@ def resolve_recipient(chain: Sequence[PartyLevel]) -> ResolvedRecipient:
         billing_address=billing,
         vat_id=vat,
         vat_verified=vat_verified,
+        tax_id_kind=tax_id_kind,
+        tax_id_evidence=tax_id_evidence,
+        # The note inherits like any other field: a department of a
+        # Kleinunternehmer inherits the explanation, because it is a fact
+        # about the business, not about the department.
+        tax_status_note=_first(chain, "tax_status_note"),
         # Where they are for tax: the nearest level that says, and failing
         # that the billing address's country — which is the only other thing
         # in the chain that could answer it.
@@ -307,8 +357,16 @@ def recipient_buyer_type(resolved: ResolvedRecipient) -> tuple[str, str]:
     question for the Steuerberater.
     """
     status = resolved.business_status.value or "auto"
-    if status in ("business", "private"):
+    if status == "private":
         return status, "explicit"
+    if status == "business":
+        # Explicitly a business. Two reasons, and the difference is what the
+        # screen shows: with a number, `explicit` says somebody overrode the
+        # derivation; without one, `explicit_without_tax_id` says this is the
+        # Kleinunternehmer case and the empty VAT field is expected (D65).
+        if _present(resolved.vat_id.value):
+            return status, "explicit"
+        return status, "explicit_without_tax_id"
     # An organisation, or anything inside one: a department of the ORF is as
     # much a business as the ORF.
     if resolved.own_level in (LEVEL_ORGANISATION, LEVEL_DEPARTMENT):
@@ -342,4 +400,13 @@ def tax_inputs(resolved: ResolvedRecipient) -> dict:
         # Not an engine argument — carried so a screen can say WHY the buyer
         # type is what it is without deriving it a second time.
         "buyer_type_reason": reason,
+        # Also not an engine argument. The evidence behind
+        # `buyer_vat_verified`, for P2 to snapshot onto a finalized document
+        # (D64). None when nothing was relied on — including when the buyer
+        # is verified-false, because there is then no evidence to carry.
+        "tax_id_evidence": (
+            dict(resolved.tax_id_evidence.value)
+            if resolved.vat_verified.value and resolved.tax_id_evidence.value
+            else None
+        ),
     }

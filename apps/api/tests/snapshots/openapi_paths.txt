@@ -89,7 +89,6 @@ POST /parties/{party_id}/bank-accounts
 POST /parties/{party_id}/contact-points
 POST /parties/{party_id}/reactivate
 POST /parties/{party_id}/tax-preview
-POST /parties/{party_id}/vat-check
 POST /setup/create-superadmin
 POST /site-settings/favicon-upload
 POST /site-settings/logo-upload

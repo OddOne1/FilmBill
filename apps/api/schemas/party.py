@@ -28,7 +28,18 @@ BusinessStatus = Literal["auto", "business", "private"]
 AddressKind = Literal["billing", "delivery", "postal"]
 ContactKind = Literal["email", "phone"]
 ContactPurpose = Literal["general", "invoice"]
-VatStatus = Literal["valid", "invalid", "unavailable", "not_applicable"]
+VatStatus = Literal[
+    "valid",
+    "invalid",
+    "unavailable",
+    "not_applicable",
+    # P1b-2. `not_configured` is a deployment fact (the operator has not
+    # supplied a credential the registry needs) and `not_checkable` a fact
+    # about the world (no register exists we may query). Neither is a finding
+    # about somebody's tax number, which is why neither is `invalid`.
+    "not_configured",
+    "not_checkable",
+]
 
 
 class PartyAddressResponse(BaseModel):
@@ -112,8 +123,31 @@ class PartyVatCheckResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
+    #: Which identifier this was a check of. Nullable for the P1b rows the
+    #: migration repointed when a party's number could not be matched.
+    tax_id_id: Optional[uuid.UUID] = None
     vat_id: str
-    country: str
+    #: Nullable now: a free-text identifier has no country.
+    country: Optional[str] = None
+    kind: str = "vat"
+    #: Who answered — `vies`, `abn`, or `manual`. The last is a human
+    #: confirmation and is shown as one, never as a registry check (D66).
+    provider: str = "vies"
+    trigger_kind: str = "manual"
+    #: True only when the call carried our own VAT ID as requester AND a
+    #: consultation reference came back. Everything else is a simple lookup,
+    #: and the difference is what a tax advisor will ask about.
+    qualified: bool = False
+    registered_name: Optional[str] = None
+    registered_address: Optional[str] = None
+    name_match: Optional[str] = None
+    address_match: Optional[str] = None
+    registration_active: Optional[bool] = None
+    gst_registered: Optional[bool] = None
+    manual_note: Optional[str] = None
+    evidence_reference: Optional[str] = None
+    valid_until: Optional[datetime] = None
+    change_detected: Optional[JsonObject] = None
     status: VatStatus
     #: Everything VIES returned, verbatim — the trader name and address as
     #: the member state has them, which is what the screen compares against
@@ -156,7 +190,8 @@ class PartyResponse(BaseModel):
     notes: Optional[str] = None
     business_status: str = "auto"
     tax_country: Optional[str] = None
-    vat_id: Optional[str] = None
+    tax_status_note: Optional[str] = None
+    recheck_interval_days: Optional[int] = None
     tax_override: Optional[JsonObject] = None
     einvoice_routing: JsonObject = {}
     is_active: bool = True
@@ -245,9 +280,17 @@ class PartyWrite(BaseModel):
     notes: Optional[str] = None
     business_status: Optional[BusinessStatus] = None
     tax_country: Optional[str] = Field(default=None, min_length=2, max_length=2)
-    #: Normalised on write — spaces, dots and dashes stripped, upper-cased —
-    #: and refused before any network call if it cannot be that country's.
-    vat_id: Optional[str] = Field(default=None, max_length=42)
+    #: `vat_id` is NOT here. Identifiers are their own rows with their own
+    #: endpoints (D59), because each kind normalises differently and a party
+    #: PATCH that could still set a number would be a second write path for
+    #: the thing this release exists to give one.
+    #:
+    #: Free text explaining a business that holds no number — the Austrian
+    #: Kleinunternehmer case (D65).
+    tax_status_note: Optional[str] = Field(default=None, max_length=500)
+    #: Per-party override of the re-check interval, in days. None means the
+    #: company's policy applies.
+    recheck_interval_days: Optional[int] = Field(default=None, ge=1, le=3650)
     tax_override: Optional[JsonObject] = None
     einvoice_routing: Optional[JsonObject] = None
 
@@ -295,6 +338,15 @@ class ResolvedRecipientResponse(BaseModel):
     billing_address: ResolvedFieldResponse
     vat_id: ResolvedFieldResponse
     vat_verified: ResolvedFieldResponse
+    #: Which kind of identifier `vat_id` holds — `vat`, `uid_ch` or `abn`.
+    #: Served so a screen can say "Swiss UID" rather than guessing from the
+    #: string, and so a caller can tell an EU number from one that cannot
+    #: carry a reverse charge (D59).
+    tax_id_kind: ResolvedFieldResponse
+    #: Why a business has no number at all (D65).
+    tax_status_note: ResolvedFieldResponse
+    #: The check `vat_verified` rests on, for P2 to snapshot (D64).
+    tax_id_evidence: ResolvedFieldResponse
     tax_country: ResolvedFieldResponse
     business_status: ResolvedFieldResponse
     tax_override: ResolvedFieldResponse

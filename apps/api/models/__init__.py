@@ -21,6 +21,7 @@ from .party import (
     PartyAddress,
     PartyBankAccount,
     PartyContactPoint,
+    PartyTaxId,
     PartyVatCheck,
 )
 
@@ -46,5 +47,6 @@ __all__ = [
     "PartyAddress",
     "PartyBankAccount",
     "PartyContactPoint",
+    "PartyTaxId",
     "PartyVatCheck",
 ]

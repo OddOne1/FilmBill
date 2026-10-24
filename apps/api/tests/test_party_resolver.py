@@ -335,11 +335,18 @@ def test_a_person_without_one_is_private():
 
 @pytest.mark.parametrize("status", ["business", "private"])
 def test_an_explicit_status_wins_over_the_derivation(status):
-    resolved = resolve_recipient([person(business_status=status)])
+    # A number present, so "explicit" is the whole story. Without one, an
+    # explicit `business` reports `explicit_without_tax_id` instead — see
+    # the Kleinunternehmer tests below.
+    resolved = resolve_recipient(
+        [person(business_status=status, vat_id="ATU16360407")]
+    )
     assert recipient_buyer_type(resolved) == (status, "explicit")
 
     # And on an organisation, in the other direction.
-    resolved = resolve_recipient([organisation(business_status=status)])
+    resolved = resolve_recipient(
+        [organisation(business_status=status, vat_id="ATU16360407")]
+    )
     assert recipient_buyer_type(resolved) == (status, "explicit")
 
 
@@ -392,4 +399,6 @@ def test_tax_inputs_for_a_private_person_abroad():
         "buyer_vat_verified": False,
         "party_override": None,
         "buyer_type_reason": "person",
+        # Nothing was relied on, so there is nothing to snapshot (D64).
+        "tax_id_evidence": None,
     }

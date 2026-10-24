@@ -96,7 +96,8 @@ def check_environment(
         )
 
 
-#: `(type, name, parent name or None, fields)`. Recognisable on purpose — a
+#: `(type, name, parent name or None, fields, address, tax_ids)`, where
+#: `tax_ids` is a list of `(kind, value, country)` (D59). Recognisable on purpose — a
 #: real Austrian broadcaster, a German one, a Swiss and an American company —
 #: so the acceptance walkthrough's "which one am I looking at" is obvious.
 PARTIES = (
@@ -106,12 +107,12 @@ PARTIES = (
         None,
         {
             "is_customer": True,
-            "vat_id": "ATU16360407",
             "tax_country": "AT",
             "language": "de",
             "payment_terms_days": 30,
         },
         {"street": "Würzburggasse 30", "zip": "1136", "city": "Wien", "country": "AT"},
+        [("vat", "ATU16360407", "AT")],
     ),
     (
         "department",
@@ -119,6 +120,7 @@ PARTIES = (
         "ORF (seed)",
         {},
         None,
+        [],
     ),
     (
         "person",
@@ -126,6 +128,7 @@ PARTIES = (
         "Redaktion Kultur (seed)",
         {"position": "Redakteurin"},
         None,
+        [],
     ),
     (
         "organisation",
@@ -133,11 +136,11 @@ PARTIES = (
         None,
         {
             "is_customer": True,
-            "vat_id": "DE123456789",
             "tax_country": "DE",
             "language": "de",
         },
         {"street": "Potsdamer Platz 1", "zip": "10785", "city": "Berlin", "country": "DE"},
+        [("vat", "DE123456789", "DE")],
     ),
     (
         "organisation",
@@ -145,11 +148,15 @@ PARTIES = (
         None,
         {
             "is_customer": True,
-            "vat_id": "CHE123456789",
             "tax_country": "CH",
             "language": "de",
         },
         {"street": "Bahnhofstrasse 1", "zip": "8001", "city": "Zürich", "country": "CH"},
+        # eCH-0097's own worked example, because the placeholder this used to
+        # carry (`CHE123456789`) fails the check digit and would now be
+        # refused — which is the format validation doing its job on the seed
+        # data as much as on a user's.
+        [("uid_ch", "CHE109322551", "CH")],
     ),
     (
         "organisation",
@@ -157,6 +164,9 @@ PARTIES = (
         None,
         {"is_customer": True, "tax_country": "US", "language": "en"},
         {"street": "1 Sunset Blvd", "zip": "90028", "city": "Los Angeles", "country": "US"},
+        # An EIN: no register anyone may query, so this is the party whose
+        # business status can only ever be confirmed by hand.
+        [("ein", "123456789", "US")],
     ),
     (
         "person",
@@ -164,6 +174,33 @@ PARTIES = (
         None,
         {"is_customer": True, "tax_country": "AT"},
         {"street": "Privatgasse 1", "zip": "1010", "city": "Wien", "country": "AT"},
+        [],
+    ),
+    (
+        # The case P1b-2 exists for: a real business, below the Austrian
+        # small-business threshold, holding no UID at all. A domestic sale to
+        # them carries ordinary Austrian VAT and there is nothing missing.
+        "person",
+        "Franz Klein e.U. (seed)",
+        None,
+        {
+            "is_customer": True,
+            "tax_country": "AT",
+            "business_status": "business",
+            "tax_status_note": "Kleinunternehmer nach §6 Abs 1 Z 27 UStG, keine UID",
+        },
+        {"street": "Werkstattgasse 4", "zip": "1050", "city": "Wien", "country": "AT"},
+        [],
+    ),
+    (
+        "organisation",
+        "Sydney Studios Pty Ltd (seed)",
+        None,
+        {"is_customer": True, "tax_country": "AU", "language": "en"},
+        {"street": "1 Macquarie St", "zip": "2000", "city": "Sydney", "country": "AU"},
+        # The Australian Business Register's own worked example, for the same
+        # reason as the Swiss one above.
+        [("abn", "51824753556", "AU")],
     ),
 )
 
@@ -181,7 +218,8 @@ def main() -> int:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     from apps.api.database import SessionLocal
     from apps.api.models.company import Company
-    from apps.api.models.party import Party, PartyAddress
+    from apps.api.billing.parties.tax_ids import normalise
+    from apps.api.models.party import Party, PartyAddress, PartyTaxId
     from apps.api.services import party_service
 
     db = SessionLocal()
@@ -201,7 +239,7 @@ def main() -> int:
         by_name: dict = {}
         added = 0
 
-        for party_type, name, parent_name, fields, address in PARTIES:
+        for party_type, name, parent_name, fields, address, tax_id_specs in PARTIES:
             if name in existing:
                 by_name[name] = (
                     db.query(Party)
@@ -230,6 +268,23 @@ def main() -> int:
                         kind="billing",
                         is_default=True,
                         **address,
+                    )
+                )
+            for kind, value, country in tax_id_specs:
+                # Through the normaliser, so the seed data is held to the
+                # same format rules a user's input is. A placeholder that
+                # fails a check digit should fail HERE, loudly, rather than
+                # sit in the dev database looking real.
+                normalised = normalise(kind, value, country=country)
+                db.add(
+                    PartyTaxId(
+                        company_id=company.id,
+                        party_id=row.id,
+                        kind=normalised.kind,
+                        country=normalised.country,
+                        value=normalised.value,
+                        value_as_entered=value,
+                        is_primary=normalised.kind in ("vat", "uid_ch", "abn"),
                     )
                 )
             by_name[name] = row

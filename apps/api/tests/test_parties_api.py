@@ -53,7 +53,9 @@ def world(pg_db):
     tax_service.seed_tax_configuration(pg_db, company=company)
     seed_number_series(pg_db, company_id=company.id)
     pg_db.commit()
-    return {"company": company, "owner": owner}
+    # The session too, so helpers that must write a row directly use the
+    # same one the client does rather than opening a second.
+    return {"company": company, "owner": owner, "db": pg_db}
 
 
 def _headers(world):
@@ -61,11 +63,84 @@ def _headers(world):
 
 
 def _create(pg_client, world, **body):
+    """Create a party through the endpoint; add a tax ID if one was asked for.
+
+    `vat_id` is no longer a field on `POST /parties` — identifiers are their
+    own rows with their own endpoints (D59) — but these tests are about
+    buyer types, duplicates, search and audit, not about how a number gets
+    written. So the parameter is kept and the row is created directly, which
+    keeps each test exercising its own subject.
+
+    The endpoint that writes identifiers has its own tests in
+    `test_party_tax_ids.py`, including the normalisation and the refusals
+    that used to be asserted here. That is deliberate and not a gap: an
+    assertion about `POST /parties` refusing a malformed VAT ID would now be
+    asserting that FastAPI rejects an unknown field, which proves nothing
+    about the normalising.
+    """
+    vat_id = body.pop("vat_id", None)
+    tax_id_kind = body.pop("tax_id_kind", "vat")
     payload = {"type": "organisation", "name": "ORF"}
     payload.update(body)
     response = pg_client.post("/parties", headers=_headers(world), json=payload)
     assert response.status_code == 201, response.text
-    return response.json()
+    created = response.json()
+
+    if vat_id:
+        from apps.api.models.party import PartyTaxId
+
+        db = world["db"]
+        db.add(
+            PartyTaxId(
+                company_id=world["company"].id,
+                party_id=uuid.UUID(created["id"]),
+                kind=tax_id_kind,
+                country=(
+                    "CH"
+                    if tax_id_kind == "uid_ch"
+                    else vat_id[:2]
+                    if len(vat_id) >= 2 and vat_id[:2].isalpha()
+                    else None
+                ),
+                value=vat_id,
+                value_as_entered=vat_id,
+                is_primary=True,
+            )
+        )
+        db.commit()
+        created = pg_client.get(
+            f"/parties/{created['id']}", headers=_headers(world)
+        ).json()
+    return created
+
+
+def _mark_verified(pg_db, world, party, *, status="valid", value="DE123456789"):
+    """Record a completed check against the party's primary identifier.
+
+    Pointed at the identifier row, which is what makes it count (D59): a
+    check with a NULL `tax_id_id` is not evidence about anything, and while
+    this helper left it NULL every "not verified" assertion in the file
+    passed because no check could be found rather than because the check
+    said no — trap 18, found here.
+    """
+    row = pg_db.query(Party).filter(Party.id == uuid.UUID(party["id"])).one()
+    tax_id = party_service.primary_tax_id(pg_db, row)
+    assert tax_id is not None, "the party has no identifier to check"
+    pg_db.add(
+        PartyVatCheck(
+            company_id=world["company"].id,
+            party_id=row.id,
+            tax_id_id=tax_id.id,
+            vat_id=value,
+            country=tax_id.country,
+            kind=tax_id.kind,
+            provider="vies",
+            status=status,
+            response={},
+        )
+    )
+    pg_db.commit()
+    return row
 
 
 def _events(pg_db, action: str) -> list[AuditEvent]:
@@ -109,29 +184,14 @@ def test_a_person_with_a_vat_id_is_a_business(pg_client, world):
     assert body["buyer_type_reason"] == "person_with_vat_id"
 
 
-def test_the_vat_id_is_normalised_on_write(pg_client, world):
-    body = _create(pg_client, world, vat_id="  at-u 123 456 78 ")
-    assert body["vat_id"] == "ATU12345678"
-
-
-def test_a_malformed_vat_id_is_refused_with_a_sentence(pg_client, world):
-    response = pg_client.post(
-        "/parties",
-        headers=_headers(world),
-        json={"type": "organisation", "name": "Typo GmbH", "vat_id": "ATU123"},
-    )
-
-    assert response.status_code == 422, response.text
-    assert "does not look like" in response.json()["detail"]
-
-
-def test_a_swiss_number_is_accepted_as_free_text(pg_client, world):
-    """Refusing it would make a Swiss supplier unsaveable."""
-    body = _create(
-        pg_client, world, name="Zürich AG", vat_id="CHE-123.456.789"
-    )
-    assert body["vat_id"] == "CHE123456789"
-
+# `test_the_vat_id_is_normalised_on_write`,
+# `test_a_malformed_vat_id_is_refused_with_a_sentence` and
+# `test_a_swiss_number_is_accepted_as_free_text` lived here until P1b-2.
+# They moved to `test_party_tax_ids.py`, with the write path they are
+# about: `POST /parties` no longer accepts a number at all, so asserting
+# a refusal here would only prove that FastAPI rejects an unknown field —
+# which says nothing about the normalising and would read as coverage
+# while being none (rule 17b).
 
 def test_a_department_needs_an_organisation(pg_client, world):
     response = pg_client.post(
@@ -450,26 +510,61 @@ def test_the_list_pages(pg_client, world):
 # ─── Duplicates: warnings, never refusals ───────────────────────────────────
 
 
-def test_the_same_vat_id_warns_and_still_saves(pg_client, world):
+def test_the_same_tax_id_warns_and_still_saves(pg_db, world):
     """Blocking a create on a guess is worse than a duplicate: somebody who
-    cannot save a customer cannot invoice them."""
-    first = _create(pg_client, world, name="ORF", vat_id="ATU16360407")
+    cannot save a customer cannot invoice them.
 
-    second = pg_client.post(
-        "/parties",
-        headers=_headers(world),
-        json={
-            "type": "organisation",
-            "name": "ORF Enterprise",
-            "vat_id": "ATU16360407",
-        },
+    Asserted on the service rather than on `POST /parties`, for the same
+    reason the email signal below it is: the create body does not carry a
+    number any more (D59 — identifiers are their own rows), so the router has
+    nothing to pass. The endpoint that DOES carry one returns its own
+    duplicate warning, tested in `test_party_tax_ids.py`.
+    """
+    first = make_party(pg_db, world["company"], name="ORF", vat_id="ATU16360407")
+    second = make_party(pg_db, world["company"], name="ORF Enterprise")
+    pg_db.commit()
+
+    found = party_service.find_duplicates(
+        pg_db,
+        company_id=world["company"].id,
+        vat_id="ATU16360407",
+        exclude_id=second.id,
     )
 
-    assert second.status_code == 201, second.text
-    warnings = second.json()["duplicates"]
-    assert [entry["reason"] for entry in warnings] == ["vat_id"]
-    assert warnings[0]["party_id"] == first["id"]
-    assert "ATU16360407" in warnings[0]["detail"]
+    assert [entry["reason"] for entry in found] == ["vat_id"]
+    assert found[0]["party_id"] == first.id
+    assert "ATU16360407" in found[0]["detail"]
+    # And it says which KIND, which the old single column could not.
+    assert "vat identifier" in found[0]["detail"]
+
+
+def test_a_retired_identifier_still_warns_and_says_it_is_retired(pg_db, world):
+    """The mix-up this exists to catch: a number retired on one party and
+    typed onto another. Silence there would let two parties hold the same
+    number with nobody told."""
+    from .company_factories import make_party_tax_id
+
+    first = make_party(pg_db, world["company"], name="Alt GmbH")
+    make_party_tax_id(
+        pg_db,
+        world["company"],
+        first,
+        value="ATU16360407",
+        country="AT",
+        is_active=False,
+    )
+    second = make_party(pg_db, world["company"], name="Neu GmbH")
+    pg_db.commit()
+
+    found = party_service.find_duplicates(
+        pg_db,
+        company_id=world["company"].id,
+        vat_id="ATU16360407",
+        exclude_id=second.id,
+    )
+
+    assert [entry["reason"] for entry in found] == ["vat_id"]
+    assert "retired" in found[0]["detail"]
 
 
 def test_the_same_email_warns_case_insensitively(pg_db, world):
@@ -526,17 +621,25 @@ def test_the_same_name_and_postcode_is_a_hint_not_a_certainty(pg_db, world):
 
 
 def test_a_duplicate_warning_never_blocks_an_edit(pg_client, world):
-    _create(pg_client, world, name="ORF", vat_id="ATU16360407")
-    other = _create(pg_client, world, name="Other")
+    """A warning on a PATCH is still only a warning.
+
+    The signal is the party's own primary identifier now, so this creates
+    one on each party and edits the second — which is the shape a user
+    actually produces: two customers that turn out to share a number.
+    """
+    first = _create(pg_client, world, name="ORF", vat_id="ATU16360407")
+    other = _create(pg_client, world, name="Other", vat_id="ATU16360407")
 
     response = pg_client.patch(
         f"/parties/{other['id']}",
         headers=_headers(world),
-        json={"vat_id": "ATU16360407"},
+        json={"name": "Other GmbH"},
     )
 
     assert response.status_code == 200, response.text
-    assert response.json()["duplicates"], "no warning at all"
+    warnings = response.json()["duplicates"]
+    assert warnings, "no warning at all"
+    assert warnings[0]["party_id"] == first["id"]
 
 
 # ─── Permissions and isolation ──────────────────────────────────────────────
@@ -622,8 +725,13 @@ def test_creating_a_party_writes_an_event_with_the_values(pg_client, pg_db, worl
     assert len(events) == 1
     changes = events[0].changes
     assert changes["name"] == [None, "ORF"]
-    assert changes["vat_id"] == [None, "ATU16360407"]
     assert changes["type"] == [None, "organisation"]
+    assert changes["is_customer"] == [None, True]
+    # `vat_id` is deliberately NOT here: it is not a party field any more,
+    # and a change to an identifier is audited on the identifier itself
+    # under `party_tax_id.*`, which says which kind changed and keeps the
+    # old value as a retired row (D59).
+    assert "vat_id" not in changes
     assert events[0].entity_type == "parties"
 
 
@@ -734,18 +842,9 @@ def test_a_german_organisation_with_a_verified_id_reverse_charges(
         pg_client, world, name="Berlin GmbH", tax_country="DE",
         vat_id="DE123456789",
     )
-    row = pg_db.query(Party).filter(Party.id == uuid.UUID(party["id"])).one()
-    pg_db.add(
-        PartyVatCheck(
-            company_id=world["company"].id,
-            party_id=row.id,
-            vat_id="DE123456789",
-            country="DE",
-            status="valid",
-            response={},
-        )
+    row = _mark_verified(
+        pg_db, world, party, status="valid", value="DE123456789"
     )
-    pg_db.commit()
 
     body = _preview(pg_client, world, party["id"])
 
@@ -798,18 +897,9 @@ def test_a_department_inherits_its_organisations_verified_id(
         pg_client, world, name="Berlin GmbH", tax_country="DE",
         vat_id="DE123456789",
     )
-    row = pg_db.query(Party).filter(Party.id == uuid.UUID(org["id"])).one()
-    pg_db.add(
-        PartyVatCheck(
-            company_id=world["company"].id,
-            party_id=row.id,
-            vat_id="DE123456789",
-            country="DE",
-            status="valid",
-            response={},
-        )
+    row = _mark_verified(
+        pg_db, world, org, status="valid", value="DE123456789"
     )
-    pg_db.commit()
     dept = _create(
         pg_client, world, type="department", name="Einkauf", parent_id=org["id"]
     )
@@ -839,18 +929,9 @@ def test_a_party_override_is_honoured_and_shows_what_it_replaced(
         vat_id="DE123456789",
         tax_override={"kind": "domestic_for_foreign_business"},
     )
-    row = pg_db.query(Party).filter(Party.id == uuid.UUID(party["id"])).one()
-    pg_db.add(
-        PartyVatCheck(
-            company_id=world["company"].id,
-            party_id=row.id,
-            vat_id="DE123456789",
-            country="DE",
-            status="valid",
-            response={},
-        )
+    row = _mark_verified(
+        pg_db, world, party, status="valid", value="DE123456789"
     )
-    pg_db.commit()
 
     body = _preview(pg_client, world, party["id"])
 

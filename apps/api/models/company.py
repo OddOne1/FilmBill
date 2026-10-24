@@ -152,6 +152,19 @@ class Company(Base):
     require_2fa_roles: Mapped[list] = mapped_column(
         JSONB, nullable=False, server_default="[]"
     )
+    #: How often this company's parties' tax identifiers are re-checked, and
+    #: how long an answer counts for (SCOPE D62). Shape and defaults live in
+    #: `services/tax_id_policy.py`; `{}` means "use the defaults".
+    #:
+    #: A blob, which the class docstring above argues against — and the
+    #: argument there is specifically about what a finalized document
+    #: snapshots. This never reaches a document: it governs when a check
+    #: runs, and what the check PRODUCED is what gets snapshotted. The set of
+    #: knobs will also grow (a per-provider interval is the obvious next
+    #: one), and rule 7 says a knob should not cost a migration.
+    tax_id_check_policy: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, server_default="{}"
+    )
     #: Whether this company's tax advisor may also see reports and download
     #: exports, beyond the archive they always get.
     #:
