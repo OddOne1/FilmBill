@@ -1,0 +1,158 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Comparing a party's name with the one a tax register holds.
+#
+# Data, not code (CLAUDE.md rule 7): the legal-form list grows with every
+# country a user invoices, and adding "Pty Ltd" must not need a release.
+#
+# **What this is for.** A VAT number can be valid and belong to somebody
+# else. The registry's name is the only cheap check against that, and a
+# mismatch is the signal worth a human's attention. **What it is not for:**
+# correcting anybody's data. FilmBill never writes a registry's name onto a
+# party — the company's own records are the company's own, several registers
+# hold stale or abbreviated forms, and a tool that "helpfully" overwrote a
+# customer's legal name would be editing the thing that goes on an invoice.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Scores are 0..100. Chosen to be defensible rather than tuned, and
+# deliberately generous about `partial`: the cost of a false `mismatch` is a
+# user chasing a non-problem, while the cost of a false `match` is a missed
+# warning on a reverse charge. So the band between them is wide and lands in
+# `partial`, which says "look at this" without claiming either.
+thresholds:
+  # At or above: `match`.
+  match: 92
+  # At or above (and below `match`): `partial`.
+  partial: 65
+  # Below `partial`: `mismatch`.
+
+# Stripped from both names before comparing. A company called "Mustermann
+# GmbH" in our records and "MUSTERMANN GESELLSCHAFT M.B.H." in the register
+# is the same company, and no amount of string distance will say so while
+# the legal form is still in the string — the forms are longer than the name.
+#
+# Longest first matters: "gesellschaft mit beschrankter haftung" has to go
+# before "gesellschaft", or the remainder leaves "mit beschrankter haftung"
+# behind as if it were part of the name. The loader sorts by length, so the
+# order here is for human reading only.
+legal_forms:
+  # German-speaking
+  - gesellschaft mit beschrankter haftung
+  - gesellschaft m b h
+  - gesellschaft mbh
+  - gmbh and co kg
+  - gmbh and co kgaa
+  - gmbh
+  - mbh
+  - aktiengesellschaft
+  - ag
+  - offene gesellschaft
+  - og
+  - kommanditgesellschaft
+  - kgaa
+  - kg
+  - einzelunternehmen
+  - eu
+  - eingetragener kaufmann
+  - e k
+  - eingetragene genossenschaft
+  - e gen
+  - gesellschaft burgerlichen rechts
+  - gbr
+  - ohg
+  - se
+  - stiftung and co kg
+  - privatstiftung
+  - verein
+  - gemeinnutziger verein
+  # English-speaking
+  - limited liability company
+  - limited
+  - ltd
+  - llc
+  - llp
+  - plc
+  - incorporated
+  - inc
+  - corporation
+  - corp
+  - company
+  - co
+  - proprietary limited
+  - pty ltd
+  - pty
+  # Romance
+  - societe anonyme
+  - sa
+  - societe a responsabilite limitee
+  - sarl
+  - sas
+  - sasu
+  - societa a responsabilita limitata
+  - s r l
+  - srl
+  - societa per azioni
+  - spa
+  - sociedad anonima
+  - sociedad limitada
+  - sl
+  - sociedade por quotas
+  - lda
+  # Low Countries and Nordics
+  - besloten vennootschap
+  - b v
+  - bv
+  - naamloze vennootschap
+  - n v
+  - nv
+  - vof
+  - cv
+  - aktiebolag
+  - ab
+  - a s
+  - as
+  - oy
+  - oyj
+  - aps
+  # Central and Eastern Europe
+  - spolka z ograniczona odpowiedzialnoscia
+  - sp z o o
+  - sp k
+  - s a
+  - d o o
+  - kft
+  - zrt
+  - sro
+  - s r o
+  - eood
+  - ood
+  - ad
+
+# Treated as "the registry returned nothing usable", not as a name. Several
+# member states answer with a placeholder rather than a name — Germany
+# returns `---` for every lookup — and reporting that as a mismatch would
+# have users correcting data that was never wrong. It is `unknown`.
+placeholders:
+  - "---"
+  - "--"
+  - "-"
+  - "."
+  - "n a"
+  - "na"
+  - "nicht verfugbar"
+  - "not available"
+  - "not disclosed"
+  - "keine angabe"
+  - "***"
+  - "xxx"
+  - "unknown"
+
+# Dropped from both names: words that carry no identity and differ by
+# register convention rather than by company.
+noise_words:
+  - the
+  - and
+  - und
+  - of
+  - der
+  - die
+  - das

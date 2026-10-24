@@ -197,6 +197,7 @@ def check_vat(
     url: str = VIES_URL,
     timeout: float = TIMEOUT_SECONDS,
     retries: int = RETRIES,
+    extra: Optional[dict] = None,
 ) -> ViesResult:
     """Look `vat_id` up. Never raises for a network or service problem.
 
@@ -228,6 +229,14 @@ def check_vat(
         "countryCode": normalised.vies_country,
         "vatNumber": normalised.number,
     }
+    if extra:
+        # P1b-2: the requester and trader fields for the approximate check.
+        # Merged here rather than built here, because WHICH fields and under
+        # which spelling is the provider's business (and the spelling is a
+        # trap — see `services/verification/vies_provider.py`). The two core
+        # fields win on a collision: a caller must not be able to redirect a
+        # lookup to a different number through `extra`.
+        payload = {**{k: v for k, v in extra.items() if v is not None}, **payload}
 
     attempts = max(1, retries + 1)
     last_failure: Optional[str] = None
