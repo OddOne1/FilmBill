@@ -1258,6 +1258,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/company/tax/id-check-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Id Check Policy
+         * @description The policy, plus the choices and defaults the screen needs.
+         *
+         *     The choices are served rather than hard-coded in the web, so the list
+         *     cannot drift from the validator that enforces it — a screen offering an
+         *     interval the API refuses is a form that fails on save for no visible
+         *     reason.
+         */
+        get: operations["read_id_check_policy_company_tax_id_check_policy_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Id Check Policy
+         * @description Change it. Validated as a combination, not field by field.
+         *
+         *     The one somebody actually gets wrong is an age limit shorter than the
+         *     interval: every identifier would then spend part of each cycle
+         *     unverified, and an unverified EU business buyer is charged domestic VAT.
+         *     The refusal does the subtraction and says what it costs.
+         */
+        patch: operations["update_id_check_policy_company_tax_id_check_policy_patch"];
+        trace?: never;
+    };
     "/company/tax/no-tax-cases": {
         parameters: {
             query?: never;
@@ -1596,11 +1630,13 @@ export interface paths {
         };
         /**
          * List Parties
-         * @description Search by name, trading name, party number, VAT ID or email.
+         * @description Search by name, trading name, party number, tax identifier or email.
          *
          *     One query over five columns rather than five filters, because somebody
          *     looking for a customer types what they remember and does not know which
-         *     field it was.
+         *     field it was. Identifiers are searched across every kind and including
+         *     retired ones: somebody with a number on a piece of paper wants the party
+         *     it belonged to, whether or not it is still current.
          */
         get: operations["list_parties_parties_get"];
         put?: never;
@@ -1780,6 +1816,214 @@ export interface paths {
         get: operations["read_resolved_parties__party_id__resolved_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/parties/{party_id}/tax-ids": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Tax Ids
+         * @description This party's identifiers, primary first.
+         */
+        get: operations["list_tax_ids_parties__party_id__tax_ids_get"];
+        put?: never;
+        /**
+         * Create Tax Id
+         * @description Add an identifier, and start its initial check series.
+         *
+         *     **Re-adding a number somebody retired reactivates that row** rather than
+         *     creating a second one. The checks on it are its history, and two rows
+         *     for one number would make "which of these is the evidence" a question
+         *     with no answer.
+         */
+        post: operations["create_tax_id_parties__party_id__tax_ids_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/parties/{party_id}/tax-ids/{tax_id_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Tax Id
+         * @description Edit an identifier.
+         *
+         *     **A changed value or country retires this row and creates a new one**
+         *     linked back to it (D63). The checks on the old row are evidence for
+         *     invoices already issued; letting them follow a different number would
+         *     make an old lookup look like confirmation of a number nobody has
+         *     checked. The new row starts its initial series from scratch, because a
+         *     different number has no history.
+         */
+        patch: operations["update_tax_id_parties__party_id__tax_ids__tax_id_id__patch"];
+        trace?: never;
+    };
+    "/parties/{party_id}/tax-ids/{tax_id_id}/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check Tax Id
+         * @description Ask the registry now, and record the answer.
+         *
+         *     Append-only: the row is the evidence for a reverse charge. A failure to
+         *     obtain an answer is `unavailable` and never `invalid`, and the party
+         *     stays usable either way — no check is ever required to save one.
+         *
+         *     A kind with no provider returns `not_checkable` with a sentence rather
+         *     than an error, because "there is no register to ask" is an answer about
+         *     the world and not a failure of ours.
+         */
+        post: operations["check_tax_id_parties__party_id__tax_ids__tax_id_id__check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/parties/{party_id}/tax-ids/{tax_id_id}/checks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Tax Id Checks
+         * @description The whole history of one identifier, newest first.
+         *
+         *     Append-only, so it only grows. Newest first because the question is
+         *     almost always "what does it say now", and the history below it is the
+         *     answer to "and has that changed".
+         */
+        get: operations["list_tax_id_checks_parties__party_id__tax_ids__tax_id_id__checks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/parties/{party_id}/tax-ids/{tax_id_id}/checks/{check_id}/acknowledge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Acknowledge Change
+         * @description Say a human has looked at a flagged change, and what they concluded.
+         *
+         *     The note goes in the audit event rather than onto the check row, because
+         *     that row cannot be updated — it is the evidence, and evidence that can
+         *     be annotated afterwards is not evidence.
+         */
+        post: operations["acknowledge_change_parties__party_id__tax_ids__tax_id_id__checks__check_id__acknowledge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/parties/{party_id}/tax-ids/{tax_id_id}/manual-confirmation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm Manually
+         * @description Record that a person confirmed this identifier.
+         *
+         *     It appends a check row with provider `manual` and status `valid`, and it
+         *     is shown as "confirmed by <user> on <date>" — never as a registry check.
+         *
+         *     **It never verifies an EU VAT ID** (D66). For a `vat` the registry is
+         *     reachable, so a human saying "trust me" in its place would put a reverse
+         *     charge on an invoice with nothing behind it. The row is still written,
+         *     because somebody choosing to record their own confirmation is entitled
+         *     to; `vat_is_verified` simply does not count it, and the response says
+         *     so.
+         */
+        post: operations["confirm_manually_parties__party_id__tax_ids__tax_id_id__manual_confirmation_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/parties/{party_id}/tax-ids/{tax_id_id}/reactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reactivate Tax Id
+         * @description Use it again, and check it again.
+         *
+         *     The initial series restarts: the number may have been retired for a
+         *     year, and an old `valid` is a historical fact rather than a current one.
+         */
+        post: operations["reactivate_tax_id_parties__party_id__tax_ids__tax_id_id__reactivate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/parties/{party_id}/tax-ids/{tax_id_id}/retire": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retire Tax Id
+         * @description Stop using an identifier. Never deletes it.
+         *
+         *     The checks stay, attached to the number they were about — they are the
+         *     evidence for invoices already issued (D59).
+         */
+        post: operations["retire_tax_id_parties__party_id__tax_ids__tax_id_id__retire_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2143,6 +2387,18 @@ export interface components {
             password: string;
             /** Token */
             token: string;
+        };
+        /**
+         * AcknowledgeRequest
+         * @description Clearing a flagged change, with a note saying what was done about it.
+         *
+         *     The note is required and bounded below: "ok" tells the next person
+         *     nothing, and the whole point of an acknowledgement is that somebody can
+         *     see afterwards that a human looked and what they concluded.
+         */
+        AcknowledgeRequest: {
+            /** Note */
+            note: string;
         };
         /**
          * AdminUserResponse
@@ -2946,6 +3202,27 @@ export interface components {
             /** Password */
             password: string;
         };
+        /**
+         * ManualConfirmationRequest
+         * @description Recording that a human confirmed an identifier.
+         *
+         *     For the kinds no register will answer about — a US EIN, a Swiss UID
+         *     (D61), a company register number. It appends a check row with provider
+         *     `manual`, and the screen shows it as "confirmed by <user> on <date>",
+         *     never as a registry check.
+         *
+         *     **It never verifies an EU VAT ID** (D66). For a `vat` the registry is
+         *     reachable, so a human saying "trust me" in its place would put a reverse
+         *     charge on an invoice with nothing behind it.
+         */
+        ManualConfirmationRequest: {
+            /** Evidence Reference */
+            evidence_reference?: string | null;
+            /** Note */
+            note: string;
+            /** Valid Until */
+            valid_until?: string | null;
+        };
         /** MemberCreate */
         MemberCreate: {
             /**
@@ -3538,6 +3815,11 @@ export interface components {
             tags: string[];
             /** Tax Country */
             tax_country?: string | null;
+            /**
+             * Tax Ids
+             * @default []
+             */
+            tax_ids: components["schemas"]["PartyTaxIdResponse"][];
             /** Tax Override */
             tax_override?: {
                 [key: string]: unknown;
@@ -3560,6 +3842,119 @@ export interface components {
              * @default false
              */
             vat_verified: boolean;
+        };
+        /**
+         * PartyTaxIdCreate
+         * @description Adding an identifier.
+         *
+         *     No `is_active`: a new identifier is active. Adding one already retired
+         *     is not a thing anybody means to do, and offering it would be a field
+         *     whose only use is a mistake.
+         */
+        PartyTaxIdCreate: {
+            /** Country */
+            country?: string | null;
+            /** Is Primary */
+            is_primary?: boolean | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "vat" | "uid_ch" | "abn" | "ein" | "tax_number" | "company_register" | "other";
+            /** Notes */
+            notes?: string | null;
+            /** Value */
+            value: string;
+        };
+        /**
+         * PartyTaxIdResponse
+         * @description One identifier, with its check state.
+         */
+        PartyTaxIdResponse: {
+            /** Country */
+            country?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Initial Checks Done
+             * @default 0
+             */
+            initial_checks_done: number;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /**
+             * Is Primary
+             * @default false
+             */
+            is_primary: boolean;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "vat" | "uid_ch" | "abn" | "ein" | "tax_number" | "company_register" | "other";
+            latest_check?: components["schemas"]["PartyVatCheckResponse"] | null;
+            /**
+             * Needs Attention
+             * @default false
+             */
+            needs_attention: boolean;
+            /** Needs Attention Reason */
+            needs_attention_reason?: string | null;
+            /** Next Check At */
+            next_check_at?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Replaces Id */
+            replaces_id?: string | null;
+            /**
+             * Unavailable Streak
+             * @default 0
+             */
+            unavailable_streak: number;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Value */
+            value: string;
+            /** Value As Entered */
+            value_as_entered?: string | null;
+            /**
+             * Verifiable
+             * @default false
+             */
+            verifiable: boolean;
+        };
+        /**
+         * PartyTaxIdUpdate
+         * @description Changing one.
+         *
+         *     **A changed `value` or `country` retires this identifier and creates a
+         *     new one** linked back to it (D63), because the checks on the old row are
+         *     evidence for invoices already issued and must not follow a different
+         *     number. Everything else is an ordinary edit.
+         */
+        PartyTaxIdUpdate: {
+            /** Country */
+            country?: string | null;
+            /** Is Primary */
+            is_primary?: boolean | null;
+            /** Notes */
+            notes?: string | null;
+            /** Value */
+            value?: string | null;
         };
         /**
          * PartyTaxPreviewRequest
@@ -4179,6 +4574,42 @@ export interface components {
             rate?: string | null;
             /** Revenue Account */
             revenue_account?: string | null;
+        };
+        /**
+         * TaxIdCheckPolicyResponse
+         * @description The company's check policy, with the choices the UI offers.
+         */
+        TaxIdCheckPolicyResponse: {
+            /**
+             * Defaults
+             * @default {}
+             */
+            defaults: {
+                [key: string]: unknown;
+            };
+            /** Initial Check Offsets */
+            initial_check_offsets: number[];
+            /**
+             * Interval Choices
+             * @default []
+             */
+            interval_choices: (number | null)[];
+            /** Max Check Age Days */
+            max_check_age_days?: number | null;
+            /** Recheck Interval Days */
+            recheck_interval_days?: number | null;
+        };
+        /**
+         * TaxIdCheckPolicyUpdate
+         * @description Changing it. Validated as a combination, not field by field.
+         */
+        TaxIdCheckPolicyUpdate: {
+            /** Initial Check Offsets */
+            initial_check_offsets?: number[] | null;
+            /** Max Check Age Days */
+            max_check_age_days?: number | null;
+            /** Recheck Interval Days */
+            recheck_interval_days?: number | null;
         };
         /**
          * TaxNoTaxCaseCreate
@@ -6332,6 +6763,72 @@ export interface operations {
             };
         };
     };
+    read_id_check_policy_company_tax_id_check_policy_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxIdCheckPolicyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_id_check_policy_company_tax_id_check_policy_patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaxIdCheckPolicyUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxIdCheckPolicyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     create_no_tax_case_company_tax_no_tax_cases_post: {
         parameters: {
             query?: never;
@@ -6778,6 +7275,8 @@ export interface operations {
                 role?: string | null;
                 type?: string | null;
                 include_inactive?: boolean;
+                /** @description Only parties with a tax identifier whose latest check differed from the one before it, and which nobody has acknowledged yet. */
+                needs_attention?: boolean;
                 limit?: number;
                 offset?: number;
             };
@@ -7146,6 +7645,330 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResolvedRecipientResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_tax_ids_parties__party_id__tax_ids_get: {
+        parameters: {
+            query?: {
+                /** @description Retired identifiers too. Default true, unlike the party list: a retired number is part of this party's history and the screen shows it greyed rather than hiding it. */
+                include_inactive?: boolean;
+            };
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                party_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartyTaxIdResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_tax_id_parties__party_id__tax_ids_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                party_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PartyTaxIdCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartyTaxIdResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_tax_id_parties__party_id__tax_ids__tax_id_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                party_id: string;
+                tax_id_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PartyTaxIdUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartyTaxIdResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    check_tax_id_parties__party_id__tax_ids__tax_id_id__check_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                party_id: string;
+                tax_id_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartyVatCheckResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_tax_id_checks_parties__party_id__tax_ids__tax_id_id__checks_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                party_id: string;
+                tax_id_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartyVatCheckResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    acknowledge_change_parties__party_id__tax_ids__tax_id_id__checks__check_id__acknowledge_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                party_id: string;
+                tax_id_id: string;
+                check_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AcknowledgeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartyTaxIdResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirm_manually_parties__party_id__tax_ids__tax_id_id__manual_confirmation_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                party_id: string;
+                tax_id_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManualConfirmationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartyVatCheckResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reactivate_tax_id_parties__party_id__tax_ids__tax_id_id__reactivate_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                party_id: string;
+                tax_id_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartyTaxIdResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retire_tax_id_parties__party_id__tax_ids__tax_id_id__retire_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                party_id: string;
+                tax_id_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartyTaxIdResponse"];
                 };
             };
             /** @description Validation Error */

@@ -719,3 +719,73 @@ def test_a_foreign_business_without_a_number_is_domestic_not_reverse_charge(
     assert proposal.treatment == "domestic"
     assert proposal.code == "AT-20"
     assert "buyer_vat_id_not_verified" in [w.code for w in proposal.warnings]
+
+
+def test_the_module_raises_exactly_one_kind_of_error():
+    """**One exception type out of this module, and only one.**
+
+    This is not a style point. The first version propagated P1b's
+    `VatFormatError` from the `vat` branch while the router caught only
+    `TaxIdFormatError`; the escaping exception left the request's
+    transaction aborted, and the symptom was the **test suite hanging** on
+    teardown rather than a visible 500. A second exception type means every
+    caller has to catch two, and one of them will catch one.
+
+    Every kind is exercised with a value that must be refused, and anything
+    other than `TaxIdFormatError` fails loudly with the type that leaked.
+    """
+    bad_per_kind = {
+        # `ZZ123456789` is deliberately NOT here: a country the format
+        # table does not know passes by design (P1b), so that a non-EU
+        # supplier stays saveable. Asserted as an accept below.
+        "vat": ["DE1", "12345678", "ATU123"],
+        "uid_ch": ["CHE12345", "CHE109322552", "nonsense"],
+        "abn": ["123", "51824753557", "abcdefghijk"],
+        "ein": ["1234", "not digits"],
+        "tax_number": ["", "   ", "x" * 200],
+        "company_register": ["", "x" * 200],
+        "other": ["", "x" * 200],
+    }
+    for kind, values in bad_per_kind.items():
+        for value in values:
+            try:
+                normalise(kind, value)
+            except TaxIdFormatError:
+                continue
+            except Exception as leaked:  # noqa: BLE001 - that is the subject
+                raise AssertionError(
+                    f"normalise({kind!r}, {value!r}) raised "
+                    f"{type(leaked).__name__}, not TaxIdFormatError"
+                ) from None
+            raise AssertionError(
+                f"normalise({kind!r}, {value!r}) was accepted"
+            )
+
+
+def test_a_refused_vat_id_keeps_p1bs_own_sentence():
+    """The translation changes the exception type, not the message: P1b's
+    per-country explanation is the useful part and a generic "invalid tax
+    identifier" would throw it away."""
+    with pytest.raises(TaxIdFormatError) as caught:
+        normalise("vat", "ATU123")
+
+    assert "AT VAT ID" in str(caught.value)
+    assert "U[0-9]{8}" in str(caught.value)
+
+
+def test_an_unknown_country_is_accepted_rather_than_guessed_at():
+    """P1b's deliberate gap, re-asserted here because it looks like a hole.
+
+    The format table covers the countries somebody wrote down. A number
+    whose country it has never heard of passes: VIES decides validity, not
+    this table, and refusing would make a supplier unsaveable over a
+    pattern nobody has checked. The country still has to look like a
+    country, and the WSDL's own length rule still applies.
+    """
+    accepted = normalise("vat", "ZZ123456789")
+    assert accepted.value == "ZZ123456789"
+    assert accepted.country == "ZZ"
+
+    # The one officially published constraint is still enforced.
+    with pytest.raises(TaxIdFormatError):
+        normalise("vat", "ZZ1")

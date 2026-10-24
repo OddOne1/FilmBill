@@ -27,6 +27,8 @@ neither party published.
 import pytest
 from fastapi.openapi.utils import get_openapi
 
+from apps.api.models.party import PartyVatCheck
+
 from apps.api.models.company import CompanyRole
 
 from .company_factories import (
@@ -36,6 +38,7 @@ from .company_factories import (
     make_company,
     make_number_series,
     make_party,
+    make_party_tax_id,
     make_superadmin,
     make_tax_class,
     make_tax_code,
@@ -193,6 +196,33 @@ CASES: dict[str, object] = {
     },
     "GET /parties/{party_id}/resolved": {"body": None},
     "GET /parties/{party_id}/vat-checks": {"body": None},
+    # Tax identifiers (P1b-2). Eleven endpoints, and every one of them takes
+    # a party id — so every one is a way to read or change another
+    # company's customer if the scoping is ever dropped.
+    "GET /parties/{party_id}/tax-ids": {"body": None},
+    "POST /parties/{party_id}/tax-ids": {
+        "body": {"kind": "vat", "value": "ATU16360407"}
+    },
+    "PATCH /parties/{party_id}/tax-ids/{tax_id_id}": {
+        "body": {"notes": "theirs"}
+    },
+    "POST /parties/{party_id}/tax-ids/{tax_id_id}/retire": {"body": None},
+    "POST /parties/{party_id}/tax-ids/{tax_id_id}/reactivate": {"body": None},
+    # Deliberately NOT exercised against a live registry: the handler would
+    # 404 before reaching a provider, which is the whole point.
+    "POST /parties/{party_id}/tax-ids/{tax_id_id}/check": {"body": None},
+    "GET /parties/{party_id}/tax-ids/{tax_id_id}/checks": {"body": None},
+    "POST /parties/{party_id}/tax-ids/{tax_id_id}/checks/{check_id}/acknowledge": {
+        "body": {"note": "should not be possible"}
+    },
+    "POST /parties/{party_id}/tax-ids/{tax_id_id}/manual-confirmation": {
+        "body": {"note": "should not be possible"}
+    },
+    # The policy is company-scoped by `X-Company-Id` like the rest of
+    # Settings → Company: there is no id in the path, so the isolation is
+    # that A's request can only ever read or write A's policy.
+    "GET /company/tax/id-check-policy": {"body": None},
+    "PATCH /company/tax/id-check-policy": {"body": {"recheck_interval_days": 30}},
     "POST /parties/{party_id}/tax-preview": {"body": {"supply_kind": "services"}},
 }
 
@@ -205,6 +235,8 @@ OTHER_COMPANY_ROWS = {
     "{tax_code_id}": "tax_code_in_b",
     "{tax_class_id}": "tax_class_in_b",
     "{party_id}": "party_in_b",
+    "{tax_id_id}": "tax_id_in_b",
+    "{check_id}": "check_in_b",
 }
 
 
@@ -282,6 +314,31 @@ def two_companies(pg_db):
     # `company_id` filter would FIND it, and answering anything but 404
     # confirms it exists.
     party_in_b = make_party(pg_db, company_b, name="Their customer")
+    # And one of their tax identifiers, plus a check of it. Same reasoning
+    # one level down: `/tax-ids/{id}` looked up without a company filter
+    # would find B's row, and so would the check history under it.
+    tax_id_in_b = make_party_tax_id(
+        pg_db,
+        company_b,
+        party_in_b,
+        kind="vat",
+        value="DE111111111",
+        country="DE",
+        is_primary=True,
+    )
+    check_in_b = PartyVatCheck(
+        company_id=company_b.id,
+        party_id=party_in_b.id,
+        tax_id_id=tax_id_in_b.id,
+        vat_id="DE111111111",
+        country="DE",
+        kind="vat",
+        provider="vies",
+        status="valid",
+        response={},
+    )
+    pg_db.add(check_in_b)
+    pg_db.commit()
     return {
         "ada": ada,
         "bo": bo,
@@ -293,6 +350,8 @@ def two_companies(pg_db):
         "tax_code_in_b": tax_code_in_b,
         "tax_class_in_b": tax_class_in_b,
         "party_in_b": party_in_b,
+        "tax_id_in_b": tax_id_in_b,
+        "check_in_b": check_in_b,
     }
 
 

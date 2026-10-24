@@ -327,11 +327,25 @@ def normalise(kind: str, raw: str, *, country: Optional[str] = None) -> Normalis
         # Delegated whole to P1b's module, which owns the per-country
         # patterns and the EL/GR mapping. One implementation of the EU rules,
         # not two that could disagree.
-        from .vat import normalise_and_validate
+        #
+        # **Its exception is translated, not propagated.** This module's
+        # contract is that it raises `TaxIdFormatError` and nothing else; a
+        # second type leaking out means every caller has to catch two, and
+        # one of them will catch one. That is not hypothetical — the first
+        # version of this did propagate `VatFormatError`, the router caught
+        # only `TaxIdFormatError`, and the escaping exception left the
+        # request's transaction aborted, which showed up as the test suite
+        # HANGING rather than as a 500.
+        from .vat import VatFormatError, normalise_and_validate
 
-        normalised = normalise_and_validate(
-            as_entered, default_country=country
-        )
+        try:
+            normalised = normalise_and_validate(
+                as_entered, default_country=country
+            )
+        except VatFormatError as error:
+            raise TaxIdFormatError(
+                str(error), kind="vat", value=as_entered
+            ) from None
         return NormalisedTaxId(
             kind="vat",
             value=normalised.full,

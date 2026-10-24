@@ -82,6 +82,7 @@ function makeParty(overrides: Partial<Party> = {}): Party {
     latest_vat_check: null,
     buyer_type: 'business',
     buyer_type_reason: 'organisation',
+    tax_ids: [],
     addresses: [],
     contact_points: [],
     bank_accounts: [],

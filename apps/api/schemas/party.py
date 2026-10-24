@@ -164,6 +164,57 @@ class PartyVatCheckResponse(BaseModel):
     trader_address: Optional[str] = None
 
 
+#: The seven kinds, as a Literal so the OpenAPI document lists them and the
+#: generated TypeScript gets a union rather than `string`. Mirrors
+#: `models.party.TAX_ID_KINDS`, and `test_party_tax_ids.py` asserts the two
+#: agree — a drift would let the API accept a kind the normaliser cannot
+#: handle.
+TaxIdKind = Literal[
+    "vat",
+    "uid_ch",
+    "abn",
+    "ein",
+    "tax_number",
+    "company_register",
+    "other",
+]
+
+
+class PartyTaxIdResponse(BaseModel):
+    """One identifier, with its check state."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    kind: TaxIdKind
+    country: Optional[str] = None
+    value: str
+    #: What the user typed, kept verbatim. Normalisation is lossy and people
+    #: recognise their own formatting.
+    value_as_entered: Optional[str] = None
+    is_primary: bool = False
+    is_active: bool = True
+    notes: Optional[str] = None
+    #: The identifier this one replaced, when a value was changed. The
+    #: history reads as a chain rather than as two unrelated numbers.
+    replaces_id: Optional[uuid.UUID] = None
+
+    # ── Served, not stored ───────────────────────────────────────────
+    #: Whether any register can be asked about this kind at all. False for
+    #: a Swiss UID (D61) and a US EIN — not an omission, a sourced decision,
+    #: and the reason the screen offers a manual confirmation instead.
+    verifiable: bool = False
+    initial_checks_done: int = 0
+    next_check_at: Optional[datetime] = None
+    unavailable_streak: int = 0
+    needs_attention: bool = False
+    needs_attention_reason: Optional[str] = None
+    #: The latest check, so a chip needs no second call.
+    latest_check: Optional[PartyVatCheckResponse] = None
+    created_at: datetime
+    updated_at: datetime
+
+
 class PartyResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -212,6 +263,11 @@ class PartyResponse(BaseModel):
     buyer_type_reason: Optional[str] = None
     #: Sub-resources, served with the party because every screen that shows
     #: one shows all of them.
+    #:
+    #: `tax_ids` comes with the party because the Tax tab is one of the six
+    #: a detail page renders, and a second request for it would be a second
+    #: chance for a half-loaded screen.
+    tax_ids: list[PartyTaxIdResponse] = []
     addresses: list[PartyAddressResponse] = []
     contact_points: list[PartyContactPointResponse] = []
     bank_accounts: list[PartyBankAccountResponse] = []
@@ -379,3 +435,108 @@ class PartyTaxPreviewRequest(BaseModel):
 
 
 PartyResponse.model_rebuild()
+
+
+# ─── Tax identifiers (P1b-2) ────────────────────────────────────────────────
+
+
+class PartyTaxIdCreate(BaseModel):
+    """Adding an identifier.
+
+    No `is_active`: a new identifier is active. Adding one already retired
+    is not a thing anybody means to do, and offering it would be a field
+    whose only use is a mistake.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: TaxIdKind
+    value: str = Field(min_length=1, max_length=80)
+    #: For `vat` the prefix usually supplies it; the free-text kinds have no
+    #: way to know it, so it can be given.
+    country: Optional[str] = Field(default=None, min_length=2, max_length=2)
+    #: Whether this becomes THE identifier the engine uses. Only one active
+    #: VAT-like identifier per party may be primary, and the database
+    #: enforces it; the endpoint moves the flag rather than refusing.
+    is_primary: Optional[bool] = None
+    notes: Optional[str] = Field(default=None, max_length=1000)
+
+
+class PartyTaxIdUpdate(BaseModel):
+    """Changing one.
+
+    **A changed `value` or `country` retires this identifier and creates a
+    new one** linked back to it (D63), because the checks on the old row are
+    evidence for invoices already issued and must not follow a different
+    number. Everything else is an ordinary edit.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    value: Optional[str] = Field(default=None, min_length=1, max_length=80)
+    country: Optional[str] = Field(default=None, min_length=2, max_length=2)
+    is_primary: Optional[bool] = None
+    notes: Optional[str] = Field(default=None, max_length=1000)
+
+
+class AcknowledgeRequest(BaseModel):
+    """Clearing a flagged change, with a note saying what was done about it.
+
+    The note is required and bounded below: "ok" tells the next person
+    nothing, and the whole point of an acknowledgement is that somebody can
+    see afterwards that a human looked and what they concluded.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    note: str = Field(min_length=3, max_length=2000)
+
+
+class ManualConfirmationRequest(BaseModel):
+    """Recording that a human confirmed an identifier.
+
+    For the kinds no register will answer about — a US EIN, a Swiss UID
+    (D61), a company register number. It appends a check row with provider
+    `manual`, and the screen shows it as "confirmed by <user> on <date>",
+    never as a registry check.
+
+    **It never verifies an EU VAT ID** (D66). For a `vat` the registry is
+    reachable, so a human saying "trust me" in its place would put a reverse
+    charge on an invoice with nothing behind it.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    note: str = Field(min_length=3, max_length=2000)
+    #: Where the evidence is — a letter reference, a file name, a case
+    #: number. Free text because every company files differently, and a
+    #: structured field would be left empty.
+    evidence_reference: Optional[str] = Field(default=None, max_length=255)
+    #: When this confirmation stops counting, if the person says so. The one
+    #: date in the check table that is a claim about the future, and it is a
+    #: person's claim rather than a registry's.
+    valid_until: Optional[datetime] = None
+
+
+class TaxIdCheckPolicyResponse(BaseModel):
+    """The company's check policy, with the choices the UI offers."""
+
+    initial_check_offsets: list[int]
+    recheck_interval_days: Optional[int] = None
+    max_check_age_days: Optional[int] = None
+    #: Served so the screen does not hard-code them and drift from the
+    #: validator. `null` in the list is "off".
+    interval_choices: list[Optional[int]] = []
+    #: The defaults, so a screen can say "90 days (the default)" and a user
+    #: can tell what they have changed.
+    defaults: JsonObject = {}
+
+
+class TaxIdCheckPolicyUpdate(BaseModel):
+    """Changing it. Validated as a combination, not field by field."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    initial_check_offsets: Optional[list[int]] = None
+    recheck_interval_days: Optional[int] = None
+    max_check_age_days: Optional[int] = None

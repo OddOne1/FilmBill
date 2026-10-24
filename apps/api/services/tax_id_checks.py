@@ -173,6 +173,9 @@ def record_check(
     actor=None,
     checked_by: Optional[uuid.UUID] = None,
     policy: Optional[TaxIdCheckPolicy] = None,
+    manual_note: Optional[str] = None,
+    evidence_reference: Optional[str] = None,
+    valid_until: Optional[datetime] = None,
 ) -> PartyVatCheck:
     """Write the check row, detect a change, and set the next due time.
 
@@ -180,6 +183,13 @@ def record_check(
     is the point of not committing here: a check that happened with no audit
     event, or an event for a check that rolled back, are both worse than
     either alone.
+
+    **The manual-confirmation fields are arguments, not something a caller
+    sets afterwards.** The table is append-only at the database level, so
+    `row.manual_note = ...` after the flush is an UPDATE and the trigger
+    refuses it — which is exactly what happened on the first attempt, and
+    exactly what the trigger is for. Everything a check row will ever say
+    has to be said before it is inserted.
     """
     policy = policy or load_policy(db, company_id=party.company_id)
     previous = _latest_completed(db, tax_id)
@@ -204,6 +214,9 @@ def record_check(
         consultation_ref=result.consultation_ref,
         response=_stored_response(result),
         checked_by=checked_by,
+        manual_note=manual_note,
+        evidence_reference=evidence_reference,
+        valid_until=valid_until,
     )
 
     completed = result.status in COMPLETED_STATUSES

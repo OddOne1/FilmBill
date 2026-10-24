@@ -39,9 +39,14 @@ from ..models.party import (
     PartyVatCheck,
 )
 from ..schemas.party import (
+    AcknowledgeRequest,
     DuplicateWarning,
+    ManualConfirmationRequest,
     PartyAddressResponse,
     PartyAddressWrite,
+    PartyTaxIdCreate,
+    PartyTaxIdResponse,
+    PartyTaxIdUpdate,
     PartyBankAccountResponse,
     PartyBankAccountWrite,
     PartyChild,
@@ -59,6 +64,8 @@ from ..schemas.party import (
 from ..schemas.tax import TaxProposalResponse, TaxWarningResponse, TaxWouldHaveAppliedResponse
 from ..services import audit, party_service, tax_service, vies
 from ..services.permissions import scoped
+from ..services import tax_id_checks
+from ..services.tax_id_policy import load_policy
 
 router = APIRouter(tags=["parties"])
 
@@ -145,15 +152,33 @@ def _check_response(row: PartyVatCheck, detail: str = "") -> PartyVatCheckRespon
     response = dict(row.response or {})
     return PartyVatCheckResponse(
         id=row.id,
+        tax_id_id=row.tax_id_id,
         vat_id=row.vat_id,
         country=row.country,
+        kind=row.kind,
+        provider=row.provider,
+        trigger_kind=row.trigger_kind,
+        qualified=bool(row.qualified),
+        registered_name=row.registered_name,
+        registered_address=row.registered_address,
+        name_match=row.name_match,
+        address_match=row.address_match,
+        registration_active=row.registration_active,
+        gst_registered=row.gst_registered,
+        manual_note=row.manual_note,
+        evidence_reference=row.evidence_reference,
+        valid_until=row.valid_until,
+        change_detected=row.change_detected,
         status=row.status,
         response=response,
         consultation_ref=row.consultation_ref,
         checked_at=row.checked_at,
-        detail=detail,
-        trader_name=response.get("_trader_name"),
-        trader_address=response.get("_trader_address"),
+        # The server's own sentence for this check. Falls back to the one
+        # stored on the row, so a history entry explains itself without the
+        # caller having to have been there when it ran.
+        detail=detail or response.get("_detail") or "",
+        trader_name=response.get("_trader_name") or row.registered_name,
+        trader_address=response.get("_trader_address") or row.registered_address,
     )
 
 
@@ -190,6 +215,17 @@ def _party_response(
         },
         tags=list(party.tags or []),
         einvoice_routing=dict(party.einvoice_routing or {}),
+        tax_ids=[
+            _tax_id_response(db, row)
+            for row in db.query(PartyTaxId)
+            .filter(PartyTaxId.party_id == party.id)
+            .order_by(
+                PartyTaxId.is_active.desc(),
+                PartyTaxId.is_primary.desc(),
+                PartyTaxId.kind,
+                PartyTaxId.created_at,
+            )
+        ],
         vat_verified=party_service.vat_is_verified(db, party),
         latest_vat_check=_check_response(latest) if latest else None,
         buyer_type=inputs["buyer_type"],
@@ -262,20 +298,42 @@ def list_parties(
     ),
     type: Optional[str] = Query(default=None),
     include_inactive: bool = False,
+    needs_attention: bool = Query(
+        default=False,
+        description=(
+            "Only parties with a tax identifier whose latest check differed "
+            "from the one before it, and which nobody has acknowledged yet."
+        ),
+    ),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     membership: Membership = Depends(require("parties.view")),
 ):
-    """Search by name, trading name, party number, VAT ID or email.
+    """Search by name, trading name, party number, tax identifier or email.
 
     One query over five columns rather than five filters, because somebody
     looking for a customer types what they remember and does not know which
-    field it was.
+    field it was. Identifiers are searched across every kind and including
+    retired ones: somebody with a number on a piece of paper wants the party
+    it belonged to, whether or not it is still current.
     """
     query = scoped(db.query(Party), membership)
     if not include_inactive:
         query = query.filter(Party.is_active.is_(True))
+    if needs_attention:
+        # A subquery rather than a join, so a party with two flagged
+        # identifiers appears once. A join would return it twice and the
+        # page count would disagree with the rows.
+        flagged = (
+            db.query(PartyTaxId.party_id)
+            .filter(
+                PartyTaxId.company_id == membership.company_id,
+                PartyTaxId.needs_attention.is_(True),
+            )
+            .subquery()
+        )
+        query = query.filter(Party.id.in_(db.query(flagged.c.party_id)))
     if type:
         query = query.filter(Party.type == type)
     if role == "customer":
@@ -800,6 +858,690 @@ def list_vat_checks(
         .filter(PartyVatCheck.party_id == party.id)
         .order_by(PartyVatCheck.checked_at.desc())
     ]
+
+
+# ─── Tax identifiers (P1b-2) ───────────────────────────────────────────────
+#
+# **No DELETE route anywhere**, asserted on the OpenAPI document like P1a-2's
+# tax codes. An identifier's checks are the evidence for invoices already
+# issued, and deleting the identifier would delete the reason a finalized
+# document says what it says. Retire instead; the row stays, the history
+# stays, and nothing proposes it any more.
+
+
+#: What an audit row records about an identifier. `value` first because a
+#: change to it is the one that restates what a future invoice will say.
+TAX_ID_AUDITED = (
+    "kind",
+    "value",
+    "country",
+    "is_primary",
+    "is_active",
+    "notes",
+)
+
+
+def _tax_id_or_404(
+    db: Session, membership: Membership, party: Party, tax_id_id: uuid.UUID
+) -> PartyTaxId:
+    """Scoped by company AND by party.
+
+    Both, because an identifier id from another party of the same company
+    would otherwise be editable through this party's URL — a smaller leak
+    than a cross-company one and the same shape of bug.
+    """
+    row = (
+        scoped(db.query(PartyTaxId), membership)
+        .filter(PartyTaxId.id == tax_id_id, PartyTaxId.party_id == party.id)
+        .first()
+    )
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="No such tax identifier."
+        )
+    return row
+
+
+def _latest_check_of(db: Session, tax_id: PartyTaxId) -> Optional[PartyVatCheck]:
+    """The newest check of ONE identifier.
+
+    Named apart from `_latest_check`, which takes a PARTY and answers "what
+    did we last ask about this customer". Two functions one word apart would
+    have been a real bug: defined later in the file, this one would have
+    shadowed the other and `_party_response` would have passed a Party where
+    a PartyTaxId was expected.
+    """
+    return (
+        db.query(PartyVatCheck)
+        .filter(PartyVatCheck.tax_id_id == tax_id.id)
+        .order_by(PartyVatCheck.checked_at.desc())
+        .first()
+    )
+
+
+def _tax_id_response(db: Session, row: PartyTaxId) -> PartyTaxIdResponse:
+    from ..billing.parties.tax_ids import is_verifiable
+
+    latest = _latest_check_of(db, row)
+    return PartyTaxIdResponse(
+        id=row.id,
+        kind=row.kind,
+        country=row.country,
+        value=row.value,
+        value_as_entered=row.value_as_entered,
+        is_primary=row.is_primary,
+        is_active=row.is_active,
+        notes=row.notes,
+        replaces_id=row.replaces_id,
+        verifiable=is_verifiable(row.kind),
+        initial_checks_done=row.initial_checks_done or 0,
+        next_check_at=row.next_check_at,
+        unavailable_streak=row.unavailable_streak or 0,
+        needs_attention=bool(row.needs_attention),
+        needs_attention_reason=row.needs_attention_reason,
+        latest_check=_check_response(latest) if latest else None,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
+
+
+def _normalise_tax_id(kind: str, value: str, country: Optional[str]):
+    """Normalise, or refuse with the sentence the normaliser wrote.
+
+    422 and before any network call: a malformed number costs a sentence
+    rather than a timeout, and a registry asked about a typo answers
+    "invalid" — which we would then store as a finding about the customer
+    when it is a finding about the typing.
+    """
+    from ..billing.parties.tax_ids import TaxIdFormatError, normalise
+
+    try:
+        return normalise(kind, value, country=country)
+    except TaxIdFormatError as error:
+        _refuse(error, status.HTTP_422_UNPROCESSABLE_ENTITY)
+
+
+def _clear_other_primaries(db: Session, party: Party, kind: str) -> None:
+    """Move the primary flag rather than refusing the write.
+
+    The database allows one primary active VAT-like identifier per party.
+    A user marking a second one primary means "this one now", so the
+    endpoint moves the flag — refusing with "unset the other one first"
+    would be making them do the bookkeeping for a rule they cannot see.
+    """
+    from ..models.party import VAT_LIKE_KINDS
+
+    group = VAT_LIKE_KINDS if kind in VAT_LIKE_KINDS else (kind,)
+    for other in (
+        db.query(PartyTaxId)
+        .filter(
+            PartyTaxId.party_id == party.id,
+            PartyTaxId.is_primary.is_(True),
+            PartyTaxId.is_active.is_(True),
+            PartyTaxId.kind.in_(group),
+        )
+        .all()
+    ):
+        other.is_primary = False
+    db.flush()
+
+
+@router.get(
+    "/parties/{party_id}/tax-ids", response_model=list[PartyTaxIdResponse]
+)
+def list_tax_ids(
+    party_id: uuid.UUID,
+    include_inactive: bool = Query(
+        True,
+        description=(
+            "Retired identifiers too. Default true, unlike the party list: "
+            "a retired number is part of this party's history and the screen "
+            "shows it greyed rather than hiding it."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    membership: Membership = Depends(require("parties.view")),
+):
+    """This party's identifiers, primary first."""
+    party = _party_or_404(db, membership, party_id)
+    query = db.query(PartyTaxId).filter(PartyTaxId.party_id == party.id)
+    if not include_inactive:
+        query = query.filter(PartyTaxId.is_active.is_(True))
+    rows = query.order_by(
+        PartyTaxId.is_active.desc(),
+        PartyTaxId.is_primary.desc(),
+        PartyTaxId.kind,
+        PartyTaxId.created_at,
+    ).all()
+    return [_tax_id_response(db, row) for row in rows]
+
+
+@router.post(
+    "/parties/{party_id}/tax-ids",
+    response_model=PartyTaxIdResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_tax_id(
+    party_id: uuid.UUID,
+    body: PartyTaxIdCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    membership: Membership = Depends(require("parties.edit")),
+):
+    """Add an identifier, and start its initial check series.
+
+    **Re-adding a number somebody retired reactivates that row** rather than
+    creating a second one. The checks on it are its history, and two rows
+    for one number would make "which of these is the evidence" a question
+    with no answer.
+    """
+    party = _party_or_404(db, membership, party_id)
+    normalised = _normalise_tax_id(body.kind, body.value, body.country)
+    policy = load_policy(db, company_id=membership.company_id)
+
+    existing = (
+        db.query(PartyTaxId)
+        .filter(
+            PartyTaxId.party_id == party.id,
+            PartyTaxId.kind == normalised.kind,
+            PartyTaxId.value == normalised.value,
+        )
+        .first()
+    )
+    if existing is not None:
+        if existing.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"{party.name} already has {normalised.value} as a "
+                    f"{normalised.kind} identifier."
+                ),
+            )
+        before = audit.snapshot(existing, TAX_ID_AUDITED)
+        existing.is_active = True
+        if body.is_primary:
+            _clear_other_primaries(db, party, existing.kind)
+            existing.is_primary = True
+        tax_id_checks.schedule_initial(existing, policy=policy)
+        db.flush()
+        audit.record(
+            db,
+            audit.actor_from(request, membership=membership),
+            existing,
+            "party_tax_id.reactivated",
+            before,
+            audit.snapshot(existing, TAX_ID_AUDITED),
+            fields=TAX_ID_AUDITED,
+            reason=(
+                "Re-added a retired identifier, which keeps its check "
+                "history rather than starting a second one."
+            ),
+        )
+        db.commit()
+        db.refresh(existing)
+        return _tax_id_response(db, existing)
+
+    from ..models.party import VAT_LIKE_KINDS
+
+    # A first VAT-like identifier is primary without being asked: a party
+    # with one number and no primary flag would resolve to nothing, and
+    # nobody means that.
+    wants_primary = body.is_primary
+    if wants_primary is None:
+        wants_primary = normalised.kind in VAT_LIKE_KINDS and (
+            party_service.primary_tax_id(db, party) is None
+        )
+    if wants_primary:
+        _clear_other_primaries(db, party, normalised.kind)
+
+    row = PartyTaxId(
+        company_id=membership.company_id,
+        party_id=party.id,
+        kind=normalised.kind,
+        country=normalised.country,
+        value=normalised.value,
+        value_as_entered=normalised.as_entered,
+        is_primary=bool(wants_primary),
+        is_active=True,
+        # The Swiss VAT-register suffix the user typed, if any. Kept because
+        # it is them telling us the company is VAT-registered — worth
+        # recording, never worth validating.
+        notes=body.notes
+        or (
+            f"Entered with the {normalised.vat_suffix} suffix."
+            if normalised.vat_suffix
+            else None
+        ),
+    )
+    db.add(row)
+    db.flush()
+    tax_id_checks.schedule_initial(row, policy=policy)
+
+    audit.record(
+        db,
+        audit.actor_from(request, membership=membership),
+        row,
+        "party_tax_id.created",
+        None,
+        audit.snapshot(row, TAX_ID_AUDITED),
+        fields=TAX_ID_AUDITED,
+    )
+    db.commit()
+    db.refresh(row)
+    return _tax_id_response(db, row)
+
+
+@router.patch(
+    "/parties/{party_id}/tax-ids/{tax_id_id}",
+    response_model=PartyTaxIdResponse,
+)
+def update_tax_id(
+    party_id: uuid.UUID,
+    tax_id_id: uuid.UUID,
+    body: PartyTaxIdUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    membership: Membership = Depends(require("parties.edit")),
+):
+    """Edit an identifier.
+
+    **A changed value or country retires this row and creates a new one**
+    linked back to it (D63). The checks on the old row are evidence for
+    invoices already issued; letting them follow a different number would
+    make an old lookup look like confirmation of a number nobody has
+    checked. The new row starts its initial series from scratch, because a
+    different number has no history.
+    """
+    party = _party_or_404(db, membership, party_id)
+    row = _tax_id_or_404(db, membership, party, tax_id_id)
+    policy = load_policy(db, company_id=membership.company_id)
+    actor = audit.actor_from(request, membership=membership)
+
+    changing_value = False
+    normalised = None
+    if body.value is not None or body.country is not None:
+        normalised = _normalise_tax_id(
+            row.kind,
+            body.value if body.value is not None else row.value,
+            body.country if body.country is not None else row.country,
+        )
+        changing_value = (
+            normalised.value != row.value or normalised.country != row.country
+        )
+
+    if changing_value:
+        before = audit.snapshot(row, TAX_ID_AUDITED)
+        was_primary = row.is_primary
+        row.is_active = False
+        row.is_primary = False
+        db.flush()
+
+        replacement = PartyTaxId(
+            company_id=membership.company_id,
+            party_id=party.id,
+            kind=row.kind,
+            country=normalised.country,
+            value=normalised.value,
+            value_as_entered=normalised.as_entered,
+            is_primary=(
+                body.is_primary if body.is_primary is not None else was_primary
+            ),
+            is_active=True,
+            notes=body.notes if body.notes is not None else row.notes,
+            replaces_id=row.id,
+        )
+        if replacement.is_primary:
+            _clear_other_primaries(db, party, replacement.kind)
+        db.add(replacement)
+        db.flush()
+        # The reset, per identifier (D63). Without it the old row's `valid`
+        # would be the latest completed check of the party's primary
+        # identifier, and the new number would arrive pre-verified.
+        tax_id_checks.schedule_initial(replacement, policy=policy)
+
+        audit.record(
+            db,
+            actor,
+            row,
+            "party_tax_id.retired",
+            before,
+            audit.snapshot(row, TAX_ID_AUDITED),
+            fields=TAX_ID_AUDITED,
+            reason=(
+                f"Replaced by {normalised.value}. Retired rather than "
+                "edited, so its checks stay attached to the number they "
+                "were about."
+            ),
+        )
+        audit.record(
+            db,
+            actor,
+            replacement,
+            "party_tax_id.created",
+            None,
+            audit.snapshot(replacement, TAX_ID_AUDITED),
+            fields=TAX_ID_AUDITED,
+            reason=f"Replaces {before.get('value')}.",
+        )
+        db.commit()
+        db.refresh(replacement)
+        return _tax_id_response(db, replacement)
+
+    before = audit.snapshot(row, TAX_ID_AUDITED)
+    if body.is_primary is True:
+        _clear_other_primaries(db, party, row.kind)
+        row.is_primary = True
+    elif body.is_primary is False:
+        row.is_primary = False
+    if body.notes is not None:
+        row.notes = body.notes
+    db.flush()
+
+    audit.record(
+        db,
+        actor,
+        row,
+        "party_tax_id.updated",
+        before,
+        audit.snapshot(row, TAX_ID_AUDITED),
+        fields=TAX_ID_AUDITED,
+    )
+    db.commit()
+    db.refresh(row)
+    return _tax_id_response(db, row)
+
+
+@router.post(
+    "/parties/{party_id}/tax-ids/{tax_id_id}/retire",
+    response_model=PartyTaxIdResponse,
+)
+def retire_tax_id(
+    party_id: uuid.UUID,
+    tax_id_id: uuid.UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    membership: Membership = Depends(require("parties.edit")),
+):
+    """Stop using an identifier. Never deletes it.
+
+    The checks stay, attached to the number they were about — they are the
+    evidence for invoices already issued (D59).
+    """
+    party = _party_or_404(db, membership, party_id)
+    row = _tax_id_or_404(db, membership, party, tax_id_id)
+
+    before = audit.snapshot(row, TAX_ID_AUDITED)
+    row.is_active = False
+    row.is_primary = False
+    # Nothing to schedule for a retired identifier.
+    row.next_check_at = None
+    db.flush()
+
+    audit.record(
+        db,
+        audit.actor_from(request, membership=membership),
+        row,
+        "party_tax_id.retired",
+        before,
+        audit.snapshot(row, TAX_ID_AUDITED),
+        fields=TAX_ID_AUDITED,
+    )
+    db.commit()
+    db.refresh(row)
+    return _tax_id_response(db, row)
+
+
+@router.post(
+    "/parties/{party_id}/tax-ids/{tax_id_id}/reactivate",
+    response_model=PartyTaxIdResponse,
+)
+def reactivate_tax_id(
+    party_id: uuid.UUID,
+    tax_id_id: uuid.UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    membership: Membership = Depends(require("parties.edit")),
+):
+    """Use it again, and check it again.
+
+    The initial series restarts: the number may have been retired for a
+    year, and an old `valid` is a historical fact rather than a current one.
+    """
+    party = _party_or_404(db, membership, party_id)
+    row = _tax_id_or_404(db, membership, party, tax_id_id)
+
+    before = audit.snapshot(row, TAX_ID_AUDITED)
+    row.is_active = True
+    tax_id_checks.schedule_initial(
+        row, policy=load_policy(db, company_id=membership.company_id)
+    )
+    db.flush()
+
+    audit.record(
+        db,
+        audit.actor_from(request, membership=membership),
+        row,
+        "party_tax_id.reactivated",
+        before,
+        audit.snapshot(row, TAX_ID_AUDITED),
+        fields=TAX_ID_AUDITED,
+    )
+    db.commit()
+    db.refresh(row)
+    return _tax_id_response(db, row)
+
+
+@router.post(
+    "/parties/{party_id}/tax-ids/{tax_id_id}/check",
+    response_model=PartyVatCheckResponse,
+)
+def check_tax_id(
+    party_id: uuid.UUID,
+    tax_id_id: uuid.UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    membership: Membership = Depends(require("parties.edit")),
+):
+    """Ask the registry now, and record the answer.
+
+    Append-only: the row is the evidence for a reverse charge. A failure to
+    obtain an answer is `unavailable` and never `invalid`, and the party
+    stays usable either way — no check is ever required to save one.
+
+    A kind with no provider returns `not_checkable` with a sentence rather
+    than an error, because "there is no register to ask" is an answer about
+    the world and not a failure of ours.
+    """
+    party = _party_or_404(db, membership, party_id)
+    row = _tax_id_or_404(db, membership, party, tax_id_id)
+
+    result = tax_id_checks.run_check(db, tax_id=row, party=party)
+    check = tax_id_checks.record_check(
+        db,
+        tax_id=row,
+        party=party,
+        result=result,
+        trigger_kind="manual",
+        actor=audit.actor_from(request, membership=membership),
+        checked_by=getattr(membership.user, "id", None),
+    )
+    db.commit()
+    db.refresh(check)
+    return _check_response(check, detail=result.detail)
+
+
+@router.get(
+    "/parties/{party_id}/tax-ids/{tax_id_id}/checks",
+    response_model=list[PartyVatCheckResponse],
+)
+def list_tax_id_checks(
+    party_id: uuid.UUID,
+    tax_id_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    membership: Membership = Depends(require("parties.view")),
+):
+    """The whole history of one identifier, newest first.
+
+    Append-only, so it only grows. Newest first because the question is
+    almost always "what does it say now", and the history below it is the
+    answer to "and has that changed".
+    """
+    party = _party_or_404(db, membership, party_id)
+    row = _tax_id_or_404(db, membership, party, tax_id_id)
+    return [
+        _check_response(check)
+        for check in db.query(PartyVatCheck)
+        .filter(PartyVatCheck.tax_id_id == row.id)
+        .order_by(PartyVatCheck.checked_at.desc())
+    ]
+
+
+@router.post(
+    "/parties/{party_id}/tax-ids/{tax_id_id}/checks/{check_id}/acknowledge",
+    response_model=PartyTaxIdResponse,
+)
+def acknowledge_change(
+    party_id: uuid.UUID,
+    tax_id_id: uuid.UUID,
+    check_id: uuid.UUID,
+    body: AcknowledgeRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    membership: Membership = Depends(require("parties.edit")),
+):
+    """Say a human has looked at a flagged change, and what they concluded.
+
+    The note goes in the audit event rather than onto the check row, because
+    that row cannot be updated — it is the evidence, and evidence that can
+    be annotated afterwards is not evidence.
+    """
+    party = _party_or_404(db, membership, party_id)
+    row = _tax_id_or_404(db, membership, party, tax_id_id)
+    check = (
+        db.query(PartyVatCheck)
+        .filter(
+            PartyVatCheck.id == check_id, PartyVatCheck.tax_id_id == row.id
+        )
+        .first()
+    )
+    if check is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No such check on this identifier.",
+        )
+
+    tax_id_checks.acknowledge(
+        db,
+        tax_id=row,
+        party=party,
+        check=check,
+        note=body.note,
+        actor=audit.actor_from(request, membership=membership),
+    )
+    db.commit()
+    db.refresh(row)
+    return _tax_id_response(db, row)
+
+
+@router.post(
+    "/parties/{party_id}/tax-ids/{tax_id_id}/manual-confirmation",
+    response_model=PartyVatCheckResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def confirm_manually(
+    party_id: uuid.UUID,
+    tax_id_id: uuid.UUID,
+    body: ManualConfirmationRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    membership: Membership = Depends(require("parties.edit")),
+):
+    """Record that a person confirmed this identifier.
+
+    It appends a check row with provider `manual` and status `valid`, and it
+    is shown as "confirmed by <user> on <date>" — never as a registry check.
+
+    **It never verifies an EU VAT ID** (D66). For a `vat` the registry is
+    reachable, so a human saying "trust me" in its place would put a reverse
+    charge on an invoice with nothing behind it. The row is still written,
+    because somebody choosing to record their own confirmation is entitled
+    to; `vat_is_verified` simply does not count it, and the response says
+    so.
+    """
+    from ..billing.parties.verification import VALID, VerificationResult
+    from ..models.party import PROVIDER_MANUAL, TAX_ID_VAT
+
+    party = _party_or_404(db, membership, party_id)
+    row = _tax_id_or_404(db, membership, party, tax_id_id)
+    actor = audit.actor_from(request, membership=membership)
+    who = getattr(getattr(membership, "user", None), "email", None) or "a user"
+
+    counts = row.kind != TAX_ID_VAT
+    detail = (
+        f"Confirmed by {who}. This is a person's confirmation, not a "
+        "registry check."
+    )
+    if not counts:
+        detail += (
+            " It does not make this VAT ID verified for tax purposes: a "
+            "reverse charge needs the number confirmed by VIES, and that "
+            "lookup is available — run it with Check now."
+        )
+
+    result = VerificationResult(
+        status=VALID,
+        provider=PROVIDER_MANUAL,
+        value=row.value,
+        kind=row.kind,
+        country=row.country,
+        detail=detail,
+        # Never qualified. Enforced in the value object and by a CHECK
+        # constraint as well, because the claim "a tax authority confirmed
+        # this" is the one nobody may make by accident.
+        qualified=False,
+        raw={"_manual": True, "_confirmed_by": who},
+    )
+    check = tax_id_checks.record_check(
+        db,
+        tax_id=row,
+        party=party,
+        result=result,
+        trigger_kind="manual",
+        actor=None,
+        checked_by=getattr(membership.user, "id", None),
+        # Passed in, not set afterwards: the table is append-only, so
+        # assigning to the row after its insert is an UPDATE the trigger
+        # refuses — which is how the first version of this failed.
+        manual_note=body.note,
+        evidence_reference=body.evidence_reference,
+        valid_until=body.valid_until,
+    )
+
+    audit.record(
+        db,
+        actor,
+        party,
+        "party.tax_id_manual_confirmed",
+        None,
+        {
+            "tax_id": row.value,
+            "kind": row.kind,
+            "note": body.note,
+            "evidence_reference": body.evidence_reference,
+            "valid_until": (
+                body.valid_until.isoformat() if body.valid_until else None
+            ),
+            "counts_as_verified": counts,
+        },
+        fields=[
+            "tax_id", "kind", "note", "evidence_reference", "valid_until",
+            "counts_as_verified",
+        ],
+        reason=detail,
+    )
+    db.commit()
+    db.refresh(check)
+    return _check_response(check, detail=detail)
 
 
 @router.post(

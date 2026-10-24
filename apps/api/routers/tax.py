@@ -36,6 +36,7 @@ from ..core.money import quantize_qty
 from ..database import get_db
 from ..middleware.company import Membership, require
 from ..models.tax import TaxClass, TaxCode, TaxRule
+from ..schemas.party import TaxIdCheckPolicyResponse, TaxIdCheckPolicyUpdate
 from ..schemas.tax import (
     CodeReferrers,
     CountryChangePlanResponse,
@@ -54,7 +55,7 @@ from ..schemas.tax import (
     TaxWarningResponse,
     TaxWouldHaveAppliedResponse,
 )
-from ..services import audit, tax_country, tax_references, tax_service
+from ..services import audit, tax_country, tax_references, tax_service, tax_id_policy
 from ..services.permissions import scoped
 
 router = APIRouter(tags=["tax"])
@@ -765,4 +766,85 @@ def propose_tax_for_a_case(
         ],
         blocking=proposal.blocking,
         would_have_applied=would,
+    )
+
+
+# ─── How often identifiers are re-checked (P1b-2) ──────────────────────────
+#
+# `company.settings.edit`, the same key as the rest of Settings → Company.
+# P1b-2 adds no permission keys at all: the matrix will change over the
+# build, and every check staying behind an existing key means that change is
+# one place rather than a search (prompt, Step 0 item 3).
+
+
+@router.get("/company/tax/id-check-policy", response_model=TaxIdCheckPolicyResponse)
+def read_id_check_policy(
+    db: Session = Depends(get_db),
+    membership: Membership = Depends(require("company.view")),
+):
+    """The policy, plus the choices and defaults the screen needs.
+
+    The choices are served rather than hard-coded in the web, so the list
+    cannot drift from the validator that enforces it — a screen offering an
+    interval the API refuses is a form that fails on save for no visible
+    reason.
+    """
+    policy = tax_id_policy.load_policy(db, company_id=membership.company_id)
+    return TaxIdCheckPolicyResponse(
+        **policy.as_dict(),
+        interval_choices=list(tax_id_policy.INTERVAL_CHOICES),
+        defaults=tax_id_policy.TaxIdCheckPolicy().as_dict(),
+    )
+
+
+@router.patch(
+    "/company/tax/id-check-policy", response_model=TaxIdCheckPolicyResponse
+)
+def update_id_check_policy(
+    body: TaxIdCheckPolicyUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    membership: Membership = Depends(require("company.settings.edit")),
+):
+    """Change it. Validated as a combination, not field by field.
+
+    The one somebody actually gets wrong is an age limit shorter than the
+    interval: every identifier would then spend part of each cycle
+    unverified, and an unverified EU business buyer is charged domestic VAT.
+    The refusal does the subtraction and says what it costs.
+    """
+    before = tax_id_policy.load_policy(
+        db, company_id=membership.company_id
+    ).as_dict()
+    # Only the fields that were sent, so a PATCH of one setting does not
+    # silently reset the other two to their defaults.
+    raw = {**before, **body.model_dump(exclude_unset=True)}
+
+    try:
+        policy = tax_id_policy.save_policy(
+            db, company_id=membership.company_id, raw=raw
+        )
+    except tax_id_policy.PolicyError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)
+        ) from None
+
+    audit.record(
+        db,
+        audit.actor_from(request, membership=membership),
+        membership.company,
+        "company.tax_id_check_policy_changed",
+        before,
+        policy.as_dict(),
+        fields=[
+            "initial_check_offsets",
+            "recheck_interval_days",
+            "max_check_age_days",
+        ],
+    )
+    db.commit()
+    return TaxIdCheckPolicyResponse(
+        **policy.as_dict(),
+        interval_choices=list(tax_id_policy.INTERVAL_CHOICES),
+        defaults=tax_id_policy.TaxIdCheckPolicy().as_dict(),
     )
