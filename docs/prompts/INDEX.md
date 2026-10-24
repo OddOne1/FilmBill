@@ -22,7 +22,7 @@ from them. `docs/SCOPE.md` is where the product is decided.
 | P1a | Tax: data model, region packs, the proposal engine, API, screens | [`21-filmbill-P1a-tax.md`](21-filmbill-P1a-tax.md) | `57d9b5a`…`154160c` | done — see notes |
 | P1a-2 | A company adds its own rates and no-tax cases | [`22-filmbill-P1a-2-user-rates.md`](22-filmbill-P1a-2-user-rates.md) | `f84ca55`…`6c7a37f` | done — see notes |
 | P1b | Change country, then parties (customers, suppliers, contacts) | [`23-filmbill-P1b-parties.md`](23-filmbill-P1b-parties.md) | `f0f9a1c`…`dfe7399` | done — see notes |
-| P1b-2 | Tax IDs as their own thing, pluggable verification, scheduled re-checks | [`24-filmbill-P1b-2-tax-ids.md`](24-filmbill-P1b-2-tax-ids.md) | `ed4cfde`…`11afc1d` | **parts 1–3 done; parts 4–6 open** |
+| P1b-2 | Tax IDs as their own thing, pluggable verification, scheduled re-checks | [`24-filmbill-P1b-2-tax-ids.md`](24-filmbill-P1b-2-tax-ids.md) | `ed4cfde`…`PENDING` | done — see notes |
 | P0b | Foundations: companies, roles, number series, audit, money, codegen | [`03-filmbill-P0b-foundations.md`](03-filmbill-P0b-foundations.md) | — | superseded — split into P0b-0, P0b-1, P0b-2 |
 
 ---
@@ -1228,48 +1228,52 @@ will say so.
 
 ## P1b-2 — tax IDs, verification providers, scheduled re-checks
 
-**Parts 1–3 are done and pushed. Parts 4, 5 and 6 are not started.** Prompt:
-[`24-filmbill-P1b-2-tax-ids.md`](24-filmbill-P1b-2-tax-ids.md). Stopped at a
-usage limit, not at a problem: the three commits are each green on their own
-and `main` is green.
+All six parts are done and pushed. Prompt:
+[`24-filmbill-P1b-2-tax-ids.md`](24-filmbill-P1b-2-tax-ids.md). Decisions in
+SCOPE §16 **D59–D68**, and §17 question 10 gains five parts.
 
 **Part 1 — tax IDs become their own table (`ed4cfde`).** Migration 0013:
 `party_tax_ids`, the data copied across, the existing checks repointed, and
 `parties.vat_id` dropped in the same migration. Both check-digit algorithms
-come from the issuing authority's own document (eCH-0097 V5.2.0 §2.4.2 for
-the Swiss UID, abr.business.gov.au/Help/AbnFormat for the ABN) and are tested
-against that authority's own worked example. `tax_status_note` and the
-resolver reason `explicit_without_tax_id` for a business with no number at
-all. Two tests were passing for the wrong reason and both were found by
-mutation.
+come from the issuing authority's own document (eCH-0097 V5.2.0 §2.4.2;
+abr.business.gov.au/Help/AbnFormat) and are tested against that authority's
+own worked example. Two tests were passing for the wrong reason and both were
+found by mutation — the second one was trap 18 applied to itself: the first
+attempt at the reverse-charge mutation survived because the Kleinunternehmer
+fixture is domestic, where the flag changes nothing.
 
-**Part 2 — providers and name matching (`89e3a80`).** One result type, five
-statuses, seven questions asked of every provider. Found by probing: the VIES
-REST API reads `requesterMemberStateCode`/`requesterNumber` and **silently
-ignores** the WSDL's `requesterCountryCode`/`requesterVatNumber` — the
-spelling every third-party package suggests — which would have stored every
-check as `qualified` with no consultation reference and nothing failing. Also
-found: VIES returns `traderNameMatch`, its own verdict on the name we sent,
-which now beats our fuzzy comparison. **No Swiss lookup provider** (D61): no
-official programmatic interface could be found and no terms for automated
-querying are published, so `uid_ch` is `not_checkable` and the route is a
-manual confirmation.
+**Part 2 — providers and name matching (`89e3a80`).** Found by probing: the
+VIES REST API reads `requesterMemberStateCode`/`requesterNumber` and
+**silently ignores** the WSDL's spelling — the one every third-party package
+suggests — which would have stored every check as `qualified` with no
+consultation reference and nothing failing. Also found: VIES returns
+`traderNameMatch`, its own verdict, which now beats our fuzzy comparison.
+**No Swiss lookup provider** (D61), sourced rather than skipped.
 
 **Part 3 — policy, scheduler, change detection (`11afc1d`).** The old
-`test_p0a_schedules_nothing_and_says_so` pin did its job: adding the first
-beat entry revealed that the `maintenance` queue had no consumer in any
-compose file, which is the FreeFrame bug caught before shipping instead of
-four times after. `FOR UPDATE SKIP LOCKED` proved with two real connections,
-and the test needed a `lock_timeout` because without it the mutation hung
-rather than failing. `unavailable` is not a completed check, in four separate
-senses.
+`test_p0a_schedules_nothing_and_says_so` pin did its job: the first beat entry
+revealed that the `maintenance` queue had no consumer in any compose file —
+the FreeFrame bug caught before shipping instead of four times after.
+`SKIP LOCKED` proved with two real connections, and the test needed a
+`lock_timeout` because without it the mutation hung rather than failed.
 
-**What is open.** Part 4 (the tax-ID endpoints, manual confirmation,
-`?needs_attention`, the policy endpoints, no-DELETE assertion, regenerated
-`api.gen.ts`), part 5 (the screens: the Tax tab as a list of identifiers with
-chips and a history drawer, the Needs-attention tab, the ID-checks settings
-section, the seed additions), part 6 (SCOPE §16 D59–D67 and the §17
-question-10 extension). The D-numbers D59–D67 are already referenced
-throughout the code written so far and are **not yet in SCOPE.md** — that is
-the first thing part 6 must reconcile.
+**Part 4 — the API (`524c3c6`).** Eleven endpoints, no DELETE, no new
+permission keys. Three real bugs, each caught by something built to catch it:
+an UPDATE on the append-only check table (refused by the 0012 trigger), a
+leaked `VatFormatError` whose symptom was **the suite hanging on teardown**,
+and `_check_response` never learning the fifteen new columns so every check
+claimed `provider: "vies"`.
 
+**Part 5 — the screens (`501a564`).** The Tax tab as an identifier list with
+six chip states, both names side by side, a history drawer, Acknowledge and
+Confirm manually; a Needs-attention tab; the ID-checks settings section. The
+mutation that reads the chip instead of the API's flag fails on two tests.
+
+**Part 6 — documentation (`1dafacd`).** SCOPE §16 D59–D68 and §17 question 10
+extended with five parts.
+
+**Flagged.** The check-policy defaults (D62) and the thresholds in
+`name_match.yaml` are `[Guessing]`. The VIES REST request and response shapes
+are **observed, not documented** — the tests that pin the field spellings are
+what will say so if the Commission changes them. `ABN_LOOKUP_GUID` is
+operator-supplied and FilmBill ships none.
