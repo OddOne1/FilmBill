@@ -448,3 +448,155 @@ def make_party_address(
     db.commit()
     db.refresh(row)
     return row
+
+
+# ─── Catalog (A1) ───────────────────────────────────────────────────────────
+#
+# Written directly rather than through `seed_catalog`, for the same reason
+# `grant` writes a membership directly: these build the WORLD a test acts in,
+# and building it through the code under test would let one bug hide another.
+# `test_catalog_api.py` covers the seeding itself.
+
+
+def make_unit(
+    db,
+    company: Company,
+    *,
+    key: str = "day",
+    label_de: str = "Tag",
+    label_en: Optional[str] = "Day",
+    period_unit: str = "day",
+    is_system: bool = True,
+    position: int = 10,
+    is_active: bool = True,
+):
+    from apps.api.models.catalog import Unit
+
+    row = Unit(
+        company_id=company.id,
+        key=key,
+        label_de=label_de,
+        label_en=label_en,
+        period_unit=period_unit,
+        is_system=is_system,
+        position=position,
+        is_active=is_active,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def make_item_category(
+    db,
+    company: Company,
+    *,
+    name: str = "Kamera",
+    kind: str = "equipment_rental",
+    parent=None,
+    position: int = 10,
+    is_active: bool = True,
+):
+    from apps.api.models.catalog import ItemCategory
+
+    row = ItemCategory(
+        company_id=company.id,
+        name=name,
+        kind=kind,
+        parent_id=parent.id if parent is not None else None,
+        position=position,
+        is_active=is_active,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def make_rental_factor_group(
+    db,
+    company: Company,
+    *,
+    name: str = "Standard-Mietfaktoren",
+    factors=((1, "1.0"), (2, "1.5"), (3, "2.0"), (5, "2.8"), (7, "3.5")),
+    is_active: bool = True,
+):
+    """A factor group carrying the A1 prompt's own table by default."""
+    from decimal import Decimal
+
+    from apps.api.models.catalog import RentalFactor, RentalFactorGroup
+
+    group = RentalFactorGroup(
+        company_id=company.id, name=name, is_active=is_active
+    )
+    db.add(group)
+    db.flush()
+    for days, factor in factors:
+        db.add(
+            RentalFactor(
+                company_id=company.id,
+                group_id=group.id,
+                days=days,
+                factor=Decimal(factor),
+            )
+        )
+    db.commit()
+    db.refresh(group)
+    return group
+
+
+def make_item(
+    db,
+    company: Company,
+    *,
+    sku: Optional[str] = "CAM-001",
+    name_de: str = "Arri Alexa 35",
+    name_en: Optional[str] = "Arri Alexa 35",
+    kind: str = "equipment_rental",
+    category=None,
+    unit=None,
+    default_tax_class: Optional[str] = None,
+    rental_factor_group=None,
+    is_active: bool = True,
+    bill_rate_day: Optional[str] = "1200.00",
+    cost_rate_day: Optional[str] = "600.00",
+    currency: str = "EUR",
+):
+    """One item, with the day rates most tests want it to have."""
+    from decimal import Decimal
+
+    from apps.api.models.catalog import Item, ItemRate
+
+    item = Item(
+        company_id=company.id,
+        sku=sku,
+        name_de=name_de,
+        name_en=name_en,
+        kind=kind,
+        category_id=category.id if category is not None else None,
+        unit_id=unit.id if unit is not None else None,
+        default_tax_class=default_tax_class,
+        rental_factor_group_id=(
+            rental_factor_group.id if rental_factor_group is not None else None
+        ),
+        is_active=is_active,
+    )
+    db.add(item)
+    db.flush()
+    for rate_type, amount in (("bill", bill_rate_day), ("cost", cost_rate_day)):
+        if amount is None:
+            continue
+        db.add(
+            ItemRate(
+                company_id=company.id,
+                item_id=item.id,
+                rate_type=rate_type,
+                period_unit="day",
+                amount=Decimal(amount),
+                currency=currency,
+            )
+        )
+    db.commit()
+    db.refresh(item)
+    return item

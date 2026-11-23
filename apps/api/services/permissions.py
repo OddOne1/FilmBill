@@ -76,6 +76,10 @@ _PARTY_EDIT: set[CompanyRole] = {
     CompanyRole.admin,
     CompanyRole.producer,
 }
+#: Who may READ the price list. `_PRODUCTION` plus staff — i.e. every member
+#: except the tax advisor. See `catalog.view` below for why staff are in
+#: this one set and in no other.
+_CATALOG_VIEW: set[CompanyRole] = _PRODUCTION | {CompanyRole.staff}
 
 #: Every permission this system knows about, and which roles hold it.
 #:
@@ -144,6 +148,37 @@ PERMISSIONS: dict[str, set[CompanyRole]] = {
     #: certainty (SCOPE D58).
     "parties.view": _PRODUCTION,
     "parties.edit": _PARTY_EDIT,
+    #: A1. The price list: items, categories, units, rental factor tables,
+    #: and the stateless calculation preview.
+    #:
+    #: **View is everyone but the tax advisor** — `_CATALOG_VIEW`, which is
+    #: `_PRODUCTION` plus staff. Staff are in it and are in nothing else,
+    #: which is the one place this matrix departs from the party sets above:
+    #: a gaffer looking up what a 2.5-ton truck costs per day is reading a
+    #: price list, not reading the customers. The catalog carries no personal
+    #: data and no document; the worst a leaked day rate does is tell
+    #: somebody inside the company what the company charges.
+    #:
+    #: **Edit is `_PARTY_EDIT`** — owner, admin, producer. The accountant is
+    #: out for the same reason they are out of `parties.edit`: a rate and a
+    #: `default_tax_class` are snapshotted onto a document the moment it is
+    #: finalized (rule 4), so changing one is a structural act with a
+    #: downstream effect, not bookkeeping.
+    #:
+    #: **The tax advisor holds neither**, consistent with D23/D43: their
+    #: access is the archive, where the price that was used is already
+    #: snapshotted on the document in front of them.
+    #:
+    #: `POST /calc/preview` is gated on `catalog.view` and not on an
+    #: `edit`-level key on purpose: it writes nothing, it is the arithmetic
+    #: behind a screen anybody planning a shoot needs, and A2's budget sheet
+    #: is built on it.
+    #:
+    #: [Guessing] — the A1 prompt proposed exactly these two sets and
+    #: Mathias has not confirmed them. Recorded as a decision with the flag
+    #: attached (SCOPE D73), not as a certainty.
+    "catalog.view": _CATALOG_VIEW,
+    "catalog.edit": _PARTY_EDIT,
     #: P5. The archive of finalized documents. The tax advisor's entire
     #: reason for existing in this system.
     "archive.view": _BOOKS | {CompanyRole.tax_advisor},

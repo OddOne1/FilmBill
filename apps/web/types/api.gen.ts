@@ -769,6 +769,398 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/calc/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Calculation
+         * @description Calculate a document. Writes nothing, reads nothing, stores nothing.
+         *
+         *     A refused document is a 422 carrying the engine's own sentence — "group
+         *     'week-2' is at nesting level 3; groups may be two deep" — because that
+         *     sentence names the thing the person has to fix and a generic
+         *     "unprocessable entity" does not.
+         */
+        post: operations["preview_calculation_calc_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/catalog/categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Categories
+         * @description The whole tree, flat, each row carrying its path and its depth.
+         *
+         *     Flat and not nested: the screen renders a tree from `parent_id` either
+         *     way, and a flat list is one response shape instead of a recursive one
+         *     that the generated types have to be taught about.
+         */
+        get: operations["list_categories_catalog_categories_get"];
+        put?: never;
+        /** Create Category */
+        post: operations["create_category_catalog_categories_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/catalog/categories/{category_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Category
+         * @description Rename a category or move it. `kind` is fixed at create.
+         *
+         *     Moving it is where the two tree rules are enforced: no cycle, and
+         *     `MAX_CATEGORY_DEPTH` levels counting whatever is already underneath.
+         */
+        patch: operations["update_category_catalog_categories__category_id__patch"];
+        trace?: never;
+    };
+    "/catalog/categories/{category_id}/deactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Deactivate Category
+         * @description Retire a category. Never deletes; refused while it has live children.
+         */
+        post: operations["deactivate_category_catalog_categories__category_id__deactivate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/catalog/categories/{category_id}/reactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reactivate Category */
+        post: operations["reactivate_category_catalog_categories__category_id__reactivate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/catalog/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Items
+         * @description Search by SKU or either name; filter by kind, category or factor table.
+         *
+         *     One `search` over three columns rather than three filters: somebody
+         *     looking for a camera types "Alexa" and does not know whether it was
+         *     filed under the German or the English name.
+         */
+        get: operations["list_items_catalog_items_get"];
+        put?: never;
+        /** Create Item */
+        post: operations["create_item_catalog_items_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/catalog/items/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Apply Item Import
+         * @description Apply the file. Creates and updates; never deletes, never deactivates
+         *     an item the file does not mention.
+         *
+         *     Error rows are skipped rather than failing the import: a five-row file
+         *     with one bad row lands the four good ones, and the response says which
+         *     was which. The alternative — all or nothing — means one typo in row 40
+         *     of a 200-row price list wastes the other 199.
+         */
+        post: operations["apply_item_import_catalog_items_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/catalog/items/import/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Item Import
+         * @description What the file would do. Writes nothing.
+         *
+         *     `catalog.edit` and not `catalog.view`: a preview writes nothing, but it
+         *     reports which SKUs exist and what they currently cost, and the person
+         *     about to press Apply is the person who needs it.
+         */
+        post: operations["preview_item_import_catalog_items_import_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/catalog/items/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Item */
+        get: operations["read_item_catalog_items__item_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Item */
+        patch: operations["update_item_catalog_items__item_id__patch"];
+        trace?: never;
+    };
+    "/catalog/items/{item_id}/deactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Deactivate Item
+         * @description Retire an item. Never deletes — it may be on a document already.
+         */
+        post: operations["deactivate_item_catalog_items__item_id__deactivate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/catalog/items/{item_id}/rates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Replace Item Rates
+         * @description Replace an item's whole rate set. The one sub-resource items have.
+         *
+         *     A `PUT` with the full set for the same reason the factor table is one:
+         *     the thing being edited is "what this item costs", and a half-saved
+         *     version of that is a price nobody agreed to.
+         */
+        put: operations["replace_item_rates_catalog_items__item_id__rates_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/catalog/items/{item_id}/reactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reactivate Item */
+        post: operations["reactivate_item_catalog_items__item_id__reactivate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/catalog/rental-factor-groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Factor Groups */
+        get: operations["list_factor_groups_catalog_rental_factor_groups_get"];
+        put?: never;
+        /** Create Factor Group */
+        post: operations["create_factor_group_catalog_rental_factor_groups_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/catalog/rental-factor-groups/{group_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Factor Group */
+        patch: operations["update_factor_group_catalog_rental_factor_groups__group_id__patch"];
+        trace?: never;
+    };
+    "/catalog/rental-factor-groups/{group_id}/factor": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Look Up Factor
+         * @description What this table charges for `days` days, and which row it used.
+         *
+         *     The row and the rule are in the response because the lookup rule is
+         *     `[Guessing]` (SCOPE D71): "6 days → 2.8, from the 5-day entry" is a rule
+         *     somebody can disagree with, and "2.8" is not.
+         */
+        get: operations["look_up_factor_catalog_rental_factor_groups__group_id__factor_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/catalog/rental-factor-groups/{group_id}/factors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Replace Factors
+         * @description Replace the whole table. A `PUT`, because that is what it is.
+         *
+         *     Per-row CRUD on a factor table would let somebody save a table that is
+         *     momentarily wrong — 5 days at 2.8 while 7 days still says 2.0 — and the
+         *     thing being edited is the table, not the rows.
+         */
+        put: operations["replace_factors_catalog_rental_factor_groups__group_id__factors_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/catalog/units": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Units */
+        get: operations["list_units_catalog_units_get"];
+        put?: never;
+        /**
+         * Create Unit
+         * @description A unit of the company's own. The nine seeded ones are already there.
+         */
+        post: operations["create_unit_catalog_units_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/catalog/units/{unit_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Unit
+         * @description Relabel a unit, reorder it, or switch it off.
+         *
+         *     A system unit's `key` and `period_unit` are fixed — the engine's period
+         *     vocabulary is built on them — but its LABELS are not: a company that
+         *     says "Drehtag" rather than "Tag" may say so.
+         */
+        patch: operations["update_unit_catalog_units__unit_id__patch"];
+        trace?: never;
+    };
     "/companies": {
         parameters: {
             query?: never;
@@ -2642,6 +3034,27 @@ export interface components {
             /** Label */
             label?: string | null;
         };
+        /** Body_apply_item_import_catalog_items_import_post */
+        Body_apply_item_import_catalog_items_import_post: {
+            /**
+             * Digest
+             * @description The digest from the preview. When given and the file no longer plans the same thing, nothing is written.
+             */
+            digest?: string | null;
+            /**
+             * File
+             * Format: binary
+             */
+            file: string;
+        };
+        /** Body_preview_item_import_catalog_items_import_preview_post */
+        Body_preview_item_import_catalog_items_import_preview_post: {
+            /**
+             * File
+             * Format: binary
+             */
+            file: string;
+        };
         /** Body_upload_avatar_users_me_avatar_post */
         Body_upload_avatar_users_me_avatar_post: {
             /**
@@ -2665,6 +3078,427 @@ export interface components {
              * Format: binary
              */
             file: string;
+        };
+        /**
+         * CalcAdjustment
+         * @description A discount or surcharge on a whole group, or on the document.
+         */
+        CalcAdjustment: {
+            /**
+             * Base
+             * @default subtotal
+             * @enum {string}
+             */
+            base: "subtotal" | "subtotal_incl_previous" | "kinds";
+            /** Kinds */
+            kinds?: string[];
+            /**
+             * Label
+             * @default
+             */
+            label: string;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "percent" | "amount";
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "discount" | "surcharge";
+            /**
+             * Value
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            value: string;
+        };
+        /** CalcAdjustmentResult */
+        CalcAdjustmentResult: {
+            /**
+             * Amount
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            amount: string;
+            /** Base */
+            base: string;
+            /**
+             * Base Amount
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            base_amount: string;
+            /** By Tax Ref */
+            by_tax_ref: {
+                [key: string]: string;
+            };
+            /** Kinds */
+            kinds: string[];
+            /** Label */
+            label: string;
+            /** Mode */
+            mode: string;
+            /** Type */
+            type: string;
+        };
+        /**
+         * CalcDiscount
+         * @description A discount on ONE line. `percent` of its own gross, or an amount.
+         */
+        CalcDiscount: {
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "percent" | "amount";
+            /**
+             * Value
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            value: string;
+        };
+        /**
+         * CalcDocumentRequest
+         * @description The whole thing to calculate. No id, no number, nothing stored.
+         */
+        CalcDocumentRequest: {
+            /** Adjustments */
+            adjustments?: components["schemas"]["CalcAdjustment"][];
+            /** Children */
+            children?: (components["schemas"]["CalcLine"] | components["schemas"]["CalcGroup"])[];
+            /**
+             * Id
+             * @default document
+             */
+            id: string;
+            /**
+             * Title
+             * @default
+             */
+            title: string;
+        };
+        /**
+         * CalcGroup
+         * @description A block of lines, or of lines and one more level of groups.
+         */
+        CalcGroup: {
+            /** Adjustments */
+            adjustments?: components["schemas"]["CalcAdjustment"][];
+            /** Children */
+            children?: (components["schemas"]["CalcLine"] | components["schemas"]["CalcGroup"])[];
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Id */
+            id: string;
+            /**
+             * Title
+             * @default
+             */
+            title: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "group";
+        };
+        /** CalcGroupResult */
+        CalcGroupResult: {
+            /** Adjustments */
+            adjustments: components["schemas"]["CalcAdjustmentResult"][];
+            /** Children */
+            children: (components["schemas"]["CalcLineResult"] | components["schemas"]["CalcGroupResult"])[];
+            /**
+             * Cost Subtotal
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            cost_subtotal: string;
+            /** Description */
+            description: string;
+            /** Id */
+            id: string;
+            /**
+             * Margin
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            margin: string;
+            /** Margin Percent */
+            margin_percent?: string | null;
+            /** Net By Tax Ref */
+            net_by_tax_ref: {
+                [key: string]: string;
+            };
+            /**
+             * Subtotal
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            subtotal: string;
+            /**
+             * Subtotal Before Adjustments
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            subtotal_before_adjustments: string;
+            /** Title */
+            title: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "group";
+            /** Uniform Period */
+            uniform_period: boolean;
+        };
+        /**
+         * CalcLine
+         * @description One line: price × quantity × periods × factor, less its own discount.
+         */
+        CalcLine: {
+            /**
+             * Allow Negative
+             * @default false
+             */
+            allow_negative: boolean;
+            discount?: components["schemas"]["CalcDiscount"] | null;
+            /**
+             * Factor
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 1
+             * @example 1.5000
+             */
+            factor: string;
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @default
+             */
+            kind: string;
+            /**
+             * Label
+             * @default
+             */
+            label: string;
+            /**
+             * Period Unit
+             * @default day
+             * @enum {string}
+             */
+            period_unit: "day" | "flat" | "half_day" | "hour" | "km" | "month" | "night" | "piece" | "week";
+            /**
+             * Period Value
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 1
+             * @example 1.5000
+             */
+            period_value: string;
+            /**
+             * Quantity
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 1
+             * @example 1.5000
+             */
+            quantity: string;
+            /** Tags */
+            tags?: string[];
+            /**
+             * Tax Ref
+             * @default
+             */
+            tax_ref: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "line";
+            /**
+             * Unit Cost
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            unit_cost: string;
+            /**
+             * Unit Price
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @example 1250.00
+             */
+            unit_price: string;
+        };
+        /** CalcLineResult */
+        CalcLineResult: {
+            /**
+             * Cost Net
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            cost_net: string;
+            /**
+             * Discount Amount
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            discount_amount: string;
+            /**
+             * Gross
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            gross: string;
+            /** Id */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Label */
+            label: string;
+            /**
+             * Margin
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            margin: string;
+            /** Margin Percent */
+            margin_percent?: string | null;
+            /**
+             * Net
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            net: string;
+            /** Period Unit */
+            period_unit: string;
+            /**
+             * Period Value
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 1
+             * @example 1.5000
+             */
+            period_value: string;
+            /** Tax Ref */
+            tax_ref: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "line";
+        };
+        /**
+         * CalcPreviewRequest
+         * @description A document and, optionally, the VAT rates to apply to its buckets.
+         */
+        CalcPreviewRequest: {
+            document: components["schemas"]["CalcDocumentRequest"];
+            /** Vat Rates */
+            vat_rates?: {
+                [key: string]: string;
+            } | null;
+        };
+        /**
+         * CalcPreviewResponse
+         * @description Every number a screen needs, computed in one place.
+         *
+         *     The web app renders these. It does not add them up, re-round them, or
+         *     derive one from another — CLAUDE.md rule 2, and the reason
+         *     `POST /calc/preview` exists at all.
+         */
+        CalcPreviewResponse: {
+            /** Adjustments */
+            adjustments: components["schemas"]["CalcAdjustmentResult"][];
+            /** Children */
+            children: (components["schemas"]["CalcLineResult"] | components["schemas"]["CalcGroupResult"])[];
+            /**
+             * Cost
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            cost: string;
+            /**
+             * Margin
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            margin: string;
+            /** Margin Percent */
+            margin_percent?: string | null;
+            /**
+             * Net
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            net: string;
+            /** Net By Tax Ref */
+            net_by_tax_ref: {
+                [key: string]: string;
+            };
+            /**
+             * Subtotal
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            subtotal: string;
+            vat?: components["schemas"]["CalcVatResponse"] | null;
+            /** Warnings */
+            warnings: components["schemas"]["CalcWarningResponse"][];
+        };
+        /** CalcVatResponse */
+        CalcVatResponse: {
+            /** By Tax Ref */
+            by_tax_ref: components["schemas"]["TaxRefTotalResponse"][];
+            /**
+             * Gross
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            gross: string;
+            /**
+             * Net
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            net: string;
+            /**
+             * Vat
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            vat: string;
+        };
+        /** CalcWarningResponse */
+        CalcWarningResponse: {
+            /** Code */
+            code: string;
+            /** Message */
+            message: string;
+            /** Where */
+            where?: string | null;
         };
         /**
          * CodeReferrers
@@ -3168,10 +4002,124 @@ export interface components {
             /** Smtp User */
             smtp_user?: string | null;
         };
+        /**
+         * FactorLookupResponse
+         * @description What this table charges for `days` days, and how it got there.
+         *
+         *     `matched_days` is the row that was used, which is the whole answer to
+         *     "why does 6 days cost the same as 5": it says `5`. The lookup rule is
+         *     [Guessing] and recorded as an open question (SCOPE D71) — a response
+         *     that only gave the factor would make it impossible to see which rule
+         *     produced it.
+         */
+        FactorLookupResponse: {
+            /**
+             * Billable Days
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 1
+             * @example 1.5000
+             */
+            billable_days: string;
+            /** Days */
+            days: number;
+            /**
+             * Factor
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 1
+             * @example 1.5000
+             */
+            factor: string;
+            /** Matched Days */
+            matched_days?: number | null;
+            /** Rule */
+            rule: string;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * ImportApplyResponse
+         * @description The same table, after the fact. `applied` is the count that landed.
+         */
+        ImportApplyResponse: {
+            /** Applied */
+            applied: number;
+            /** Created */
+            created: number;
+            /** Delimiter */
+            delimiter: string;
+            /** Digest */
+            digest: string;
+            /** Errors */
+            errors: number;
+            /** Ignored Columns */
+            ignored_columns?: string[];
+            /** Rows */
+            rows: components["schemas"]["ImportRowResponse"][];
+            /** Updated */
+            updated: number;
+        };
+        /**
+         * ImportPreviewResponse
+         * @description What the file would do, computed and shown before anything is written.
+         *
+         *     `digest` is the handle the apply call must send back. See
+         *     `services/catalog_service.apply_import`: it is how "the import applies
+         *     exactly what the preview showed" is enforced rather than asserted.
+         */
+        ImportPreviewResponse: {
+            /** Created */
+            created: number;
+            /** Delimiter */
+            delimiter: string;
+            /** Digest */
+            digest: string;
+            /** Errors */
+            errors: number;
+            /** Ignored Columns */
+            ignored_columns?: string[];
+            /** Rows */
+            rows: components["schemas"]["ImportRowResponse"][];
+            /** Updated */
+            updated: number;
+        };
+        /**
+         * ImportRowResponse
+         * @description One line of the file and what it would do. `error` rows are skipped.
+         *
+         *     `message` is a sentence, in the second person, naming the column — this
+         *     table is the whole user interface for a failed import and
+         *     "validation error" in it would be useless.
+         */
+        ImportRowResponse: {
+            /** Action */
+            action: string;
+            /** Active */
+            active?: boolean | null;
+            /** Bill Rate Day */
+            bill_rate_day?: string | null;
+            /** Category */
+            category?: string | null;
+            /** Cost Rate Day */
+            cost_rate_day?: string | null;
+            /** Item Id */
+            item_id?: string | null;
+            /** Kind */
+            kind?: string | null;
+            /** Line Number */
+            line_number: number;
+            /** Message */
+            message: string;
+            /** Name De */
+            name_de?: string | null;
+            /** Sku */
+            sku?: string | null;
+            /** Tax Class */
+            tax_class?: string | null;
+            /** Unit */
+            unit?: string | null;
         };
         /** InviteInfoResponse */
         InviteInfoResponse: {
@@ -3191,6 +4139,247 @@ export interface components {
             email: string;
             /** Name */
             name: string;
+        };
+        /** ItemCategoryCreate */
+        ItemCategoryCreate: {
+            /** Is Active */
+            is_active?: boolean | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "labor" | "equipment_rental" | "space_rental" | "travel" | "per_diem" | "storage" | "product" | "software_license" | "fee" | "other";
+            /** Name */
+            name: string;
+            /** Parent Id */
+            parent_id?: string | null;
+            /** Position */
+            position?: number | null;
+        };
+        /** ItemCategoryResponse */
+        ItemCategoryResponse: {
+            /**
+             * Depth
+             * @default 1
+             */
+            depth: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /**
+             * Item Count
+             * @default 0
+             */
+            item_count: number;
+            /** Kind */
+            kind: string;
+            /** Name */
+            name: string;
+            /** Parent Id */
+            parent_id?: string | null;
+            /**
+             * Path
+             * @default
+             */
+            path: string;
+            /** Position */
+            position: number;
+        };
+        /** ItemCategoryWrite */
+        ItemCategoryWrite: {
+            /** Is Active */
+            is_active?: boolean | null;
+            /** Name */
+            name: string;
+            /** Parent Id */
+            parent_id?: string | null;
+            /** Position */
+            position?: number | null;
+        };
+        /** ItemCreate */
+        ItemCreate: {
+            /** Category Id */
+            category_id?: string | null;
+            /** Default Tax Class */
+            default_tax_class?: string | null;
+            /** Description Customer */
+            description_customer?: string | null;
+            /** Description Internal */
+            description_internal?: string | null;
+            /** Expense Account */
+            expense_account?: string | null;
+            /** Is Active */
+            is_active?: boolean | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "labor" | "equipment_rental" | "space_rental" | "travel" | "per_diem" | "storage" | "product" | "software_license" | "fee" | "other";
+            /** Name De */
+            name_de: string;
+            /** Name En */
+            name_en?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Rates */
+            rates?: components["schemas"]["ItemRateWrite"][] | null;
+            /**
+             * Rebilled Cost
+             * @default false
+             */
+            rebilled_cost: boolean;
+            /** Rental Factor Group Id */
+            rental_factor_group_id?: string | null;
+            /** Revenue Account */
+            revenue_account?: string | null;
+            /** Sku */
+            sku?: string | null;
+            /** Unit Id */
+            unit_id?: string | null;
+        };
+        /** ItemPage */
+        ItemPage: {
+            /** Items */
+            items: components["schemas"]["ItemResponse"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
+        };
+        /** ItemRateResponse */
+        ItemRateResponse: {
+            /**
+             * Amount
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            amount: string;
+            /** Currency */
+            currency: string;
+            /** Period Unit */
+            period_unit: string;
+            /** Rate Type */
+            rate_type: string;
+        };
+        /** ItemRateWrite */
+        ItemRateWrite: {
+            /**
+             * Amount
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @example 1250.00
+             */
+            amount: string;
+            /**
+             * Period Unit
+             * @enum {string}
+             */
+            period_unit: "day" | "flat" | "half_day" | "hour" | "km" | "month" | "night" | "piece" | "week";
+            /**
+             * Rate Type
+             * @enum {string}
+             */
+            rate_type: "bill" | "cost";
+        };
+        /** ItemResponse */
+        ItemResponse: {
+            /** Category Id */
+            category_id?: string | null;
+            /** Category Path */
+            category_path?: string | null;
+            /** Created At */
+            created_at?: string | null;
+            /** Default Tax Class */
+            default_tax_class?: string | null;
+            /** Description Customer */
+            description_customer?: string | null;
+            /** Description Internal */
+            description_internal?: string | null;
+            /** Expense Account */
+            expense_account?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Kind */
+            kind: string;
+            /** Name De */
+            name_de: string;
+            /** Name En */
+            name_en?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Rates */
+            rates?: components["schemas"]["ItemRateResponse"][];
+            /**
+             * Rebilled Cost
+             * @default false
+             */
+            rebilled_cost: boolean;
+            /** Rental Factor Group Id */
+            rental_factor_group_id?: string | null;
+            /** Rental Factor Group Name */
+            rental_factor_group_name?: string | null;
+            /** Revenue Account */
+            revenue_account?: string | null;
+            /** Sku */
+            sku?: string | null;
+            /** Unit Id */
+            unit_id?: string | null;
+            /** Unit Key */
+            unit_key?: string | null;
+            /** Updated At */
+            updated_at?: string | null;
+        };
+        /** ItemWrite */
+        ItemWrite: {
+            /** Category Id */
+            category_id?: string | null;
+            /** Default Tax Class */
+            default_tax_class?: string | null;
+            /** Description Customer */
+            description_customer?: string | null;
+            /** Description Internal */
+            description_internal?: string | null;
+            /** Expense Account */
+            expense_account?: string | null;
+            /** Is Active */
+            is_active?: boolean | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "labor" | "equipment_rental" | "space_rental" | "travel" | "per_diem" | "storage" | "product" | "software_license" | "fee" | "other";
+            /** Name De */
+            name_de: string;
+            /** Name En */
+            name_en?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Rates */
+            rates?: components["schemas"]["ItemRateWrite"][] | null;
+            /**
+             * Rebilled Cost
+             * @default false
+             */
+            rebilled_cost: boolean;
+            /** Rental Factor Group Id */
+            rental_factor_group_id?: string | null;
+            /** Revenue Account */
+            revenue_account?: string | null;
+            /** Sku */
+            sku?: string | null;
+            /** Unit Id */
+            unit_id?: string | null;
         };
         /** LoginRequest */
         LoginRequest: {
@@ -4177,6 +5366,54 @@ export interface components {
             /** Password */
             password: string;
         };
+        /** RentalFactorGroupResponse */
+        RentalFactorGroupResponse: {
+            /** Factors */
+            factors?: components["schemas"]["RentalFactorResponse"][];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Name */
+            name: string;
+            /** Notes */
+            notes?: string | null;
+        };
+        /** RentalFactorGroupWrite */
+        RentalFactorGroupWrite: {
+            /** Is Active */
+            is_active?: boolean | null;
+            /** Name */
+            name: string;
+            /** Notes */
+            notes?: string | null;
+        };
+        /** RentalFactorResponse */
+        RentalFactorResponse: {
+            /** Days */
+            days: number;
+            /**
+             * Factor
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 1
+             * @example 1.5000
+             */
+            factor: string;
+        };
+        /** RentalFactorWrite */
+        RentalFactorWrite: {
+            /** Days */
+            days: number;
+            /**
+             * Factor
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @example 1.5000
+             */
+            factor: string;
+        };
         /**
          * ResolvedFieldResponse
          * @description A value and the level it came from. Both, always.
@@ -4471,6 +5708,7 @@ export interface components {
             /**
              * Rate
              * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 1
              * @example 1.5000
              */
             rate: string;
@@ -4537,6 +5775,7 @@ export interface components {
             /**
              * Rate
              * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 1
              * @example 1.5000
              */
             rate: string;
@@ -4752,6 +5991,7 @@ export interface components {
             /**
              * Rate
              * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 1
              * @example 1.5000
              */
             rate: string;
@@ -4763,6 +6003,24 @@ export interface components {
         TaxRateResponse: {
             tax_class: components["schemas"]["TaxClassResponse"];
             tax_code: components["schemas"]["TaxCodeResponse"];
+        };
+        /** TaxRefTotalResponse */
+        TaxRefTotalResponse: {
+            /** Gross */
+            gross?: string | null;
+            /**
+             * Net
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            net: string;
+            /** Rate */
+            rate?: string | null;
+            /** Tax Ref */
+            tax_ref: string;
+            /** Vat */
+            vat?: string | null;
         };
         /**
          * TaxRuleResponse
@@ -5032,6 +6290,57 @@ export interface components {
             code: string;
             /** Pending Token */
             pending_token: string;
+        };
+        /** UnitCreate */
+        UnitCreate: {
+            /** Is Active */
+            is_active?: boolean | null;
+            /** Key */
+            key: string;
+            /** Label De */
+            label_de: string;
+            /** Label En */
+            label_en?: string | null;
+            /**
+             * Period Unit
+             * @enum {string}
+             */
+            period_unit: "day" | "flat" | "half_day" | "hour" | "km" | "month" | "night" | "piece" | "week";
+            /** Position */
+            position?: number | null;
+        };
+        /** UnitResponse */
+        UnitResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Is System */
+            is_system: boolean;
+            /** Key */
+            key: string;
+            /** Label De */
+            label_de: string;
+            /** Label En */
+            label_en?: string | null;
+            /** Period Unit */
+            period_unit: string;
+            /** Position */
+            position: number;
+        };
+        /** UnitWrite */
+        UnitWrite: {
+            /** Is Active */
+            is_active?: boolean | null;
+            /** Label De */
+            label_de: string;
+            /** Label En */
+            label_en?: string | null;
+            /** Position */
+            position?: number | null;
         };
         /** UpdateProfileRequest */
         UpdateProfileRequest: {
@@ -5971,6 +7280,813 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TokenResponse"] | components["schemas"]["TwoFactorRequiredResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_calculation_calc_preview_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CalcPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalcPreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_categories_catalog_categories_get: {
+        parameters: {
+            query?: {
+                include_inactive?: boolean;
+                kind?: string | null;
+            };
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemCategoryResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_category_catalog_categories_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ItemCategoryCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemCategoryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_category_catalog_categories__category_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                category_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ItemCategoryWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemCategoryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    deactivate_category_catalog_categories__category_id__deactivate_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                category_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemCategoryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reactivate_category_catalog_categories__category_id__reactivate_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                category_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemCategoryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_items_catalog_items_get: {
+        parameters: {
+            query?: {
+                search?: string | null;
+                kind?: string | null;
+                category_id?: string | null;
+                rental_factor_group_id?: string | null;
+                include_inactive?: boolean;
+                limit?: number;
+                offset?: number;
+            };
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_item_catalog_items_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ItemCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    apply_item_import_catalog_items_import_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_apply_item_import_catalog_items_import_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportApplyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_item_import_catalog_items_import_preview_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_preview_item_import_catalog_items_import_preview_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportPreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_item_catalog_items__item_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_item_catalog_items__item_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ItemWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    deactivate_item_catalog_items__item_id__deactivate_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    replace_item_rates_catalog_items__item_id__rates_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ItemRateWrite"][];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemRateResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reactivate_item_catalog_items__item_id__reactivate_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_factor_groups_catalog_rental_factor_groups_get: {
+        parameters: {
+            query?: {
+                include_inactive?: boolean;
+            };
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RentalFactorGroupResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_factor_group_catalog_rental_factor_groups_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RentalFactorGroupWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RentalFactorGroupResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_factor_group_catalog_rental_factor_groups__group_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RentalFactorGroupWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RentalFactorGroupResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    look_up_factor_catalog_rental_factor_groups__group_id__factor_get: {
+        parameters: {
+            query: {
+                /** @description Rental days to price. */
+                days: number;
+            };
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FactorLookupResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    replace_factors_catalog_rental_factor_groups__group_id__factors_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RentalFactorWrite"][];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RentalFactorGroupResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_units_catalog_units_get: {
+        parameters: {
+            query?: {
+                include_inactive?: boolean;
+            };
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnitResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_unit_catalog_units_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UnitCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnitResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_unit_catalog_units__unit_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                unit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UnitWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnitResponse"];
                 };
             };
             /** @description Validation Error */

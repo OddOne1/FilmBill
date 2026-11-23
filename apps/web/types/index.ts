@@ -255,6 +255,75 @@ export const VAT_NOT_CHECKABLE = 'not_checkable'
  *  be missed here. */
 export type TaxIdKind = PartyTaxIdCreate['kind']
 
+// ─── Catalog (A1) ───────────────────────────────────────────────────────────
+
+export type Item = Schemas['ItemResponse']
+export type ItemPage = Schemas['ItemPage']
+export type ItemWrite = Schemas['ItemWrite']
+export type ItemRate = Schemas['ItemRateResponse']
+export type ItemRateWrite = Schemas['ItemRateWrite']
+export type ItemCategory = Schemas['ItemCategoryResponse']
+export type Unit = Schemas['UnitResponse']
+export type RentalFactorGroup = Schemas['RentalFactorGroupResponse']
+export type RentalFactor = Schemas['RentalFactorResponse']
+export type FactorLookup = Schemas['FactorLookupResponse']
+export type ImportPreview = Schemas['ImportPreviewResponse']
+export type ImportApplyResult = Schemas['ImportApplyResponse']
+export type ImportRow = Schemas['ImportRowResponse']
+
+/** The ten item kinds. Fixed by the system because they drive behaviour —
+ *  which account an item posts to, whether `rebilled_cost` means anything,
+ *  what a kinds-based adjustment catches (SCOPE §4.1). Taken from the
+ *  generated schema, so a kind added server-side cannot be missed here. */
+export type ItemKind = NonNullable<Schemas['ItemWrite']['kind']>
+
+/** `bill` (what the customer pays) or `cost` (what it costs us). */
+export type RateType = NonNullable<Schemas['ItemRateWrite']['rate_type']>
+
+/** `day` · `hour` · `half_day` · `night` · `week` · `month` · `flat` ·
+ *  `piece` · `km`. The engine's period vocabulary and the seeded units are
+ *  the same list, asserted on the server at import time. */
+export type PeriodUnit = NonNullable<Schemas['ItemRateWrite']['period_unit']>
+
+/** `create` · `update` · `error` — what one line of a CSV would do. */
+export type ImportAction = ImportRow['action']
+
+// ─── The calculation engine (A1) ────────────────────────────────────────────
+//
+// The web app sends these and renders what comes back. It never adds a
+// column up, re-rounds a subtotal, or derives VAT from a net (CLAUDE.md
+// rule 2) — which is why there is a request type here at all rather than a
+// local model with a `total()` method on it.
+
+export type CalcPreviewRequest = Schemas['CalcPreviewRequest']
+export type CalcPreviewResponse = Schemas['CalcPreviewResponse']
+export type CalcDocumentRequest = Schemas['CalcDocumentRequest']
+export type CalcLine = Schemas['CalcLine']
+export type CalcGroup = Schemas['CalcGroup']
+export type CalcAdjustment = Schemas['CalcAdjustment']
+export type CalcLineResult = Schemas['CalcLineResult']
+export type CalcGroupResult = Schemas['CalcGroupResult']
+export type CalcAdjustmentResult = Schemas['CalcAdjustmentResult']
+export type CalcVat = Schemas['CalcVatResponse']
+export type CalcWarning = Schemas['CalcWarningResponse']
+
+/** A child of a document or a group: a line, or one more group.
+ *
+ *  **This is the one union OpenAPI could not express for us usefully.** The
+ *  server's request model is a discriminated union on `type` and the
+ *  generated types do carry it, but `CalcGroup['children']` comes out as the
+ *  recursive alias and TypeScript cannot narrow it without the tag spelled
+ *  out. So it is spelled out: a result row is a line when `type === 'line'`,
+ *  and every walk of the tree in this app goes through that check. */
+export type CalcChild = CalcLine | CalcGroup
+export type CalcChildResult = CalcLineResult | CalcGroupResult
+
+export function isCalcGroupResult(
+  row: CalcChildResult,
+): row is CalcGroupResult {
+  return row.type === 'group'
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // Hand-written, deliberately
 //

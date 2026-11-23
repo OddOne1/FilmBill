@@ -87,6 +87,15 @@ def create_company(
     from .tax_service import seed_tax_configuration
 
     seed_tax_configuration(db, company=company)
+
+    # And the catalog's own fixed furniture: the nine system units and one
+    # default category per item kind (A1, SCOPE §4.1–4.2). Unlike the tax
+    # pack this needs no country — a day is a day — so it always runs, and
+    # like the tax pack it never overwrites, so re-seeding a company that
+    # already has a catalog adds nothing.
+    from .catalog_service import seed_catalog
+
+    seed_catalog(db, company=company)
     return company
 
 

@@ -36,12 +36,16 @@ from .company_factories import (
     grant,
     make_bank_account,
     make_company,
+    make_item,
+    make_item_category,
     make_number_series,
     make_party,
     make_party_tax_id,
+    make_rental_factor_group,
     make_superadmin,
     make_tax_class,
     make_tax_code,
+    make_unit,
     make_user,
     unrelated_company_id,
 )
@@ -67,7 +71,13 @@ from .company_factories import (
 #: selector was a TAG. Listed explicitly rather than widened to "anything
 #: scoped", because the point of this function is that adding a path somebody
 #: forgot about makes a test fail rather than quietly pass.
-_SCOPED_PREFIXES = ("/company/", "/parties")
+#: `/catalog` and `/calc` join them for A1, and the reasoning repeats a third
+#: time: twenty-three endpoints on top-level paths. `/calc/preview` touches no
+#: company-scoped ROW at all — it is pure arithmetic — and it is in here
+#: anyway, because it takes a company context through `require()` and
+#: "pointing the header at a company you are not in is a 404" has to be true
+#: of every endpoint that takes one, not only of the ones that read a table.
+_SCOPED_PREFIXES = ("/company/", "/parties", "/catalog", "/calc")
 _SCOPED_EXACT = ("/companies", "/company", "/parties")
 
 
@@ -224,6 +234,60 @@ CASES: dict[str, object] = {
     "GET /company/tax/id-check-policy": {"body": None},
     "PATCH /company/tax/id-check-policy": {"body": {"recheck_interval_days": 30}},
     "POST /parties/{party_id}/tax-preview": {"body": {"supply_kind": "services"}},
+    # A1. Twenty-three endpoints on `/catalog` and `/calc`, which is why
+    # `_SCOPED_PREFIXES` had to learn about both. Every `{item_id}`,
+    # `{category_id}`, `{unit_id}` and `{group_id}` below is substituted with
+    # a row belonging to company B — a router that dropped its `company_id`
+    # filter FINDS those rows, and anything but a 404 confirms they exist.
+    "GET /catalog/units": {"body": None},
+    "POST /catalog/units": {
+        "body": {"key": "drehtag", "label_de": "Drehtag", "period_unit": "day"}
+    },
+    "PATCH /catalog/units/{unit_id}": {"body": {"label_de": "Stolen"}},
+    "GET /catalog/categories": {"body": None},
+    "POST /catalog/categories": {"body": {"name": "Stolen", "kind": "fee"}},
+    "PATCH /catalog/categories/{category_id}": {"body": {"name": "Stolen"}},
+    "POST /catalog/categories/{category_id}/deactivate": {"body": None},
+    "POST /catalog/categories/{category_id}/reactivate": {"body": None},
+    "GET /catalog/items": {"body": None},
+    "POST /catalog/items": {"body": {"name_de": "Stolen", "kind": "fee"}},
+    "GET /catalog/items/{item_id}": {"body": None},
+    "PATCH /catalog/items/{item_id}": {
+        "body": {"name_de": "Stolen", "kind": "fee"}
+    },
+    "PUT /catalog/items/{item_id}/rates": {
+        "body": [{"rate_type": "bill", "period_unit": "day", "amount": "1.00"}]
+    },
+    "POST /catalog/items/{item_id}/deactivate": {"body": None},
+    "POST /catalog/items/{item_id}/reactivate": {"body": None},
+    "GET /catalog/rental-factor-groups": {"body": None},
+    "POST /catalog/rental-factor-groups": {"body": {"name": "Stolen"}},
+    "PATCH /catalog/rental-factor-groups/{group_id}": {"body": {"name": "Stolen"}},
+    "PUT /catalog/rental-factor-groups/{group_id}/factors": {
+        "body": [{"days": 1, "factor": "1.0"}]
+    },
+    "GET /catalog/rental-factor-groups/{group_id}/factor": {
+        "body": None,
+        "query": {"days": 5},
+    },
+    # The two multipart endpoints. `files` rather than `body`, because a JSON
+    # body would be refused as malformed multipart with a 422 — and a 422 is
+    # not a 404, so the first test below would pass for entirely the wrong
+    # reason while the second failed.
+    "POST /catalog/items/import/preview": {
+        "files": {"file": ("items.csv", b"sku;name_de;kind\nX-1;Stolen;fee\n", "text/csv")}
+    },
+    "POST /catalog/items/import": {
+        "files": {"file": ("items.csv", b"sku;name_de;kind\nX-1;Stolen;fee\n", "text/csv")}
+    },
+    # Pure arithmetic, no stored row — and still a company endpoint.
+    "POST /calc/preview": {
+        "body": {
+            "document": {
+                "children": [{"id": "l1", "unit_price": "100.00", "quantity": "2"}]
+            }
+        }
+    },
 }
 
 #: Placeholder -> the key in the `two_companies` fixture holding a row that
@@ -237,6 +301,10 @@ OTHER_COMPANY_ROWS = {
     "{party_id}": "party_in_b",
     "{tax_id_id}": "tax_id_in_b",
     "{check_id}": "check_in_b",
+    "{item_id}": "item_in_b",
+    "{category_id}": "category_in_b",
+    "{unit_id}": "unit_in_b",
+    "{group_id}": "group_in_b",
 }
 
 
@@ -326,6 +394,15 @@ def two_companies(pg_db):
         country="DE",
         is_primary=True,
     )
+    # And the catalog rows A1 added: an item, a category, a unit and a factor
+    # group, all B's. Every `/catalog/...{id}` endpoint looked up without a
+    # company filter would FIND them.
+    unit_in_b = make_unit(pg_db, company_b)
+    category_in_b = make_item_category(pg_db, company_b)
+    group_in_b = make_rental_factor_group(pg_db, company_b)
+    item_in_b = make_item(
+        pg_db, company_b, category=category_in_b, unit=unit_in_b
+    )
     check_in_b = PartyVatCheck(
         company_id=company_b.id,
         party_id=party_in_b.id,
@@ -352,6 +429,10 @@ def two_companies(pg_db):
         "party_in_b": party_in_b,
         "tax_id_in_b": tax_id_in_b,
         "check_in_b": check_in_b,
+        "item_in_b": item_in_b,
+        "category_in_b": category_in_b,
+        "unit_in_b": unit_in_b,
+        "group_in_b": group_in_b,
     }
 
 
@@ -359,7 +440,24 @@ def _send(client, operation: str, headers: dict, case: dict, world: dict):
     method, path = operation.split(" ", 1)
     for placeholder, key in OTHER_COMPANY_ROWS.items():
         path = path.replace(placeholder, str(world[key].id))
-    return client.request(method, path, headers=headers, json=case.get("body"))
+    if "files" in case:
+        # A multipart endpoint. Sending `json=` to one gets a 422 for the
+        # wrong reason — see the CSV import cases above.
+        return client.request(
+            method,
+            path,
+            headers=headers,
+            files=case["files"],
+            data=case.get("data"),
+            params=case.get("query"),
+        )
+    return client.request(
+        method,
+        path,
+        headers=headers,
+        json=case.get("body"),
+        params=case.get("query"),
+    )
 
 
 def _targets_another_companys_row(operation: str) -> bool:

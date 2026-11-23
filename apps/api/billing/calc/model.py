@@ -509,8 +509,8 @@ def group_from_data(data: Mapping[str, Any]) -> Group:
 CHILD_TYPES: tuple[str, ...] = ("group", "line")
 
 
-def _is_group(entry: Mapping[str, Any], *, where: str) -> bool:
-    """Whether this child is a group. Explicit `type` wins over shape.
+def child_type(entry: Mapping[str, Any], *, where: str = "a child") -> str:
+    """`"group"` or `"line"`. Explicit `type` wins over shape.
 
     The shape fallback — "it has `children`, so it is a group" — is what a
     hand-written fixture or a curl command will rely on. The explicit tag is
@@ -518,13 +518,21 @@ def _is_group(entry: Mapping[str, Any], *, where: str) -> bool:
     can make in the editor and `{"id": "g3", "children": []}` and
     `{"id": "g3"}` would otherwise be a group and a line with no price. The
     tag removes that difference instead of documenting it.
+
+    Public, and the only answer to this question anywhere: `schemas/calc.py`
+    calls it to tag a child before Pydantic's discriminated union looks for
+    the tag. Without that, the API would be strictly stricter than the
+    engine — every fixture in `tests/fixtures/calc/` omits `type` on its
+    lines — and "what counts as a group" would have two answers.
     """
     declared = entry.get("type")
     if declared is not None:
-        return check_member(
-            declared, CHILD_TYPES, what="child type", where=where
-        ) == "group"
-    return "children" in entry
+        return check_member(declared, CHILD_TYPES, what="child type", where=where)
+    return "group" if "children" in entry else "line"
+
+
+def _is_group(entry: Mapping[str, Any], *, where: str) -> bool:
+    return child_type(entry, where=where) == "group"
 
 
 def _children_from_data(entries: Any, *, where: str) -> tuple[Child, ...]:

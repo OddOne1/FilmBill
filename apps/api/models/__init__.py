@@ -16,6 +16,14 @@ from .company import (
 from .number_series import NumberAllocation, NumberSeries
 from .audit import AuditEvent
 from .tax import TaxClass, TaxCode, TaxRule
+from .catalog import (
+    Item,
+    ItemCategory,
+    ItemRate,
+    RentalFactor,
+    RentalFactorGroup,
+    Unit,
+)
 from .party import (
     Party,
     PartyAddress,
@@ -49,4 +57,10 @@ __all__ = [
     "PartyContactPoint",
     "PartyTaxId",
     "PartyVatCheck",
+    "Item",
+    "ItemCategory",
+    "ItemRate",
+    "RentalFactor",
+    "RentalFactorGroup",
+    "Unit",
 ]

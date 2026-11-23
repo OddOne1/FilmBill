@@ -33,6 +33,7 @@ from .engine import (
     display_row_for_group,
 )
 from .model import (
+    child_type,
     CHILD_TYPES,
     Adjustment,
     CalcDocument,
@@ -93,6 +94,7 @@ __all__ = [
     "adjustment_from_data",
     "apply_vat",
     "calculate",
+    "child_type",
     "display_row_for_group",
     "document_from_data",
     "group_from_data",

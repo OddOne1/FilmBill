@@ -113,6 +113,11 @@ class LineResult:
     gross: Decimal
     #: What the line's own discount took off, as a positive number.
     discount_amount: Decimal
+    #: `"line"`. A constant, carried so a result tree can be told apart row
+    #: by row without inspecting which fields happen to be present. The
+    #: API's response models discriminate on it, and so does a client
+    #: walking the tree.
+    type: str = "line"
 
 
 @dataclass(frozen=True)
@@ -155,6 +160,8 @@ class GroupResult:
     #: This group's contribution to the document's net per tax category: its
     #: lines, its own adjustments and its descendants'. Sums to `subtotal`.
     net_by_tax_ref: Mapping[str, Decimal]
+    #: `"group"`. See `LineResult.type`.
+    type: str = "group"
 
 
 @dataclass(frozen=True)

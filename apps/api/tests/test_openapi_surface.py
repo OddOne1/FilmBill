@@ -50,6 +50,21 @@ EXPECTED_TAGS = {
     #: answerable by looking at one tag.
     "audit",
     "auth",           # includes every /auth/2fa/* endpoint
+    #: A1. The stateless calculation preview — one POST, no stored state.
+    #: A tag of its own and not `catalog`, because the engine is the thing
+    #: A2's budget sheet and every document from P2 on will ask, and
+    #: "what can compute money" should be answerable from one tag. It is
+    #: `/calc/...` rather than `/company/.../calc` because it reads no
+    #: company-scoped row at all; the membership check is still there, so
+    #: `test_company_isolation` had to learn about the path (see that file).
+    "calc",
+    #: A1. The price list: items, categories, units and rental factor
+    #: tables. A top-level PATH rather than `/company/...` for the same
+    #: reason `/parties` is one — a price list is not a company setting —
+    #: and the same consequence: `test_company_isolation._is_company_scoped`
+    #: has to know about `/catalog`, or eighteen endpoints would be
+    #: invisible to the suite that proves cross-company isolation.
+    "catalog",
     #: P0b-1. Two path shapes under one tag: `/companies` (plural) for the
     #: two operations with no company context — listing yours, creating one —
     #: and `/company/...` (singular) for everything that acts inside the
