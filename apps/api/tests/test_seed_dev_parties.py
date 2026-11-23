@@ -191,8 +191,6 @@ def test_the_script_is_idempotent_on_name(pg_db, monkeypatch, script):
     with `SessionLocal` pointed at the test session — so this covers the
     actual insert path rather than a re-implementation of it.
     """
-    import os
-
     from apps.api.models.company import Company
     from apps.api.models.party import Party
     from apps.api.services.number_series import seed_number_series
@@ -203,7 +201,20 @@ def test_the_script_is_idempotent_on_name(pg_db, monkeypatch, script):
     seed_number_series(pg_db, company_id=company.id)
     pg_db.commit()
 
-    monkeypatch.setenv("DATABASE_URL", os.environ["DATABASE_URL"])
+    # The URL of the database this test actually writes to, not the ambient
+    # one. `SessionLocal` is patched to `pg_db` below, so every insert lands
+    # in the scratch database (`filmbill_pytest_scratch_<pid>`) whatever
+    # DATABASE_URL says — and the script reads DATABASE_URL only to decide
+    # whether it is allowed to run at all. Handing it the ambient value made
+    # the test depend on what the runner happened to set: CI sets
+    # `filmbill_test`, which `DEV_DATABASE_NAMES` does not list, so
+    # `check_environment` refused, `main()` returned 2 and this assertion
+    # failed — invisibly, because a `| tee` in ci.yml was swallowing the
+    # exit code. `filmbill_pytest*` is allowlisted on purpose, which is what
+    # `test_a_pytest_scratch_database_is_accepted` above is about.
+    monkeypatch.setenv(
+        "DATABASE_URL", pg_db.get_bind().url.render_as_string(hide_password=False)
+    )
     monkeypatch.delenv("FILMBILL_ENV", raising=False)
 
     import apps.api.database as database
@@ -227,8 +238,6 @@ def test_the_seeded_chain_resolves_the_way_the_acceptance_expects(
 ):
     """Acceptance item 3, as a test: the person inherits the organisation's
     address and keeps her own name."""
-    import os
-
     from apps.api.models.party import Party
     from apps.api.services import party_service
     from apps.api.services.number_series import seed_number_series
@@ -238,7 +247,20 @@ def test_the_seeded_chain_resolves_the_way_the_acceptance_expects(
     company = make_company(pg_db, "Seed Target OG", address_country="AT")
     seed_number_series(pg_db, company_id=company.id)
     pg_db.commit()
-    monkeypatch.setenv("DATABASE_URL", os.environ["DATABASE_URL"])
+    # The URL of the database this test actually writes to, not the ambient
+    # one. `SessionLocal` is patched to `pg_db` below, so every insert lands
+    # in the scratch database (`filmbill_pytest_scratch_<pid>`) whatever
+    # DATABASE_URL says — and the script reads DATABASE_URL only to decide
+    # whether it is allowed to run at all. Handing it the ambient value made
+    # the test depend on what the runner happened to set: CI sets
+    # `filmbill_test`, which `DEV_DATABASE_NAMES` does not list, so
+    # `check_environment` refused, `main()` returned 2 and this assertion
+    # failed — invisibly, because a `| tee` in ci.yml was swallowing the
+    # exit code. `filmbill_pytest*` is allowlisted on purpose, which is what
+    # `test_a_pytest_scratch_database_is_accepted` above is about.
+    monkeypatch.setenv(
+        "DATABASE_URL", pg_db.get_bind().url.render_as_string(hide_password=False)
+    )
     monkeypatch.delenv("FILMBILL_ENV", raising=False)
 
     import apps.api.database as database

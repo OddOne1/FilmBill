@@ -91,8 +91,18 @@ jobs:
       # see is the shape that has cost this project three green runs that had
       # not run — see the real-database guard two steps down, and
       # docs/engineering/test-harness-traps.md.
+      # `set -o pipefail` is the whole reason this is a block and not a
+      # one-liner. GitHub Actions runs `run:` as `bash -e {0}` — WITHOUT
+      # pipefail — so `pytest | tee` reports tee's exit status and a failing
+      # suite leaves a green step. That is not hypothetical: two tests in
+      # `test_seed_dev_parties.py` failed on main from 11afc1d until A1 and
+      # every run stayed green, because the only thing left checking was the
+      # passed-count floor below, and 2267 of 2269 clears a floor of 750.
+      # Nineteenth instance of docs/engineering/test-harness-traps.md.
       - name: Run tests
-        run: python -m pytest apps/api/tests/ -q --tb=short -rs | tee test-output.txt
+        run: |
+          set -o pipefail
+          python -m pytest apps/api/tests/ -q --tb=short -rs | tee test-output.txt
 
       # The suite is the guard against the API surface widening, media code
       # coming back, and Celery tasks landing on a queue nobody consumes.
@@ -119,7 +129,12 @@ jobs:
       # turn 130 checks into 130 skips and the job would stay green.
       - name: Real-database tests ran, not skipped
         run: |
-          python -m pytest apps/api/tests/ -m realdb -q --tb=short -rs             | tee realdb-output.txt
+          # Same reason as the step above: without pipefail this `| tee`
+          # throws away pytest's exit status, so a real-database test that
+          # FAILS (as opposed to skipping, which the check below catches)
+          # would never reach these assertions.
+          set -o pipefail
+          python -m pytest apps/api/tests/ -m realdb -q --tb=short -rs | tee realdb-output.txt
           PASSED=$(grep -oE '[0-9]+ passed' realdb-output.txt | grep -oE '[0-9]+' | head -1)
           SKIPPED=$(grep -oE '[0-9]+ skipped' realdb-output.txt | grep -oE '[0-9]+' | head -1)
           echo "Real-database tests passed: ${PASSED:-0}, skipped: ${SKIPPED:-0}"
