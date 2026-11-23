@@ -8,6 +8,7 @@ import {
   Bell,
   ChevronsLeft,
   LayoutDashboard,
+  Tags,
   Users,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -46,6 +47,11 @@ const navItems: NavItem[] = [
   // entry rather than a company setting, because a customer list is not a
   // setting — it is one of the two things the application is about.
   { href: '/parties', label: 'Parties', icon: Users, permission: 'parties.view' },
+  // A1. The price list, and the calculator that runs on the same engine
+  // every quote and invoice will. `catalog.view` is held by everybody except
+  // the tax advisor — staff included, because looking up what a truck costs
+  // per day is reading a price list, not reading the customer base.
+  { href: '/catalog', label: 'Catalog', icon: Tags, permission: 'catalog.view' },
   { href: '/archive', label: 'Archive', icon: Archive, permission: 'archive.view' },
 ]
 
