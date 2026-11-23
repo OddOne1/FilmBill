@@ -118,7 +118,8 @@ jobs:
       # suite leaves a green step. That is not hypothetical: two tests in
       # `test_seed_dev_parties.py` failed on main from 11afc1d until A1 and
       # every run stayed green, because the only thing left checking was the
-      # passed-count floor below, and 2267 of 2269 clears a floor of 750.
+      # passed-count floor below, which was then 750 — and 2267 of 2269
+      # clears 750 without a flicker. Both floors are now within 3 %.
       # Nineteenth instance of docs/engineering/test-harness-traps.md.
       - name: Run tests
         run: |
@@ -138,10 +139,25 @@ jobs:
           # the `-z` check below can print anything useful.
           PASSED=$(grep -oE '[0-9]+ passed' test-output.txt | grep -oE '[0-9]+' | head -1 || true)
           echo "Tests passed: ${PASSED:-0}"
-          # Raised from 250 with P0b-3: the suite is at 814 and a floor of
-          # 250 would no longer notice two thirds of it disappearing.
-          if [ -z "$PASSED" ] || [ "$PASSED" -lt 750 ]; then
-            echo "::error::Expected at least 750 passing tests, got ${PASSED:-0}."
+          # 2200, set at A1 (2026-11-23) when the suite was 2275 passing.
+          # That is a margin of 75 tests, about 3 %.
+          #
+          # Why 3 % and not the 67 % of slack this floor used to carry: the
+          # previous value was 750, set when the suite was 814, and never
+          # moved while the suite grew to 2275. By then it could absorb two
+          # thirds of the suite vanishing, and it DID absorb two failing
+          # tests for months — it was the only check left once `| tee` ate
+          # the exit code (trap 19). A floor is not a safety net; it is what
+          # is left when the real check breaks, so it has to sit just under
+          # the real number.
+          #
+          # 3 % is the tightest margin that does not redden the build on
+          # ordinary churn — a handful of tests deleted along with a feature.
+          # It will NOT notice ten tests going missing; nothing this shape
+          # can. It notices a collapse, which is what it is for. Per
+          # CLAUDE.md, the closing commit of every phase moves it back up.
+          if [ -z "$PASSED" ] || [ "$PASSED" -lt 2200 ]; then
+            echo "::error::Expected at least 2200 passing tests, got ${PASSED:-0}."
             exit 1
           fi
 
@@ -166,8 +182,13 @@ jobs:
           PASSED=$(grep -oE '[0-9]+ passed' realdb-output.txt | grep -oE '[0-9]+' | head -1 || true)
           SKIPPED=$(grep -oE '[0-9]+ skipped' realdb-output.txt | grep -oE '[0-9]+' | head -1 || true)
           echo "Real-database tests passed: ${PASSED:-0}, skipped: ${SKIPPED:-0}"
-          if [ -z "$PASSED" ] || [ "$PASSED" -lt 120 ]; then
-            echo "::error::Expected at least 120 passing real-database tests, got ${PASSED:-0}. A real-database check that does not RUN is not a check."
+          # 900, set at A1 (2026-11-23) when `-m realdb` was 931 passing.
+          # A margin of 31 tests, about 3 %, for the same reason as the
+          # floor in the step above — and with the same history: this was
+          # 120 while the real count was 931, so seven eighths of the
+          # real-database suite could have stopped running unnoticed.
+          if [ -z "$PASSED" ] || [ "$PASSED" -lt 900 ]; then
+            echo "::error::Expected at least 900 passing real-database tests, got ${PASSED:-0}. A real-database check that does not RUN is not a check."
             exit 1
           fi
           if [ -n "$SKIPPED" ] && [ "$SKIPPED" -gt 0 ]; then

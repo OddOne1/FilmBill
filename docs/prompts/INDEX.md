@@ -1304,6 +1304,12 @@ computes money.
 **Part 4 — documentation (`3c784fd`).** SCOPE §16 D69–D73 and the §13 slice plan
 (A1, A2, B, C).
 
+**Counts.** API **2275 passed** (1929 before A1), of which **931** are
+`-m realdb` and none skip in CI; web **624 passed / 55 files**. Declared
+environment: real PostgreSQL 15 and Redis, `python:3.11`; web on Linux in
+`node:20` via `pnpm ci:web`. CI's floors were raised to 2200 and 900 in the
+same phase (CLAUDE.md 17e).
+
 **Flagged.**
 - **D71, the rental factor lookup rule, is `[Guessing]` and an open question
   for Mathias**, not for the Steuerberater: six days with rows at five and seven
