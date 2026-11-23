@@ -1,0 +1,24 @@
+{
+  "why": "The two zeros that are not the same zero. A line with no net has NO margin percentage — `null`, not 0 and not 100, because either number would be a claim about a row that has none. A line that is sold at exactly its cost has a margin percentage, and it is 0.00. A result type that collapsed the two would make the first row read as a 0 % margin, which is the kind of thing a producer acts on.",
+  "document": {
+    "id": "zeros",
+    "children": [
+      { "id": "unfilled", "label": "Nothing booked yet", "quantity": "0", "period_value": "1", "period_unit": "day", "unit_price": "500", "unit_cost": "400", "tax_ref": "AT-20" },
+      { "id": "at-cost", "label": "Rebilled at cost", "quantity": "1", "period_value": "1", "period_unit": "flat", "unit_price": "100", "unit_cost": "100", "tax_ref": "AT-20" }
+    ]
+  },
+  "expect": {
+    "subtotal": "100.00",
+    "net": "100.00",
+    "cost": "100.00",
+    "margin": "0.00",
+    "margin_percent": "0.00",
+    "net_by_tax_ref": { "AT-20": "100.00" },
+    "warnings": [],
+    "lines": {
+      "unfilled": { "net": "0.00", "cost_net": "0.00", "margin": "0.00", "margin_percent": null },
+      "at-cost": { "net": "100.00", "cost_net": "100.00", "margin": "0.00", "margin_percent": "0.00" }
+    },
+    "vat": { "rates": { "AT-20": "20" }, "net": "100.00", "vat": "20.00", "gross": "120.00" }
+  }
+}

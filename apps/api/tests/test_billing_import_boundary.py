@@ -48,15 +48,20 @@ def test_importing_the_billing_package_loads_no_orm_and_no_web_framework():
     """
     program = (
         "import sys\n"
-        # Both packages, because the boundary is the PACKAGE's and a second
-        # one added later must not be exempt by having been forgotten here.
+        # EVERY sub-package, because the boundary is the whole package's
+        # and one added later must not be exempt by having been
+        # forgotten here. `calc` is the one that made this matter: it is
+        # the first part of billing/ that rounds money, and the rounding
+        # it needs lives in `core/rounding.py` precisely BECAUSE
+        # `core/money.py` imports SQLAlchemy and would be caught here.
         "import apps.api.billing.parties as parties\n"
         "import apps.api.billing.tax as tax\n"
+        "import apps.api.billing.calc as calc\n"
         # Touch EVERY exported name, so this is not merely a check on what
         # the __init__ statements do: an import inside a function body is
         # reached as well. Written against `__all__` rather than a named
         # function so it keeps covering the whole surface as the package grows.
-        "for module in (tax, parties):\n"
+        "for module in (tax, parties, calc):\n"
         "    assert module.__all__, f'{module.__name__} exports nothing'\n"
         "    for name in module.__all__:\n"
         "        getattr(module, name)\n"
@@ -74,12 +79,12 @@ def test_importing_the_billing_package_loads_no_orm_and_no_web_framework():
     )
 
     assert result.returncode == 0, (
-        f"apps.api.billing.tax does not import cleanly on its own:\n"
+        f"the billing package does not import cleanly on its own:\n"
         f"{result.stdout}\n{result.stderr}"
     )
     leaked = [name for name in result.stdout.strip().split("|") if name]
     assert not leaked, (
-        "importing apps.api.billing.tax pulled in "
+        "importing apps.api.billing pulled in "
         f"{', '.join(leaked)}. The billing package is pure Python over plain "
         "data — see its docstring. Move whatever needs a session into "
         "apps/api/services/ and pass the data in."
@@ -125,7 +130,9 @@ def _python_files() -> list[Path]:
 def test_the_package_has_files_to_check():
     """A glob that matched nothing would make the scan below vacuous."""
     files = _python_files()
-    assert len(files) >= 7, f"only found {files} under {BILLING}"
+    # tax (5) + parties (5) + calc (4), and the floor rises with the
+    # package rather than staying at the number it was written with.
+    assert len(files) >= 14, f"only found {files} under {BILLING}"
 
 
 def _imported_modules(path: Path) -> list[tuple[int, str]]:

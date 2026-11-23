@@ -1,0 +1,41 @@
+{
+  "why": "SCOPE §5.4 and S15, the same group with a drone added for ONE day: group net 2 970.00 (3 300 less the 10 % group discount), and because the lines no longer share a period the collapsed row must read `1 × € 2 970.00` with no days in it, plus `mixed_days_in_group`. The warning text is the sentence §5.4 specifies, which is why it lives in `vocabulary.WARNING_TEXT` rather than in a screen.",
+  "document": {
+    "id": "mixed-days",
+    "children": [
+      {
+        "type": "group",
+        "id": "camera",
+        "title": "Camera",
+        "children": [
+          { "id": "alexa", "quantity": "1", "period_value": "2", "period_unit": "day", "unit_price": "1200", "kind": "equipment_rental", "tax_ref": "AT-20" },
+          { "id": "lenses", "quantity": "1", "period_value": "2", "period_unit": "day", "unit_price": "300", "kind": "equipment_rental", "tax_ref": "AT-20" },
+          { "id": "drone", "quantity": "1", "period_value": "1", "period_unit": "day", "unit_price": "300", "kind": "equipment_rental", "tax_ref": "AT-20" }
+        ],
+        "adjustments": [
+          { "label": "Group discount", "type": "discount", "mode": "percent", "value": "10", "base": "subtotal" }
+        ]
+      }
+    ]
+  },
+  "expect": {
+    "subtotal": "2970.00",
+    "net": "2970.00",
+    "warnings": [{ "code": "mixed_days_in_group", "where": "group Camera" }],
+    "groups": {
+      "camera": { "subtotal_before_adjustments": "3300.00", "subtotal": "2970.00", "uniform_period": false }
+    },
+    "display_rows": {
+      "camera": {
+        "quantity": "1",
+        "period_value": null,
+        "period_unit": null,
+        "price_per_period": "2970.00",
+        "total": "2970.00",
+        "uniform_period": false,
+        "exact": true,
+        "warnings": [{ "code": "mixed_days_in_group", "where": "group Camera" }]
+      }
+    }
+  }
+}

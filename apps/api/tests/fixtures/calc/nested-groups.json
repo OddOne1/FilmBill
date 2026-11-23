@@ -1,0 +1,46 @@
+{
+  "why": "Two levels of group — the deepest SCOPE §5.4 allows — with an adjustment at EACH level, which is the case the engine's structure is easiest to get wrong on. The outer group's `subtotal` base must be 2 700.00: the inner group's own 10 % discount has already happened, so the outer 5 % is 135.00 and not 150.00. An implementation that built the outer group's base from the raw line nets would produce 2 850.00 here and would still look right on a flat document.",
+  "document": {
+    "id": "nested",
+    "children": [
+      {
+        "type": "group",
+        "id": "outer",
+        "title": "Production",
+        "children": [
+          {
+            "type": "group",
+            "id": "inner",
+            "title": "Camera",
+            "children": [
+              { "id": "alexa", "quantity": "1", "period_value": "2", "period_unit": "day", "unit_price": "1200", "kind": "equipment_rental", "tax_ref": "AT-20" },
+              { "id": "lenses", "quantity": "1", "period_value": "2", "period_unit": "day", "unit_price": "300", "kind": "equipment_rental", "tax_ref": "AT-20" }
+            ],
+            "adjustments": [
+              { "label": "Camera discount", "type": "discount", "mode": "percent", "value": "10", "base": "subtotal" }
+            ]
+          }
+        ],
+        "adjustments": [
+          { "label": "Outer discount", "type": "discount", "mode": "percent", "value": "5", "base": "subtotal" }
+        ]
+      }
+    ]
+  },
+  "expect": {
+    "subtotal": "2565.00",
+    "net": "2565.00",
+    "net_by_tax_ref": { "AT-20": "2565.00" },
+    "warnings": [],
+    "groups": {
+      "inner": { "subtotal_before_adjustments": "3000.00", "subtotal": "2700.00", "net_by_tax_ref": { "AT-20": "2700.00" } },
+      "outer": {
+        "subtotal_before_adjustments": "2700.00",
+        "subtotal": "2565.00",
+        "net_by_tax_ref": { "AT-20": "2565.00" },
+        "adjustments": [{ "label": "Outer discount", "base_amount": "2700.00", "amount": "-135.00" }]
+      }
+    },
+    "vat": { "rates": { "AT-20": "20" }, "net": "2565.00", "vat": "513.00", "gross": "3078.00" }
+  }
+}

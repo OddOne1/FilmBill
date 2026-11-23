@@ -1,10 +1,18 @@
-"""Money and quantities. The only place FilmBill rounds anything.
+"""Money and quantities on the wire and in the database.
 
 CLAUDE.md rule 1, made enforceable rather than aspirational: amounts are
 `Decimal`, never float; the database stores `NUMERIC(18,2)` for money and
 `NUMERIC(18,4)` for quantities and rates; the API serialises both as JSON
-**strings**; and the two `quantize_*` functions here are the only rounding in
-the system.
+**strings**; and `core/rounding.py` holds the only rounding in the system.
+
+**The arithmetic lives one file down, in `core/rounding.py`.** This module is
+the Pydantic and SQLAlchemy surface — the annotations and the column types —
+and it imports both of those libraries, which is exactly why the rounding
+could not stay here: `apps/api/billing/` may import neither (principle P1,
+`tests/test_billing_import_boundary.py`), and the calculation engine lives
+there and has to round. Splitting it was the only way to keep rule 1 literally
+true instead of having a second `quantize` in the engine. Every name this
+module used to own is re-exported below, so no caller changed.
 
 Three decisions worth the space, because each one is a bug that has shipped
 in other billing systems:
@@ -15,7 +23,7 @@ numbers are IEEE-754 doubles, so the request has already lost the value
 before FilmBill sees it — `12.3` is really 12.30000000000000426... and no
 amount of care downstream gets the original back. Refusing it makes the
 client send `"12.3"`, which is exact. An integer IS accepted, because an
-integer survives the round trip intact.
+integer survives the round trip intact. (`rounding.to_decimal`.)
 
 **2. Trailing zeros are preserved.** `"12.30"` stays `"12.30"` and does not
 become `"12.3"`. `Decimal` carries its own exponent, so the scale a value
@@ -31,103 +39,54 @@ to `quantize` makes that impossible; `test_money.py` proves it by setting a
 hostile global context and asserting the answer does not move.
 """
 
-from decimal import (
-    Context,
-    Decimal,
-    DivisionByZero,
-    InvalidOperation,
-    Overflow,
-    ROUND_HALF_UP,
-)
+from decimal import Decimal
 from typing import Annotated, Any
 
 from pydantic import BeforeValidator, PlainSerializer, WithJsonSchema
 from sqlalchemy import Numeric
 
-# ─── Scales ─────────────────────────────────────────────────────────────────
-
-#: Decimal places for money. Two, matching `NUMERIC(18,2)`.
-AMOUNT_PLACES = 2
-#: Decimal places for quantities, rates and unit prices. Four, matching
-#: `NUMERIC(18,4)` — a day rate split across three productions, or a
-#: percentage carried to four places, needs the room that money does not.
-QTY_PLACES = 4
-
-_AMOUNT_EXPONENT = Decimal(1).scaleb(-AMOUNT_PLACES)  # Decimal("0.01")
-_QTY_EXPONENT = Decimal(1).scaleb(-QTY_PLACES)  # Decimal("0.0001")
-
-#: The one context every rounding in FilmBill happens in.
-#:
-#: `prec=34` is IEEE-754 decimal128's precision: comfortably more than
-#: `NUMERIC(18,x)` can hold, so the precision limit is the database's and not
-#: an invisible second one here.
-#:
-#: The traps matter as much as the rounding. Without them an overflow or a
-#: division by zero yields `Infinity` or `NaN` and keeps going, and a `NaN`
-#: total reaches the database as a constraint violation three functions
-#: later, where nothing says what produced it. Trapped, it raises where it
-#: happened.
-_CONTEXT = Context(
-    prec=34,
-    rounding=ROUND_HALF_UP,
-    traps=[InvalidOperation, DivisionByZero, Overflow],
+from .rounding import (
+    AMOUNT_PLACES,
+    QTY_PLACES,
+    DecimalParseError,
+    divide,
+    multiply,
+    percent_of,
+    quantize_amount,
+    quantize_qty,
+    to_decimal,
 )
+
+#: Re-exported so that `from ..core.money import quantize_amount` keeps
+#: working and there is one obvious import for both halves of the subject.
+#: The implementations are in `core/rounding.py` — see this module's
+#: docstring for why they are not here.
+__all__ = [
+    "AMOUNT_PLACES",
+    "QTY_PLACES",
+    "AmountColumn",
+    "DecimalParseError",
+    "Money",
+    "QtyColumn",
+    "Quantity",
+    "divide",
+    "multiply",
+    "percent_of",
+    "quantize_amount",
+    "quantize_qty",
+    "to_decimal",
+]
 
 
 # ─── Parsing ────────────────────────────────────────────────────────────────
 
 
-class DecimalParseError(ValueError):
-    """A value that cannot be a money or quantity. Surfaces as a 422."""
-
-
-def _to_decimal(value: Any, *, what: str) -> Decimal:
-    """The one conversion. Strings and ints in, `Decimal` out, floats refused.
-
-    `bool` is checked before `int` on purpose: in Python `True` IS an `int`,
-    so an unguarded `isinstance(value, int)` silently turns a JSON `true` into
-    an amount of 1.
-    """
-    if isinstance(value, Decimal):
-        parsed = value
-    elif isinstance(value, bool):
-        raise DecimalParseError(f"{what} must be a string or an integer, not a boolean")
-    elif isinstance(value, int):
-        parsed = Decimal(value)
-    elif isinstance(value, str):
-        text = value.strip()
-        if not text:
-            raise DecimalParseError(f"{what} must not be empty")
-        try:
-            parsed = Decimal(text)
-        except InvalidOperation:
-            raise DecimalParseError(f"{what} is not a number: {value!r}") from None
-    elif isinstance(value, float):
-        # The whole point of this module. See the module docstring.
-        raise DecimalParseError(
-            f"{what} must be sent as a string, not a JSON number — a JSON "
-            f"number is a binary float and has already lost the exact value "
-            f"(got {value!r})"
-        )
-    else:
-        raise DecimalParseError(
-            f"{what} must be a string or an integer, not {type(value).__name__}"
-        )
-
-    # "NaN", "Infinity" and "sNaN" are all valid input to `Decimal()`. They
-    # are not valid amounts, and left through they would poison every total
-    # they touch without ever raising.
-    if not parsed.is_finite():
-        raise DecimalParseError(f"{what} must be a finite number, not {parsed}")
-    return parsed
-
-
 def _parse_amount(value: Any) -> Decimal:
-    return _to_decimal(value, what="An amount")
+    return to_decimal(value, what="An amount")
 
 
 def _parse_qty(value: Any) -> Decimal:
-    return _to_decimal(value, what="A quantity")
+    return to_decimal(value, what="A quantity")
 
 
 def _serialise(value: Decimal) -> str:
@@ -169,26 +128,6 @@ Quantity = Annotated[
     PlainSerializer(_serialise, return_type=str, when_used="json"),
     WithJsonSchema({**_JSON_SCHEMA, "examples": ["1.5000"]}),
 ]
-
-
-# ─── Rounding ───────────────────────────────────────────────────────────────
-
-
-def quantize_amount(value: Decimal) -> Decimal:
-    """Round to 2 dp, half up, in the local context. The only money rounding.
-
-    Half UP, not Python's default half-EVEN. Banker's rounding is the better
-    choice for long statistical sums and the wrong one for an invoice: the
-    rule a customer, an auditor and every other billing system in Austria
-    expect is that 0.005 becomes 0.01, every time, not "sometimes, depending
-    on the digit before it".
-    """
-    return value.quantize(_AMOUNT_EXPONENT, rounding=ROUND_HALF_UP, context=_CONTEXT)
-
-
-def quantize_qty(value: Decimal) -> Decimal:
-    """Round to 4 dp, half up, in the local context."""
-    return value.quantize(_QTY_EXPONENT, rounding=ROUND_HALF_UP, context=_CONTEXT)
 
 
 # ─── Columns ────────────────────────────────────────────────────────────────

@@ -1,0 +1,37 @@
+{
+  "why": "The collapsed row's honest edge. The group's lines all run 3 days, so the row MAY show days — but the group total of 100.00 over 3 days is 33.33 per day, and 3 × 33.33 is 99.99. The total stays 100.00 (it is the authoritative number) and `exact` is false with `collapsed_price_not_exact`, so a PDF or a screen can decide whether to print a breakdown that does not add up or fall back to `1 × total`. Silently printing 33.33 × 3 = 100.00 is the bug this case exists to make impossible.",
+  "document": {
+    "id": "inexact",
+    "children": [
+      {
+        "type": "group",
+        "id": "kit",
+        "title": "Kit",
+        "children": [
+          { "id": "k1", "quantity": "1", "period_value": "3", "period_unit": "day", "unit_price": "50", "tax_ref": "AT-20" }
+        ],
+        "adjustments": [
+          { "label": "Kit allowance", "type": "discount", "mode": "amount", "value": "50", "base": "subtotal" }
+        ]
+      }
+    ]
+  },
+  "expect": {
+    "subtotal": "100.00",
+    "net": "100.00",
+    "warnings": [],
+    "groups": { "kit": { "subtotal_before_adjustments": "150.00", "subtotal": "100.00", "uniform_period": true } },
+    "display_rows": {
+      "kit": {
+        "quantity": "1",
+        "period_value": "3",
+        "period_unit": "day",
+        "price_per_period": "33.33",
+        "total": "100.00",
+        "uniform_period": true,
+        "exact": false,
+        "warnings": [{ "code": "collapsed_price_not_exact", "where": "group Kit" }]
+      }
+    }
+  }
+}

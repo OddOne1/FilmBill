@@ -1,0 +1,24 @@
+{
+  "why": "A correction line. A negative quantity is refused unless the line says `allow_negative`, because in a budget it is a typo every time — and when it IS a correction it has to work, including through the pro-rata allocation (the correction's net is part of its category's weight). The second line's own margin_percent is 100.00 even though the line is negative: margin / net with both negative is positive, and that is correct — a credit of 120 with no cost behind it gives back 120 of margin.",
+  "document": {
+    "id": "correction",
+    "children": [
+      { "id": "service", "quantity": "1", "period_value": "1", "period_unit": "flat", "unit_price": "500", "kind": "fee", "tax_ref": "AT-20" },
+      { "id": "credit", "label": "Correction: one day not worked", "quantity": "-1", "period_value": "1", "period_unit": "flat", "unit_price": "120", "kind": "fee", "tax_ref": "AT-20", "allow_negative": true }
+    ]
+  },
+  "expect": {
+    "subtotal": "380.00",
+    "net": "380.00",
+    "cost": "0.00",
+    "margin": "380.00",
+    "margin_percent": "100.00",
+    "net_by_tax_ref": { "AT-20": "380.00" },
+    "warnings": [],
+    "lines": {
+      "service": { "net": "500.00", "margin": "500.00", "margin_percent": "100.00" },
+      "credit": { "net": "-120.00", "cost_net": "0.00", "margin": "-120.00", "margin_percent": "100.00" }
+    },
+    "vat": { "rates": { "AT-20": "20" }, "net": "380.00", "vat": "76.00", "gross": "456.00" }
+  }
+}

@@ -1,0 +1,184 @@
+{
+  "why": "SCOPE §12 S1 and the A1 prompt, which computed the totals independently: a domestic AT quote in four groups with a group discount and a document production fee. Net 12 517.20, VAT 2 503.44, gross 15 020.64 are the numbers Mathias checks by eye in acceptance step 4, so this file is the contract. The unit costs are NOT in SCOPE — they were chosen here to give the margin something to be about, and they are stated in the line labels: DoP 600/day, gaffer 420/day, camera and lenses owned outright (cost 0), Studio A sub-rented at 1 100/day, the taxi rebilled at what it cost.",
+  "document": {
+    "id": "s1",
+    "title": "S1 — domestic AT B2B quote",
+    "children": [
+      {
+        "type": "group",
+        "id": "crew",
+        "title": "Crew",
+        "children": [
+          {
+            "id": "dop",
+            "label": "DoP (cost 600/day)",
+            "quantity": "1",
+            "period_value": "3",
+            "period_unit": "day",
+            "unit_price": "850",
+            "unit_cost": "600",
+            "kind": "labor",
+            "tax_ref": "AT-20"
+          },
+          {
+            "id": "gaffer",
+            "label": "Gaffer (cost 420/day)",
+            "quantity": "1",
+            "period_value": "3",
+            "period_unit": "day",
+            "unit_price": "550",
+            "unit_cost": "420",
+            "kind": "labor",
+            "tax_ref": "AT-20"
+          }
+        ],
+        "adjustments": [
+          {
+            "label": "Crew discount",
+            "type": "discount",
+            "mode": "percent",
+            "value": "5",
+            "base": "subtotal"
+          }
+        ]
+      },
+      {
+        "type": "group",
+        "id": "equipment",
+        "title": "Equipment",
+        "children": [
+          {
+            "id": "alexa",
+            "label": "Alexa 35 (owned, cost 0)",
+            "quantity": "1",
+            "period_value": "3",
+            "period_unit": "day",
+            "unit_price": "1200",
+            "unit_cost": "0",
+            "kind": "equipment_rental",
+            "tax_ref": "AT-20"
+          },
+          {
+            "id": "lenses",
+            "label": "Lens set (owned, cost 0)",
+            "quantity": "2",
+            "period_value": "3",
+            "period_unit": "day",
+            "unit_price": "180",
+            "unit_cost": "0",
+            "kind": "equipment_rental",
+            "tax_ref": "AT-20"
+          }
+        ]
+      },
+      {
+        "type": "group",
+        "id": "studio",
+        "title": "Studio",
+        "children": [
+          {
+            "id": "studio-a",
+            "label": "Studio A (sub-rented at 1 100/day)",
+            "quantity": "1",
+            "period_value": "2",
+            "period_unit": "day",
+            "unit_price": "1400",
+            "unit_cost": "1100",
+            "kind": "space_rental",
+            "tax_ref": "AT-20"
+          }
+        ]
+      },
+      {
+        "type": "group",
+        "id": "travel",
+        "title": "Travel",
+        "children": [
+          {
+            "id": "taxi",
+            "label": "Taxi (rebilled at cost)",
+            "quantity": "1",
+            "period_value": "1",
+            "period_unit": "flat",
+            "unit_price": "120",
+            "unit_cost": "120",
+            "kind": "travel",
+            "tax_ref": "AT-20"
+          }
+        ]
+      }
+    ],
+    "adjustments": [
+      {
+        "label": "Production fee",
+        "type": "surcharge",
+        "mode": "percent",
+        "value": "8",
+        "base": "subtotal"
+      }
+    ]
+  },
+  "expect": {
+    "subtotal": "11590.00",
+    "net": "12517.20",
+    "cost": "5380.00",
+    "margin": "7137.20",
+    "margin_percent": "57.02",
+    "net_by_tax_ref": { "AT-20": "12517.20" },
+    "warnings": [],
+    "adjustments": [
+      {
+        "label": "Production fee",
+        "base_amount": "11590.00",
+        "amount": "927.20",
+        "by_tax_ref": { "AT-20": "927.20" }
+      }
+    ],
+    "lines": {
+      "dop": { "gross": "2550.00", "net": "2550.00", "cost_net": "1800.00", "margin": "750.00", "margin_percent": "29.41" },
+      "gaffer": { "gross": "1650.00", "net": "1650.00", "cost_net": "1260.00", "margin": "390.00", "margin_percent": "23.64" },
+      "alexa": { "gross": "3600.00", "net": "3600.00", "cost_net": "0.00", "margin": "3600.00", "margin_percent": "100.00" },
+      "lenses": { "gross": "1080.00", "net": "1080.00", "cost_net": "0.00", "margin": "1080.00", "margin_percent": "100.00" },
+      "studio-a": { "gross": "2800.00", "net": "2800.00", "cost_net": "2200.00", "margin": "600.00", "margin_percent": "21.43" },
+      "taxi": { "gross": "120.00", "net": "120.00", "cost_net": "120.00", "margin": "0.00", "margin_percent": "0.00" }
+    },
+    "groups": {
+      "crew": {
+        "subtotal_before_adjustments": "4200.00",
+        "subtotal": "3990.00",
+        "cost_subtotal": "3060.00",
+        "margin": "930.00",
+        "margin_percent": "23.31",
+        "uniform_period": true,
+        "net_by_tax_ref": { "AT-20": "3990.00" },
+        "adjustments": [
+          { "label": "Crew discount", "base_amount": "4200.00", "amount": "-210.00", "by_tax_ref": { "AT-20": "-210.00" } }
+        ]
+      },
+      "equipment": {
+        "subtotal_before_adjustments": "4680.00",
+        "subtotal": "4680.00",
+        "cost_subtotal": "0.00",
+        "margin": "4680.00",
+        "margin_percent": "100.00",
+        "uniform_period": true
+      },
+      "studio": { "subtotal": "2800.00", "cost_subtotal": "2200.00", "margin": "600.00", "margin_percent": "21.43", "uniform_period": true },
+      "travel": { "subtotal": "120.00", "cost_subtotal": "120.00", "margin": "0.00", "margin_percent": "0.00", "uniform_period": true }
+    },
+    "display_rows": {
+      "crew": { "quantity": "1", "period_value": "3", "period_unit": "day", "price_per_period": "1330.00", "total": "3990.00", "uniform_period": true, "exact": true, "warnings": [] },
+      "equipment": { "period_value": "3", "period_unit": "day", "price_per_period": "1560.00", "total": "4680.00", "exact": true },
+      "travel": { "period_value": "1", "period_unit": "flat", "price_per_period": "120.00", "total": "120.00", "exact": true }
+    },
+    "vat": {
+      "rates": { "AT-20": "20" },
+      "net": "12517.20",
+      "vat": "2503.44",
+      "gross": "15020.64",
+      "by_tax_ref": [
+        { "tax_ref": "AT-20", "net": "12517.20", "rate": "20", "vat": "2503.44", "gross": "15020.64" }
+      ]
+    }
+  }
+}

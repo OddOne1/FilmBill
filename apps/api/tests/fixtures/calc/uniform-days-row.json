@@ -1,0 +1,40 @@
+{
+  "why": "SCOPE §5.4's uniform-days rule, satisfied, with SCOPE S13/S15's own numbers: a camera group of Alexa (1 200/day) and lens set (300/day) over 2 days with a 10 % group discount is 2 700.00, and the collapsed row reads `1 × 2 days × € 1 350.00 = € 2 700.00`. Every line in the group carries the same (period_unit, period_value), so the row may show days and there is no warning.",
+  "document": {
+    "id": "uniform",
+    "children": [
+      {
+        "type": "group",
+        "id": "camera",
+        "title": "Camera",
+        "children": [
+          { "id": "alexa", "quantity": "1", "period_value": "2", "period_unit": "day", "unit_price": "1200", "kind": "equipment_rental", "tax_ref": "AT-20" },
+          { "id": "lenses", "quantity": "1", "period_value": "2", "period_unit": "day", "unit_price": "300", "kind": "equipment_rental", "tax_ref": "AT-20" }
+        ],
+        "adjustments": [
+          { "label": "Group discount", "type": "discount", "mode": "percent", "value": "10", "base": "subtotal" }
+        ]
+      }
+    ]
+  },
+  "expect": {
+    "subtotal": "2700.00",
+    "net": "2700.00",
+    "warnings": [],
+    "groups": {
+      "camera": { "subtotal_before_adjustments": "3000.00", "subtotal": "2700.00", "uniform_period": true }
+    },
+    "display_rows": {
+      "camera": {
+        "quantity": "1",
+        "period_value": "2",
+        "period_unit": "day",
+        "price_per_period": "1350.00",
+        "total": "2700.00",
+        "uniform_period": true,
+        "exact": true,
+        "warnings": []
+      }
+    }
+  }
+}

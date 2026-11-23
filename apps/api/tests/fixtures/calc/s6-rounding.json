@@ -1,0 +1,53 @@
+{
+  "why": "SCOPE §12 S6 and §5.6, the rule the whole engine is shaped by: line nets are rounded to 2 dp ONE AT A TIME, and VAT is computed per tax category on the SUM of them, not per line. 3 × 2.5 d × 333.33 is 2 499.975, which goes to 2 499.98 half UP (not half even, which would give 2 499.98 here too and 2 499.97 for a 0.005 ending on an even cent — see core/rounding.quantize_amount). Seven lines of 0.333 are seven times 0.33, which is 2.31, NOT 2.331 rounded to 2.33. Net 2 502.29 · VAT 20 % 500.46 · gross 3 002.75.",
+  "document": {
+    "id": "s6",
+    "title": "S6 — rounding",
+    "children": [
+      {
+        "id": "big",
+        "label": "3 × 2.5 days × 333.33",
+        "quantity": "3",
+        "period_value": "2.5",
+        "period_unit": "day",
+        "unit_price": "333.33",
+        "tax_ref": "AT-20"
+      },
+      { "id": "small-1", "quantity": "1", "period_value": "1", "period_unit": "piece", "unit_price": "0.333", "tax_ref": "AT-20" },
+      { "id": "small-2", "quantity": "1", "period_value": "1", "period_unit": "piece", "unit_price": "0.333", "tax_ref": "AT-20" },
+      { "id": "small-3", "quantity": "1", "period_value": "1", "period_unit": "piece", "unit_price": "0.333", "tax_ref": "AT-20" },
+      { "id": "small-4", "quantity": "1", "period_value": "1", "period_unit": "piece", "unit_price": "0.333", "tax_ref": "AT-20" },
+      { "id": "small-5", "quantity": "1", "period_value": "1", "period_unit": "piece", "unit_price": "0.333", "tax_ref": "AT-20" },
+      { "id": "small-6", "quantity": "1", "period_value": "1", "period_unit": "piece", "unit_price": "0.333", "tax_ref": "AT-20" },
+      { "id": "small-7", "quantity": "1", "period_value": "1", "period_unit": "piece", "unit_price": "0.333", "tax_ref": "AT-20" }
+    ]
+  },
+  "expect": {
+    "subtotal": "2502.29",
+    "net": "2502.29",
+    "cost": "0.00",
+    "margin": "2502.29",
+    "margin_percent": "100.00",
+    "net_by_tax_ref": { "AT-20": "2502.29" },
+    "warnings": [],
+    "lines": {
+      "big": { "net": "2499.98" },
+      "small-1": { "net": "0.33" },
+      "small-2": { "net": "0.33" },
+      "small-3": { "net": "0.33" },
+      "small-4": { "net": "0.33" },
+      "small-5": { "net": "0.33" },
+      "small-6": { "net": "0.33" },
+      "small-7": { "net": "0.33" }
+    },
+    "vat": {
+      "rates": { "AT-20": "20" },
+      "net": "2502.29",
+      "vat": "500.46",
+      "gross": "3002.75",
+      "by_tax_ref": [
+        { "tax_ref": "AT-20", "net": "2502.29", "rate": "20", "vat": "500.46", "gross": "3002.75" }
+      ]
+    }
+  }
+}

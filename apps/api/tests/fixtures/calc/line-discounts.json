@@ -1,0 +1,50 @@
+{
+  "why": "The line discount, and the two things about it that are easy to get wrong.\n\n**It is inside the rounding.** §5.3 writes `round(q × p × f × price × (1 − d%))`, so a 50 % discount on 1.05 is round(0.525) = 0.53 half up. Rounding first and subtracting a rounded discount gives 1.05 − 0.53 = 0.52, a cent out, and every realistic test case hides the difference — this one does not.\n\n**It does not reduce the cost.** `at-cost-aware` is sold at 500/day for 2 days with a cost of 300/day. The 20 % discount takes the net from 1 000.00 to 800.00 and leaves `cost_net` at 600.00, so the margin falls from 400.00 to 200.00 and the margin percentage from 40 % to 25 %. If the discount reduced the cost too, the margin percentage would be 40 % either way — which is the one number a producer uses to decide whether the discount is affordable. This is a DECISION and departs from the A1 prompt's literal \"same formula with unit_cost\"; see `engine._line_result`.",
+  "document": {
+    "id": "discounts",
+    "children": [
+      {
+        "id": "half-of-a-cent-and-a-bit",
+        "label": "50 % of 1.05",
+        "quantity": "1", "period_value": "1", "period_unit": "piece", "unit_price": "1.05",
+        "discount": { "mode": "percent", "value": "50" },
+        "tax_ref": "AT-20"
+      },
+      {
+        "id": "amount-off",
+        "label": "3 days at 100, less 50.00",
+        "quantity": "1", "period_value": "3", "period_unit": "day", "unit_price": "100",
+        "discount": { "mode": "amount", "value": "50" },
+        "tax_ref": "AT-20"
+      },
+      {
+        "id": "given-away",
+        "label": "100 % discount",
+        "quantity": "1", "period_value": "1", "period_unit": "flat", "unit_price": "1",
+        "discount": { "mode": "percent", "value": "100" },
+        "tax_ref": "AT-20"
+      },
+      {
+        "id": "at-cost-aware",
+        "label": "2 days at 500, cost 300/day, less 20 %",
+        "quantity": "1", "period_value": "2", "period_unit": "day", "unit_price": "500", "unit_cost": "300",
+        "discount": { "mode": "percent", "value": "20" },
+        "tax_ref": "AT-20"
+      }
+    ]
+  },
+  "expect": {
+    "subtotal": "1050.53",
+    "net": "1050.53",
+    "cost": "600.00",
+    "margin": "450.53",
+    "net_by_tax_ref": { "AT-20": "1050.53" },
+    "warnings": [],
+    "lines": {
+      "half-of-a-cent-and-a-bit": { "gross": "1.05", "net": "0.53", "discount_amount": "0.52" },
+      "amount-off": { "gross": "300.00", "net": "250.00", "discount_amount": "50.00" },
+      "given-away": { "gross": "1.00", "net": "0.00", "discount_amount": "1.00", "margin": "0.00", "margin_percent": null },
+      "at-cost-aware": { "gross": "1000.00", "net": "800.00", "discount_amount": "200.00", "cost_net": "600.00", "margin": "200.00", "margin_percent": "25.00" }
+    }
+  }
+}

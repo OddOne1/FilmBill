@@ -1,0 +1,28 @@
+{
+  "why": "SCOPE §5.4's kind filter: \"production fee 8 % on labor + equipment only\". The fee's base is 2 000 + 1 000 = 3 000 and NOT the 3 300 subtotal — the 300 of travel is outside it. The second adjustment is the same shape with a kind nothing in the document has: it comes to 0.00 and raises `kind_filter_matched_nothing`, because a fee that silently evaluates to nothing and a typo in a kind name look identical on a screen.",
+  "document": {
+    "id": "kinds",
+    "children": [
+      { "id": "crew", "quantity": "1", "period_value": "2", "period_unit": "day", "unit_price": "1000", "unit_cost": "700", "kind": "labor", "tax_ref": "AT-20" },
+      { "id": "camera", "quantity": "1", "period_value": "2", "period_unit": "day", "unit_price": "500", "kind": "equipment_rental", "tax_ref": "AT-20" },
+      { "id": "taxi", "quantity": "1", "period_value": "1", "period_unit": "flat", "unit_price": "300", "unit_cost": "300", "kind": "travel", "tax_ref": "AT-20" }
+    ],
+    "adjustments": [
+      { "label": "Production fee", "type": "surcharge", "mode": "percent", "value": "8", "base": "kinds", "kinds": ["labor", "equipment_rental"] },
+      { "label": "Per-diem handling", "type": "surcharge", "mode": "percent", "value": "10", "base": "kinds", "kinds": ["per_diem"] }
+    ]
+  },
+  "expect": {
+    "subtotal": "3300.00",
+    "net": "3540.00",
+    "cost": "1700.00",
+    "margin": "1840.00",
+    "net_by_tax_ref": { "AT-20": "3540.00" },
+    "warnings": [{ "code": "kind_filter_matched_nothing", "where": "the document: Per-diem handling" }],
+    "adjustments": [
+      { "label": "Production fee", "base_amount": "3000.00", "amount": "240.00", "by_tax_ref": { "AT-20": "240.00" } },
+      { "label": "Per-diem handling", "base_amount": "0.00", "amount": "0.00" }
+    ],
+    "vat": { "rates": { "AT-20": "20" }, "net": "3540.00", "vat": "708.00", "gross": "4248.00" }
+  }
+}

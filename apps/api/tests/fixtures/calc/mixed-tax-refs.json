@@ -1,0 +1,36 @@
+{
+  "why": "SCOPE §5.4's \"percent adjustments are allocated to the tax categories of their base proportionally; amount adjustments too, pro rata by net\" — with a split chosen so the allocation CANNOT come out even. 100.00 across three equal categories is three times 33.3333, which rounds to 33.33 and sums to 99.99. The missing cent goes to the heaviest share (ties broken by the category key, so 'C'), because the property that matters is that the per-category nets add up to the document net to the cent. A, B and C carry 20 %, 10 % and 0 %, so the per-category VAT is three different numbers and a per-line VAT implementation would be visible immediately.",
+  "document": {
+    "id": "mixed",
+    "children": [
+      { "id": "a1", "quantity": "1", "period_value": "1", "period_unit": "flat", "unit_price": "100", "kind": "labor", "tax_ref": "A" },
+      { "id": "b1", "quantity": "1", "period_value": "1", "period_unit": "flat", "unit_price": "100", "kind": "labor", "tax_ref": "B" },
+      { "id": "c1", "quantity": "1", "period_value": "1", "period_unit": "flat", "unit_price": "100", "kind": "labor", "tax_ref": "C" }
+    ],
+    "adjustments": [
+      { "label": "Rush surcharge", "type": "surcharge", "mode": "percent", "value": "10", "base": "subtotal" },
+      { "label": "Handling", "type": "surcharge", "mode": "amount", "value": "100", "base": "subtotal" }
+    ]
+  },
+  "expect": {
+    "subtotal": "300.00",
+    "net": "430.00",
+    "net_by_tax_ref": { "A": "143.33", "B": "143.33", "C": "143.34" },
+    "warnings": [],
+    "adjustments": [
+      { "label": "Rush surcharge", "base_amount": "300.00", "amount": "30.00", "by_tax_ref": { "A": "10.00", "B": "10.00", "C": "10.00" } },
+      { "label": "Handling", "base_amount": "300.00", "amount": "100.00", "by_tax_ref": { "A": "33.33", "B": "33.33", "C": "33.34" } }
+    ],
+    "vat": {
+      "rates": { "A": "20", "B": "10", "C": "0" },
+      "net": "430.00",
+      "vat": "43.00",
+      "gross": "473.00",
+      "by_tax_ref": [
+        { "tax_ref": "A", "net": "143.33", "rate": "20", "vat": "28.67", "gross": "172.00" },
+        { "tax_ref": "B", "net": "143.33", "rate": "10", "vat": "14.33", "gross": "157.66" },
+        { "tax_ref": "C", "net": "143.34", "rate": "0", "vat": "0.00", "gross": "143.34" }
+      ]
+    }
+  }
+}
