@@ -23,7 +23,7 @@ from them. `docs/SCOPE.md` is where the product is decided.
 | P1a-2 | A company adds its own rates and no-tax cases | [`22-filmbill-P1a-2-user-rates.md`](22-filmbill-P1a-2-user-rates.md) | `f84ca55`…`6c7a37f` | done — see notes |
 | P1b | Change country, then parties (customers, suppliers, contacts) | [`23-filmbill-P1b-parties.md`](23-filmbill-P1b-parties.md) | `f0f9a1c`…`dfe7399` | done — see notes |
 | P1b-2 | Tax IDs as their own thing, pluggable verification, scheduled re-checks | [`24-filmbill-P1b-2-tax-ids.md`](24-filmbill-P1b-2-tax-ids.md) | `ed4cfde`…`2dc1a3d` | done — see notes |
-| A1 | Lean catalog and the pure calculation engine | [`25-filmbill-A1-catalog-calc-engine.md`](25-filmbill-A1-catalog-calc-engine.md) | — | in progress |
+| A1 | Lean catalog and the pure calculation engine | [`25-filmbill-A1-catalog-calc-engine.md`](25-filmbill-A1-catalog-calc-engine.md) | `032d77a`…`e899a15` | done — see notes |
 | P0b | Foundations: companies, roles, number series, audit, money, codegen | [`03-filmbill-P0b-foundations.md`](03-filmbill-P0b-foundations.md) | — | superseded — split into P0b-0, P0b-1, P0b-2 |
 
 ---
@@ -1278,3 +1278,55 @@ extended with five parts.
 are **observed, not documented** — the tests that pin the field spellings are
 what will say so if the Commission changes them. `ABN_LOOKUP_GUID` is
 operator-supplied and FilmBill ships none.
+
+---
+
+## A1 — lean catalog and the pure calculation engine
+
+**Part 1 — the engine (`032d77a`).** `apps/api/billing/calc`: lines, groups two
+deep, adjustments (percent and amount, on the subtotal or compounding),
+discounts, cost and margin per line and per group, VAT per tax category on the
+sum of that category's nets, largest-remainder pro-rata allocation, and the
+group display row. Pure: no SQLAlchemy and no FastAPI, asserted in a fresh
+interpreter.
+
+**Part 2 — the catalog over HTTP (`28649b3`).** Migration `0014_catalog`
+(items, item_categories, item_rates, units, rental_factor_groups,
+rental_factors); 23 operations under `/catalog` and `/calc` and no DELETE
+anywhere; `catalog.view` and `catalog.edit`; the CSV import with a preview, a
+plan digest and per-row refusals; `explain_factor`, which reports the row and
+the rule as well as the number.
+
+**Part 3 — the screens (`44dff5e`).** Seven screens under Catalog, including
+"Try the engine", which asks `POST /calc/preview` on every change. No screen
+computes money.
+
+**Part 4 — documentation (`e899a15`).** SCOPE §16 D69–D73 and the §13 slice plan
+(A1, A2, B, C).
+
+**Flagged.**
+- **D71, the rental factor lookup rule, is `[Guessing]` and an open question
+  for Mathias**, not for the Steuerberater: six days with rows at five and seven
+  bills as five. The endpoint and the screen report the rule as well as the
+  factor so it can be disagreed with.
+- **D73, the permission matrix, is `[Guessing]`.** The accountant being outside
+  `catalog.edit` is the line most likely to be wrong in practice.
+- **`cost_net` ignores a line discount**, on purpose: a discount changes what we
+  charge and not what the thing cost us. It means a discounted line's margin
+  falls, which is the intended reading, but it is a departure worth knowing
+  about.
+- **A CSV import will not create a category.** A row naming an unknown category
+  is refused rather than inventing one, because a typo would otherwise become a
+  permanent category.
+- **An item's kind need not match its category's kind.** One rule for CRUD and
+  for the import, chosen over a cross-check that would have had to differ
+  between them.
+- **`units.label_en` is nullable.** A company's own unit needs no English label,
+  and filling it with the German one would be a lie in the English column.
+- **Pre-existing and untouched:** `apps/api/tests/test_seed_dev_parties.py` has
+  two tests that depend on the ambient `DATABASE_URL` naming a database in
+  `scripts/seed_dev_parties.py`'s `DEV_DATABASE_NAMES` (`filmbill`,
+  `filmbill_dev`, `postgres`). CI sets `filmbill_test`, so the seed writes
+  nothing and both fail with `assert 2 == 0`. Reproduced, not fixed — widening
+  the guard would weaken a safety check, and pointing the test at a dev-named
+  database is Mathias's call (CLAUDE.md rule 17b).
