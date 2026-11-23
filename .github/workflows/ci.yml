@@ -13,6 +13,27 @@
 
 name: CI
 
+# Every `run:` step in this file uses an EXPLICIT bash, and the difference is
+# `pipefail`. GitHub's documented shells (github/docs
+# `data/reusables/actions/supported-shells.md`) are:
+#
+#   shell: unspecified  ->  bash -e {0}
+#   shell: bash         ->  bash --noprofile --norc -eo pipefail {0}
+#
+# and the table's own note says "this runs a different command to when `bash`
+# is specified explicitly". Without the explicit shell, `pytest | tee` reports
+# TEE's exit status and a failing suite leaves a green step — which is exactly
+# what happened here (see docs/engineering/test-harness-traps.md, instance 19).
+#
+# The per-step `set -o pipefail` lines are kept deliberately. They are not
+# redundant: they keep each step correct on its own, so deleting this block —
+# or a job overriding `defaults` with one of its own, which GitHub allows —
+# cannot quietly take pipefail away again. `tests/test_workflow_pipelines.py`
+# is the check that neither disappears.
+defaults:
+  run:
+    shell: bash
+
 on:
   push:
     branches: [main]
@@ -111,7 +132,11 @@ jobs:
       # hundred.
       - name: Guard against a gutted suite
         run: |
-          PASSED=$(grep -oE '[0-9]+ passed' test-output.txt | grep -oE '[0-9]+' | head -1)
+          # `|| true` is load-bearing: with pipefail on (below), a grep
+          # that matches nothing fails the pipeline, and a failing pipeline
+          # inside $( ) aborts the whole step under `-e` — silently, before
+          # the `-z` check below can print anything useful.
+          PASSED=$(grep -oE '[0-9]+ passed' test-output.txt | grep -oE '[0-9]+' | head -1 || true)
           echo "Tests passed: ${PASSED:-0}"
           # Raised from 250 with P0b-3: the suite is at 814 and a floor of
           # 250 would no longer notice two thirds of it disappearing.
@@ -135,8 +160,11 @@ jobs:
           # would never reach these assertions.
           set -o pipefail
           python -m pytest apps/api/tests/ -m realdb -q --tb=short -rs | tee realdb-output.txt
-          PASSED=$(grep -oE '[0-9]+ passed' realdb-output.txt | grep -oE '[0-9]+' | head -1)
-          SKIPPED=$(grep -oE '[0-9]+ skipped' realdb-output.txt | grep -oE '[0-9]+' | head -1)
+          # Both `|| true`s for the reason given in the step above. The
+          # SKIPPED one matters most: finding no "skipped" is the GOOD
+          # case, and without the guard the healthy run is the one that dies.
+          PASSED=$(grep -oE '[0-9]+ passed' realdb-output.txt | grep -oE '[0-9]+' | head -1 || true)
+          SKIPPED=$(grep -oE '[0-9]+ skipped' realdb-output.txt | grep -oE '[0-9]+' | head -1 || true)
           echo "Real-database tests passed: ${PASSED:-0}, skipped: ${SKIPPED:-0}"
           if [ -z "$PASSED" ] || [ "$PASSED" -lt 120 ]; then
             echo "::error::Expected at least 120 passing real-database tests, got ${PASSED:-0}. A real-database check that does not RUN is not a check."

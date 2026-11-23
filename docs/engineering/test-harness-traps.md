@@ -16,7 +16,12 @@ had run against something kinder than production. There are four ways in:
    connection, session or resolver, so the harness could not configure it,
    and silently selected the arrangement in which it does nothing;
 4. **the result was compared across environments** — a skip read as a pass,
-   or a count from one machine read against a count from another.
+   or a count from one machine read against a count from another;
+5. **the verdict was thrown away after the fact** — the check ran, failed,
+   and said so, and the plumbing between it and the build discarded the
+   answer. Instance 19. This one is the worst of the five to find, because
+   every earlier entry can be caught by reading the test, and this one
+   cannot: the test was correct and the failure was real.
 
 ---
 
@@ -304,3 +309,78 @@ The general form, for the next person writing a mutation against a system
 with layered protections: **pick the row that only the guard under test
 protects, and assert the reason, not just the outcome.** If no such row
 exists, the guard may be unreachable, which is worth knowing too.
+
+
+## 19. A green run that had not run — `| tee` ate pytest's exit code
+
+Found while pushing A1 (2026-11-23), and only because somebody asked why two
+tests that fail locally did not fail in CI. The answer was that they *did*
+fail in CI, every time, for as long as they had existed.
+
+`.github/workflows/ci.yml` ran the suite as
+
+```yaml
+- name: Run tests
+  run: python -m pytest apps/api/tests/ -q --tb=short -rs | tee test-output.txt
+```
+
+GitHub Actions runs a `run:` step, when `shell:` is not given, as `bash -e
+{0}` — **without** `pipefail`. The documented table (github/docs,
+`data/reusables/actions/supported-shells.md`) spells out both halves and even
+warns about the difference:
+
+| `shell` parameter | Command run internally |
+|---|---|
+| unspecified | `bash -e {0}` — "Note that this runs a different command to when `bash` is specified explicitly." |
+| `bash` | `bash --noprofile --norc -eo pipefail {0}` |
+
+So the step's exit status was **`tee`'s**, which is 0 whatever pytest thought.
+The one thing still looking at the result was the next step's floor on the
+passed count — `at least 750` — and 2267 passing out of 2269 clears it
+without a flicker. The suite had grown ninefold since that floor was set,
+which made it ninefold less able to notice anything.
+
+What it hid: the two tests in `apps/api/tests/test_seed_dev_parties.py` that
+drive the real seed script. They handed the script the **ambient**
+`DATABASE_URL` rather than the scratch database the test actually writes to —
+`SessionLocal` is patched to `pg_db`, so every insert lands in
+`filmbill_pytest_scratch_<pid>` regardless, and the script reads that variable
+only to decide whether it is allowed to run at all. CI sets `filmbill_test`,
+which `DEV_DATABASE_NAMES` does not list, so `check_environment` refused,
+`main()` returned 2 and `assert script.main() == 0` failed as `assert 2 == 0`.
+Since `11afc1d`. Nobody saw it, because nothing was looking.
+
+**The fix**, in three parts, because any one alone is undone by the next
+edit:
+
+1. a workflow-level `defaults: run: shell: bash`, which is what buys
+   `-eo pipefail`;
+2. `set -o pipefail` kept on each piped step as well, so a job that defines
+   its own `defaults` — GitHub lets a job override the workflow's — cannot
+   silently take it back;
+3. `apps/api/tests/test_workflow_pipelines.py`, which parses every workflow
+   and fails on any `run:` block containing a pipeline with neither a
+   pipefail shell in effect nor `set -o pipefail` in the script. It is about
+   **every** pipeline and not about `tee`; the next one will not be `tee`.
+
+And the tests themselves now pass the scratch database's own URL, so they no
+longer depend on what the runner happens to set. The safety guard in
+`scripts/seed_dev_parties.py` was deliberately **not** widened: it exists so
+sample customers cannot land in front of somebody real, and `filmbill_pytest*`
+was already allowlisted for exactly this.
+
+**One more thing the fix itself nearly broke**, which is worth the paragraph
+because it is the same class of error pointing the other way. Turning pipefail
+on makes `SKIPPED=$(grep -oE '[0-9]+ skipped' realdb-output.txt | ... )` fail
+its pipeline when the grep matches nothing — and a failing pipeline inside
+`$( )` aborts the step under `-e`, with no message. For that variable,
+matching nothing is the **healthy** case, so the first green run after the fix
+would have been the one that died. Hence `|| true` on every counted pipeline,
+and a test asserting it stays there.
+
+The general form: **a test's verdict has to survive the journey to the thing
+that reads it.** Rule 12 already says a mutation must show a real FAIL line;
+this is the same demand made of the pipeline between the FAIL line and the
+build status. When a check and a count-floor disagree, the count floor is not
+a safety net — it is what you will be left with, so set it against the suite
+you have rather than the suite you had.
