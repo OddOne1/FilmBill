@@ -17,7 +17,7 @@ them. The company context still comes from `require()`, so the endpoint is
 members-only and another company's session gets its own 404 from the
 dependency — even though this handler never touches a company-scoped row.
 
-**Validation is the engine's.** `document_from_data` refuses a third nesting
+**Validation is the engine's.** `services/calc_mapping` refuses a third nesting
 level, a duplicate id, an unknown period unit and a quantity that names
 something, with its own sentences, and those sentences are what the client
 shows. Pydantic's job here stops at "this is well-formed JSON of the right
@@ -28,12 +28,17 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from ..billing.calc import CalcError, apply_vat, calculate, document_from_data
+from ..billing.calc import apply_vat
 from ..middleware.company import Membership, require
 from ..schemas.calc import (
     CalcPreviewRequest,
     CalcPreviewResponse,
     CalcVatResponse,
+)
+from ..services.calc_mapping import (
+    CalcError,
+    calculate_document,
+    response_from_result,
 )
 
 router = APIRouter(tags=["calc"])
@@ -52,14 +57,17 @@ def preview_calculation(
     "unprocessable entity" does not.
     """
     try:
-        document = document_from_data(body.document.model_dump(mode="json"))
+        # `services/calc_mapping` and not `document_from_data` directly: A2's
+        # budget sheet asks the engine for the same numbers from stored rows,
+        # and one mapping means one answer for what a line's result looks
+        # like. See that module's docstring.
+        result = calculate_document(body.document.model_dump(mode="json"))
     except CalcError as error:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)
         ) from None
 
-    result = calculate(document)
-    response = CalcPreviewResponse.model_validate(result)
+    response = response_from_result(result)
 
     if body.vat_rates is not None:
         rates: dict[str, Decimal] = dict(body.vat_rates)

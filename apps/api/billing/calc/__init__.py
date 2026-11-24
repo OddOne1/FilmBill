@@ -31,6 +31,7 @@ from .engine import (
     apply_vat,
     calculate,
     display_row_for_group,
+    percent_share,
 )
 from .model import (
     child_type,
@@ -99,4 +100,5 @@ __all__ = [
     "document_from_data",
     "group_from_data",
     "line_from_data",
+    "percent_share",
 ]

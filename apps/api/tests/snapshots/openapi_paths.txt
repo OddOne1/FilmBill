@@ -38,6 +38,9 @@ GET /parties/{party_id}/resolved
 GET /parties/{party_id}/tax-ids
 GET /parties/{party_id}/tax-ids/{tax_id_id}/checks
 GET /parties/{party_id}/vat-checks
+GET /projects
+GET /projects/{project_id}
+GET /projects/{project_id}/days
 GET /setup/status
 GET /site-settings
 GET /site-settings/logo-image
@@ -63,6 +66,8 @@ PATCH /company/tax/id-check-policy
 PATCH /email-settings
 PATCH /parties/{party_id}
 PATCH /parties/{party_id}/tax-ids/{tax_id_id}
+PATCH /projects/{project_id}
+PATCH /projects/{project_id}/days/{day_id}
 PATCH /site-settings
 PATCH /users/{user_id}
 PATCH /users/{user_id}/deactivate
@@ -121,6 +126,11 @@ POST /parties/{party_id}/tax-ids/{tax_id_id}/manual-confirmation
 POST /parties/{party_id}/tax-ids/{tax_id_id}/reactivate
 POST /parties/{party_id}/tax-ids/{tax_id_id}/retire
 POST /parties/{party_id}/tax-preview
+POST /projects
+POST /projects/{project_id}/days
+POST /projects/{project_id}/days/range
+POST /projects/{project_id}/days/{day_id}/remove
+POST /projects/{project_id}/status
 POST /setup/create-superadmin
 POST /site-settings/favicon-upload
 POST /site-settings/logo-upload

@@ -225,6 +225,28 @@ def _margin_percent(net: Decimal, margin: Decimal) -> Optional[Decimal]:
     return quantize_amount(multiply(divide(margin, net), HUNDRED))
 
 
+def percent_share(part: Decimal, whole: Decimal) -> Optional[Decimal]:
+    """`part / whole` as a percentage, or `None` when `whole` is zero.
+
+    Public, and the only reason it is: A2's budget top sheet shows each
+    section's **share of the total**, and the web app may not compute it
+    (rule 2). It is the same arithmetic `_margin_percent` does, through the
+    same explicit-context helpers, so a share and a margin percentage round
+    identically — two implementations of one division is how two screens
+    end up a tenth of a percent apart.
+
+    `None` rather than 0 on a zero total, for `_margin_percent`'s reason: a
+    share of nothing is undefined, and either number would be a claim.
+
+    It adds nothing to and changes nothing about the engine's calculation
+    contract — `calculate`, `apply_vat` and every value object are untouched.
+    """
+    if whole == ZERO:
+        return None
+    with exact_arithmetic():
+        return quantize_amount(multiply(divide(part, whole), HUNDRED))
+
+
 def _merge_into(target: dict[str, Decimal], source: Mapping[str, Decimal]) -> None:
     """Add `source`'s per-category amounts into `target`, in place."""
     for ref, value in source.items():

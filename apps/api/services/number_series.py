@@ -582,11 +582,28 @@ PARTY_SERIES: tuple[tuple[str, str, str], ...] = (
     ("supplier", "L", "Lieferantennummern"),
 )
 
+#: The project series (A2). Not a document either, and it uses the same
+#: machinery for the third time rather than growing a second counter.
+#:
+#: `yearly` with a `{YYYY}` token, unlike the party series: a project number
+#: is read as "the first project of 2026" and restarting it in January is
+#: what everybody in the business expects — two projects a year apart
+#: sharing a sequence number is not the problem it would be for a customer,
+#: because the year is in the number.
+#:
+#: **Padding 3, not 4.** `PRJ-2026-001`. A production company does not do a
+#: thousand projects a year, and `PRJ-2026-0001` reads as an invoice number.
+#: The padding is a per-series column, so a company that outgrows it edits
+#: one field in Settings → Company → Number series.
+PROJECT_SERIES: tuple[tuple[str, str, str, int], ...] = (
+    ("project", "PRJ", "Projektnummern", 3),
+)
+
 DEFAULT_PADDING = 4
 
 
 def seed_rows(company_id: uuid.UUID) -> list[NumberSeries]:
-    """The eight series as unsaved rows. Shared by the service and the migration.
+    """Every default series as unsaved rows, for the service and the migration.
 
     A function rather than a literal in two places: the migration backfills
     existing companies and `create_company` seeds new ones, and the day those
@@ -622,11 +639,25 @@ def seed_rows(company_id: uuid.UUID) -> list[NumberSeries]:
         )
         for document_type, prefix, name in PARTY_SERIES
     ]
+    rows += [
+        NumberSeries(
+            company_id=company_id,
+            document_type=document_type,
+            name=name,
+            pattern=f"{prefix}-{{YYYY}}-{{SEQ}}",
+            reset=RESET_YEARLY,
+            next_value=1,
+            current_period=None,
+            padding=padding,
+            is_active=True,
+        )
+        for document_type, prefix, name, padding in PROJECT_SERIES
+    ]
     return rows
 
 
 def seed_number_series(db: Session, *, company_id: uuid.UUID) -> list[NumberSeries]:
-    """Give a company the eight default series. No commit.
+    """Give a company every default series there is. No commit.
 
     Idempotent on document type: a company that already has an active series
     for a type keeps it. That is what makes this safe to call from

@@ -761,10 +761,13 @@ def test_a_new_company_gets_every_default_series(pg_client, pg_db):
     # a number issued once, from a counter a user can re-point — is the
     # same one, and a second mechanism for it would be a second place for
     # that promise to break.
-    assert {row.document_type for row in rows} == {
-        document_type
-        for document_type, _, _ in engine.DEFAULT_SERIES + engine.PARTY_SERIES
-    }
+    assert {row.document_type for row in rows} == (
+        {document_type for document_type, _, _ in engine.DEFAULT_SERIES}
+        | {document_type for document_type, _, _ in engine.PARTY_SERIES}
+        # A2's project series carries a padding of its own, so it is a
+        # 4-tuple and cannot be unpacked with the other two.
+        | {document_type for document_type, _, _, _ in engine.PROJECT_SERIES}
+    )
     by_type = {row.document_type: row for row in rows}
     assert by_type["invoice"].pattern == "AR-{YYYY}-{SEQ}"
     assert by_type["invoice"].reset == "yearly"
@@ -783,7 +786,15 @@ def test_seeding_twice_adds_nothing(pg_db, world):
     pg_db.commit()
 
     assert created == []
-    assert pg_db.query(func.count(NumberSeries.id)).scalar() == before + 9, (
+    expected_new = (
+        len(engine.DEFAULT_SERIES)
+        + len(engine.PARTY_SERIES)
+        + len(engine.PROJECT_SERIES)
+        # The fixture already made an `invoice` series by hand, and the seed
+        # is idempotent on document type, so that one is not created again.
+        - 1
+    )
+    assert pg_db.query(func.count(NumberSeries.id)).scalar() == before + expected_new, (
         "the fixture's hand-made invoice series was duplicated or the seed "
         "count changed"
     )
@@ -800,7 +811,11 @@ def test_the_listing_shows_the_seeded_series(pg_client, pg_db, world):
 
     assert response.status_code == 200, response.text
     body = response.json()
-    assert len(body) == len(engine.DEFAULT_SERIES) + len(engine.PARTY_SERIES)
+    assert len(body) == (
+        len(engine.DEFAULT_SERIES)
+        + len(engine.PARTY_SERIES)
+        + len(engine.PROJECT_SERIES)
+    )
     invoice = next(entry for entry in body if entry["document_type"] == "invoice")
     assert invoice["pattern"] == "AR-{YYYY}-{SEQ}"
     assert invoice["reset"] == "yearly"
@@ -1209,15 +1224,17 @@ def test_the_migration_backfills_existing_companies(at_revision_0007):
             {"id": company_id},
         ).fetchall()
 
-    # The eight DOCUMENT series plus the two party ones (P1b): a customer
-    # and a supplier number use the same machinery, because the promise —
-    # a number issued once, from a counter a user can re-point — is the
-    # same one, and a second mechanism for it would be a second place for
-    # that promise to break.
-    assert {row.document_type for row in rows} == {
-        document_type
-        for document_type, _, _ in engine.DEFAULT_SERIES + engine.PARTY_SERIES
-    }
+    # The eight DOCUMENT series plus the two party ones (P1b) plus the
+    # project one (A2): a customer number, a supplier number and a project
+    # number use the same machinery, because the promise — a number issued
+    # once, from a counter a user can re-point — is the same one, and a
+    # second mechanism for it would be a second place for that promise to
+    # break.
+    assert {row.document_type for row in rows} == (
+        {document_type for document_type, _, _ in engine.DEFAULT_SERIES}
+        | {document_type for document_type, _, _ in engine.PARTY_SERIES}
+        | {document_type for document_type, _, _, _ in engine.PROJECT_SERIES}
+    )
     by_type = {row.document_type: row for row in rows}
     assert by_type["invoice"].pattern == "AR-{YYYY}-{SEQ}"
     assert by_type["quote"].pattern == "AN-{YYYY}-{SEQ}"
@@ -1227,17 +1244,26 @@ def test_the_migration_backfills_existing_companies(at_revision_0007):
     # group rather than over all of them, which is what made this fail
     # usefully when P1b added the second kind.
     document_rows = [
-        row for row in rows if row.document_type not in ("customer", "supplier")
+        row
+        for row in rows
+        if row.document_type not in ("customer", "supplier", "project")
     ]
     party_rows = [
         row for row in rows if row.document_type in ("customer", "supplier")
     ]
-    assert len(document_rows) == 8 and len(party_rows) == 2
-    assert all(row.reset == "yearly" for row in document_rows)
+    project_rows = [row for row in rows if row.document_type == "project"]
+    assert len(document_rows) == 8
+    assert len(party_rows) == 2
+    assert len(project_rows) == 1
+    # A project number restarts yearly and carries the year, like a document
+    # number — "the first project of 2026" is how it is read — but its
+    # padding is 3, so `PRJ-2026-001` does not read as an invoice number.
+    assert all(row.reset == "yearly" for row in document_rows + project_rows)
     assert all(row.reset == "never" for row in party_rows)
-    assert all("{YYYY}" in row.pattern for row in document_rows)
+    assert all("{YYYY}" in row.pattern for row in document_rows + project_rows)
     assert all("{YYYY}" not in row.pattern for row in party_rows)
-    assert all(row.padding == 4 for row in rows)
+    assert all(row.padding == 4 for row in document_rows + party_rows)
+    assert all(row.padding == 3 for row in project_rows)
     assert all(row.next_value == 1 for row in rows)
     assert all(row.current_period is None for row in rows)
     assert all(row.is_active for row in rows)
@@ -1280,8 +1306,9 @@ def test_the_backfill_is_idempotent(at_revision_0007):
             )
         }
     # Migration 0008's own eight, plus the two migration 0012 backfills — a
-    # customer and a supplier number (P1b). Asserted as a SET rather than a
-    # count, so the next migration that adds one says which.
+    # customer and a supplier number (P1b) — plus migration 0015's project
+    # series (A2). Asserted as a SET rather than a count, so the next
+    # migration that adds one says which.
     assert types == {
         "quote",
         "order_confirmation",
@@ -1293,4 +1320,5 @@ def test_the_backfill_is_idempotent(at_revision_0007):
         "letter",
         "customer",
         "supplier",
+        "project",
     }

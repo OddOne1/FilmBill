@@ -76,6 +76,13 @@ _PARTY_EDIT: set[CompanyRole] = {
     CompanyRole.admin,
     CompanyRole.producer,
 }
+#: Who may READ a project and its production days: `_PRODUCTION` plus staff,
+#: i.e. everybody except the tax advisor. The same set as `_CATALOG_VIEW` and
+#: deliberately its own name — the two are the same list today and are two
+#: different decisions, and collapsing them would mean widening one by
+#: widening the other. See `projects.view` below.
+_PROJECT_VIEW: set[CompanyRole] = _PRODUCTION | {CompanyRole.staff}
+
 #: Who may READ the price list. `_PRODUCTION` plus staff — i.e. every member
 #: except the tax advisor. See `catalog.view` below for why staff are in
 #: this one set and in no other.
@@ -179,6 +186,47 @@ PERMISSIONS: dict[str, set[CompanyRole]] = {
     #: attached (SCOPE D73), not as a certainty.
     "catalog.view": _CATALOG_VIEW,
     "catalog.edit": _PARTY_EDIT,
+    #: A2. Projects and their production days.
+    #:
+    #: **View is `_PRODUCTION` plus staff** — `_PROJECT_VIEW`, i.e. everybody
+    #: except the tax advisor. A gaffer who is booked on a shoot has to be
+    #: able to see which days it runs and where it is; that is the same
+    #: reasoning `catalog.view` is wide on, and a project's dates and
+    #: locations are not commercial information. The BUDGET is where the
+    #: commercial information lives, and staff do not hold that key — see
+    #: `budgets.view` below.
+    #:
+    #: **Edit is `_PARTY_EDIT`** — owner, admin, producer. The accountant is
+    #: out for the third time and for the same reason: a project's client and
+    #: its dates end up on documents, so changing one is a structural act.
+    #:
+    #: **The tax advisor holds neither**, consistent with D23/D43: their
+    #: access is the archive of finalized documents.
+    #:
+    #: [Guessing] — these are the A2 prompt's proposal with staff kept on
+    #: view, and they are recorded as a decision with the flag attached
+    #: (SCOPE D76) rather than as a certainty.
+    "projects.view": _PROJECT_VIEW,
+    "projects.edit": _PARTY_EDIT,
+    #: A2. The Budget sheet: sections, lines, globals, adjustments and the
+    #: calculated view.
+    #:
+    #: **Staff hold NEITHER key, and that is the point of having two keys
+    #: rather than reusing `projects.*`.** Every budget endpoint serves
+    #: `unit_cost`, `cost`, `margin` and `margin_percent` — what the company
+    #: pays its crew and what it makes on them. A crew-safe view of a budget
+    #: (quantities and dates, no money) is a later slice; until it exists the
+    #: honest answer is that staff cannot open a budget at all, and
+    #: `test_budgets_api.py` asserts that no budget endpoint returns a cost
+    #: or a margin field to a staff user.
+    #:
+    #: **View includes the accountant**, unlike `catalog.edit` and
+    #: `parties.edit`: reading what a production is planned to cost is
+    #: exactly bookkeeping work. Edit is `_PARTY_EDIT` again.
+    #:
+    #: [Guessing], recorded as SCOPE D77.
+    "budgets.view": _PRODUCTION,
+    "budgets.edit": _PARTY_EDIT,
     #: P5. The archive of finalized documents. The tax advisor's entire
     #: reason for existing in this system.
     "archive.view": _BOOKS | {CompanyRole.tax_advisor},

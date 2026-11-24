@@ -43,6 +43,7 @@ from apps.api.billing.calc import (
     calculate,
     display_row_for_group,
     document_from_data,
+    percent_share,
 )
 
 CALC_PACKAGE = Path(__file__).resolve().parents[1] / "billing" / "calc"
@@ -1016,3 +1017,33 @@ def test_a_line_with_no_tax_ref_groups_under_the_empty_category():
     result = calculate(doc(line(id="l1")))
     assert result.net_by_tax_ref == {"": Decimal("100.00")}
     assert result.net == Decimal("100.00")
+
+
+# ─── percent_share (A2) ─────────────────────────────────────────────────────
+
+
+def test_percent_share_rounds_like_every_other_amount():
+    """A2's top sheet needs "this section is 34.43 % of the budget", and the
+    web app may not divide (rule 2). So the engine answers it, with the same
+    `quantize_amount` every other number goes through."""
+    assert percent_share(Decimal("3990.00"), Decimal("11590.00")) == Decimal("34.43")
+    assert percent_share(Decimal("120.00"), Decimal("11590.00")) == Decimal("1.04")
+    assert percent_share(Decimal("11590.00"), Decimal("11590.00")) == Decimal("100.00")
+
+
+def test_percent_share_of_a_zero_whole_is_undefined_and_not_zero():
+    """`None`, for `margin_percent`'s reason: a share of nothing is not 0 %
+    and not 100 %, and a screen showing "0 %" would be stating something
+    false."""
+    assert percent_share(Decimal("0.00"), Decimal("0.00")) is None
+    assert percent_share(Decimal("10.00"), Decimal("0.00")) is None
+
+
+def test_percent_share_changes_nothing_about_a_calculation():
+    """It is a helper beside the engine, not a step inside it: the same
+    document calculates identically whether or not anybody asks for a
+    share."""
+    result = calculate(doc(line(id="l1")))
+    before = (result.net, result.cost, result.margin, result.margin_percent)
+    percent_share(result.net, result.net)
+    assert (result.net, result.cost, result.margin, result.margin_percent) == before

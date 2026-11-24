@@ -30,6 +30,7 @@ from fastapi.openapi.utils import get_openapi
 from apps.api.models.party import PartyVatCheck
 
 from apps.api.models.company import CompanyRole
+from apps.api.services import number_series
 
 from .company_factories import (
     auth_headers,
@@ -41,6 +42,8 @@ from .company_factories import (
     make_number_series,
     make_party,
     make_party_tax_id,
+    make_project,
+    make_project_day,
     make_rental_factor_group,
     make_superadmin,
     make_tax_class,
@@ -77,8 +80,11 @@ from .company_factories import (
 #: anyway, because it takes a company context through `require()` and
 #: "pointing the header at a company you are not in is a 404" has to be true
 #: of every endpoint that takes one, not only of the ones that read a table.
-_SCOPED_PREFIXES = ("/company/", "/parties", "/catalog", "/calc")
-_SCOPED_EXACT = ("/companies", "/company", "/parties")
+#: A2 adds `/projects`, and for the fourth time the same reasoning: a
+#: project list is not a company setting, so it is a top-level path, and a
+#: top-level path that is not named here is invisible to this file.
+_SCOPED_PREFIXES = ("/company/", "/parties", "/catalog", "/calc", "/projects")
+_SCOPED_EXACT = ("/companies", "/company", "/parties", "/projects")
 
 
 def _is_company_scoped(path: str) -> bool:
@@ -280,6 +286,26 @@ CASES: dict[str, object] = {
     "POST /catalog/items/import": {
         "files": {"file": ("items.csv", b"sku;name_de;kind\nX-1;Stolen;fee\n", "text/csv")}
     },
+    # A2. Projects and their production days. Every `{project_id}` and
+    # `{day_id}` below is substituted with a row belonging to company B, so a
+    # handler that dropped its `company_id` filter FINDS them — and a 200 on
+    # `PATCH /projects/{id}` would mean A had just renamed B's production.
+    "GET /projects": {"body": None},
+    "POST /projects": {"body": {"name": "Stolen", "start_date": "2026-06-01"}},
+    "GET /projects/{project_id}": {"body": None},
+    "PATCH /projects/{project_id}": {"body": {"name": "Stolen"}},
+    "POST /projects/{project_id}/status": {"body": {"status": "archived"}},
+    "GET /projects/{project_id}/days": {"body": None},
+    "POST /projects/{project_id}/days": {
+        "body": {"date": "2026-07-01", "type": "shoot"}
+    },
+    "POST /projects/{project_id}/days/range": {
+        "body": {"from": "2026-07-01", "to": "2026-07-03", "type": "shoot"}
+    },
+    "PATCH /projects/{project_id}/days/{day_id}": {
+        "body": {"location": "Stolen"}
+    },
+    "POST /projects/{project_id}/days/{day_id}/remove": {"body": None},
     # Pure arithmetic, no stored row — and still a company endpoint.
     "POST /calc/preview": {
         "body": {
@@ -296,6 +322,8 @@ OTHER_COMPANY_ROWS = {
     "{membership_id}": "membership_in_b",
     "{bank_account_id}": "bank_account_in_b",
     "{series_id}": "series_in_b",
+    "{project_id}": "project_in_b",
+    "{day_id}": "day_in_b",
     "{tax_code_id}": "tax_code_in_b",
     "{tax_class_id}": "tax_class_in_b",
     "{party_id}": "party_in_b",
@@ -369,6 +397,12 @@ def two_companies(pg_db):
     # A row of B's that is NOT a membership, so the scoped lookups in the
     # bank-accounts router are exercised against a real neighbour rather than
     # against an id that names nothing.
+    # A's own number series, seeded: `POST /projects` has no placeholder in
+    # its path, so the test below sends it as a LEGITIMATE request and
+    # expects it to succeed — and a company with no `project` series answers
+    # 409 with a sentence, which would read here as an isolation failure.
+    number_series.seed_number_series(pg_db, company_id=company_a.id)
+    pg_db.commit()
     bank_in_b = make_bank_account(pg_db, company_b, iban="AT61 1904 3002 3457 3201")
     # And a number series of B's, for the same reason: `/company/number-series/
     # {series_id}` looked up without a `company_id` filter FINDS this row, and
@@ -403,6 +437,12 @@ def two_companies(pg_db):
     item_in_b = make_item(
         pg_db, company_b, category=category_in_b, unit=unit_in_b
     )
+    # And A2's: a project of B's and one of its production days. A handler
+    # that looked either up by id alone would find them, and `POST
+    # .../days/{id}/remove` answering 200 would be A taking a day out of B's
+    # shooting schedule.
+    project_in_b = make_project(pg_db, company_b, client=party_in_b)
+    day_in_b = make_project_day(pg_db, company_b, project_in_b)
     check_in_b = PartyVatCheck(
         company_id=company_b.id,
         party_id=party_in_b.id,
@@ -433,6 +473,8 @@ def two_companies(pg_db):
         "category_in_b": category_in_b,
         "unit_in_b": unit_in_b,
         "group_in_b": group_in_b,
+        "project_in_b": project_in_b,
+        "day_in_b": day_in_b,
     }
 
 

@@ -389,6 +389,43 @@ def read_rows(payload: bytes | str) -> tuple[list[dict[str, str]], tuple[str, ..
 # ─── Values ─────────────────────────────────────────────────────────────────
 
 
+def normalise_decimal_text(raw: str) -> Optional[str]:
+    """A German or an English decimal as plain digits, or `None` when blank.
+
+    The separator rule only, with no quantization: "whichever of `.` and `,`
+    comes LAST is the decimal separator, and the other one is a thousands
+    separator". `parse_decimal` below quantizes the result to money;
+    `billing/budget/csv_lines.py` needs the same rule at FOUR places for a
+    quantity and a factor, and two copies of this rule would be two answers
+    to what `1.234,56` means in a file somebody exported from Excel.
+
+    The ambiguity is real and deliberate: `1.234` is 1.234, read as English.
+    Forcing one locale would be wrong for the other half of the time, and
+    every caller shows the parsed value in a preview, so it is visible
+    before anything is written.
+    """
+    text = (raw or "").strip()
+    if not text:
+        return None
+    text = text.replace("\xa0", "").replace(" ", "")
+    for symbol in ("\u20ac", "EUR", "eur"):
+        text = text.replace(symbol, "")
+    text = text.strip()
+    if not text:
+        return None
+
+    last_dot = text.rfind(".")
+    last_comma = text.rfind(",")
+    if last_dot >= 0 and last_comma >= 0:
+        if last_comma > last_dot:
+            text = text.replace(".", "").replace(",", ".")
+        else:
+            text = text.replace(",", "")
+    elif last_comma >= 0:
+        text = text.replace(",", ".")
+    return text
+
+
 def parse_decimal(raw: str, *, column: str) -> Optional[Decimal]:
     """A German or an English decimal, as a `Decimal`, or `None` when blank.
 
@@ -404,25 +441,9 @@ def parse_decimal(raw: str, *, column: str) -> Optional[Decimal]:
     other half of the time, and the preview table shows the parsed amount so
     it is visible before anything is written.
     """
-    text = (raw or "").strip()
-    if not text:
+    text = normalise_decimal_text(raw)
+    if text is None:
         return None
-    text = text.replace(" ", "").replace(" ", "")
-    for symbol in ("€", "EUR", "eur"):
-        text = text.replace(symbol, "")
-    text = text.strip()
-    if not text:
-        return None
-
-    last_dot = text.rfind(".")
-    last_comma = text.rfind(",")
-    if last_dot >= 0 and last_comma >= 0:
-        if last_comma > last_dot:
-            text = text.replace(".", "").replace(",", ".")
-        else:
-            text = text.replace(",", "")
-    elif last_comma >= 0:
-        text = text.replace(",", ".")
 
     try:
         return quantize_amount(to_decimal(text, what=f"{column!r}"))

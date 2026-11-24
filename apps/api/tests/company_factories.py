@@ -600,3 +600,248 @@ def make_item(
     db.commit()
     db.refresh(item)
     return item
+
+
+def make_project(
+    db,
+    company: Company,
+    *,
+    name: str = "Spot Sommer 2026",
+    project_number: str = "PRJ-2026-001",
+    client=None,
+    status: str = "active",
+    start_date=None,
+    end_date=None,
+    description: Optional[str] = None,
+    notes: Optional[str] = None,
+):
+    """A project row, written directly.
+
+    The number is a literal rather than an allocation: `make_company` writes
+    a company row without seeding its number series, and a factory that
+    allocated would couple every test that wants a project to the series
+    machinery. `test_projects_api.py` covers the allocation through the
+    endpoint, which is where it matters.
+    """
+    from datetime import date as _date
+
+    from apps.api.models.project import Project
+
+    row = Project(
+        company_id=company.id,
+        project_number=project_number,
+        name=name,
+        client_party_id=client.id if client is not None else None,
+        description=description,
+        status=status,
+        start_date=start_date or _date(2026, 6, 1),
+        end_date=end_date,
+        notes=notes,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def make_project_day(
+    db,
+    company: Company,
+    project,
+    *,
+    date=None,
+    type: str = "shoot",
+    location: Optional[str] = None,
+    notes: Optional[str] = None,
+    is_active: bool = True,
+):
+    from datetime import date as _date
+
+    from apps.api.models.project import ProjectDay
+
+    row = ProjectDay(
+        company_id=company.id,
+        project_id=project.id,
+        date=date or _date(2026, 6, 1),
+        type=type,
+        location=location,
+        notes=notes,
+        is_active=is_active,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def make_budget(
+    db,
+    company: Company,
+    project,
+    *,
+    name: str = "Estimate",
+    currency: str = "EUR",
+    notes: Optional[str] = None,
+    is_primary: bool = False,
+    locked_at=None,
+    is_active: bool = True,
+):
+    from apps.api.models.project import Budget
+
+    row = Budget(
+        company_id=company.id,
+        project_id=project.id,
+        name=name,
+        currency=currency,
+        notes=notes,
+        is_primary=is_primary,
+        locked_at=locked_at,
+        is_active=is_active,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def make_budget_section(
+    db,
+    company: Company,
+    budget,
+    *,
+    code: Optional[str] = "1100",
+    name: str = "Crew",
+    parent=None,
+    position: int = 10,
+    is_active: bool = True,
+):
+    from apps.api.models.project import BudgetSection
+
+    row = BudgetSection(
+        company_id=company.id,
+        budget_id=budget.id,
+        code=code,
+        name=name,
+        parent_id=parent.id if parent is not None else None,
+        position=position,
+        is_active=is_active,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def make_budget_line(
+    db,
+    company: Company,
+    section,
+    *,
+    description: str = "DoP",
+    kind: str = "labor",
+    quantity: str = "1",
+    period_value: str = "3",
+    period_unit: str = "day",
+    factor: str = "1",
+    unit_price: str = "850.00",
+    unit_cost: str = "600.00",
+    item=None,
+    tax_ref: str = "",
+    position: int = 10,
+    is_active: bool = True,
+):
+    from decimal import Decimal
+
+    from apps.api.models.project import BudgetLine
+
+    row = BudgetLine(
+        company_id=company.id,
+        section_id=section.id,
+        position=position,
+        item_id=item.id if item is not None else None,
+        description=description,
+        kind=kind,
+        quantity=Decimal(quantity),
+        period_value=Decimal(period_value),
+        period_unit=period_unit,
+        factor=Decimal(factor),
+        unit_price=Decimal(unit_price),
+        unit_cost=Decimal(unit_cost),
+        tax_ref=tax_ref,
+        tags=[],
+        is_active=is_active,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def make_budget_global(
+    db,
+    company: Company,
+    budget,
+    *,
+    key: str = "shoot_days",
+    label: str = "Shoot days",
+    value: str = "3",
+    unit: Optional[str] = "days",
+    source: str = "manual",
+    is_active: bool = True,
+):
+    from decimal import Decimal
+
+    from apps.api.models.project import BudgetGlobal
+
+    row = BudgetGlobal(
+        company_id=company.id,
+        budget_id=budget.id,
+        key=key,
+        label=label,
+        value=Decimal(value),
+        unit=unit,
+        source=source,
+        is_active=is_active,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def make_budget_adjustment(
+    db,
+    company: Company,
+    budget,
+    *,
+    section=None,
+    label: str = "Production fee",
+    type: str = "surcharge",
+    mode: str = "percent",
+    value: str = "8",
+    base: str = "subtotal",
+    kinds=(),
+    position: int = 10,
+    is_active: bool = True,
+):
+    from decimal import Decimal
+
+    from apps.api.models.project import BudgetAdjustment
+
+    row = BudgetAdjustment(
+        company_id=company.id,
+        budget_id=budget.id,
+        section_id=section.id if section is not None else None,
+        position=position,
+        label=label,
+        type=type,
+        mode=mode,
+        value=Decimal(value),
+        base=base,
+        kinds=list(kinds),
+        is_active=is_active,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row

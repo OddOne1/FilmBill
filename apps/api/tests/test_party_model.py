@@ -346,8 +346,11 @@ def test_a_company_gets_a_customer_and_a_supplier_series(pg_db):
     assert series["customer"].padding == 4
     assert series["supplier"].pattern == "L-{SEQ}"
     assert series["supplier"].reset == "never"
-    # And the eight document series are still there beside them.
-    assert "invoice" in series and len(series) == 10
+    # And the eight document series are still there beside them, plus A2's
+    # project series — eleven in all.
+    assert "invoice" in series
+    assert "project" in series
+    assert len(series) == 11
 
 
 def test_a_number_is_allocated_when_a_party_becomes_a_customer(pg_db, company):

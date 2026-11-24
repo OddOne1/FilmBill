@@ -629,6 +629,73 @@ def refuse_archive_with_active_children(db: Session, party: Party) -> None:
     )
 
 
+# ─── Who still points at a party (A2) ───────────────────────────────────────
+#
+# The same shape as `services/tax_references.py`, and for the same reason
+# that module's docstring gives: a guard whose knowledge lives in the
+# endpoint is a guard the next endpoint forgets. P1b's archive guard knew
+# about one thing — a party's own active children — because that was the only
+# referrer there was. A2 adds projects, and slice B will add documents, so
+# the knowledge moves into a registry and each owner registers its own
+# source at the bottom of its own module.
+#
+# **Archiving, not deactivating a code.** The two registries stay separate
+# because they answer different questions about different subjects, and
+# merging them would mean a tax-code referrer had to decide what it meant
+# for a party.
+
+_ARCHIVE_BLOCKERS: list = []
+
+
+def register_archive_blocker(source):
+    """Add a source of "this party is still in use". Returns it, so it works
+    as a decorator.
+
+    Idempotent on the function object, like the tax registry: importing a
+    module twice must not name the same project twice in the sentence.
+    """
+    if source not in _ARCHIVE_BLOCKERS:
+        _ARCHIVE_BLOCKERS.append(source)
+    return source
+
+
+def registered_archive_blockers() -> int:
+    """How many sources are registered. For tests and for a diagnostic.
+
+    A count, asserted by `test_projects_api.py`, because "the guard is
+    registered" is the half of this that a test of the endpoint alone cannot
+    distinguish from "nothing refers to this party".
+    """
+    return len(_ARCHIVE_BLOCKERS)
+
+
+def archive_blockers(db: Session, party: Party) -> list:
+    """Everything that still needs this party, from every registered source."""
+    found: list = []
+    for source in _ARCHIVE_BLOCKERS:
+        found.extend(source(db, party))
+    return found
+
+
+def refuse_archive_with_references(db: Session, party: Party) -> None:
+    """Refuse to archive a party something still points at, naming it.
+
+    Named, for the reason `refuse_archive_with_active_children` is named:
+    "cannot archive: it is in use" leaves somebody opening rows one at a time
+    to find out which. An archived client on a live project would leave that
+    project resolving its recipient from a row the list no longer shows —
+    usable, and explaining itself with something nobody can find.
+    """
+    referrers = archive_blockers(db, party)
+    if not referrers:
+        return
+    listed = ", ".join(str(referrer) for referrer in referrers)
+    raise PartyError(
+        f"{party.name} is still in use by {listed}. Change that first — "
+        f"archiving never deletes, so nothing is lost either way."
+    )
+
+
 # ─── Parties as referrers of tax codes and classes (P1a-2 part 2) ───────────
 #
 # Registered HERE, at the bottof the module that owns the referring table,

@@ -24,6 +24,15 @@ from .catalog import (
     RentalFactorGroup,
     Unit,
 )
+from .project import (
+    Budget,
+    BudgetAdjustment,
+    BudgetGlobal,
+    BudgetLine,
+    BudgetSection,
+    Project,
+    ProjectDay,
+)
 from .party import (
     Party,
     PartyAddress,
@@ -57,6 +66,13 @@ __all__ = [
     "PartyContactPoint",
     "PartyTaxId",
     "PartyVatCheck",
+    "Project",
+    "ProjectDay",
+    "Budget",
+    "BudgetSection",
+    "BudgetLine",
+    "BudgetGlobal",
+    "BudgetAdjustment",
     "Item",
     "ItemCategory",
     "ItemRate",

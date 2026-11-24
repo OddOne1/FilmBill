@@ -537,11 +537,18 @@ def archive_party(
 
     Refused while it still has active entries below it, naming them: an
     archived organisation with a live department would leave that department
-    resolving its address from a row the list no longer shows.
+    resolving its address from a row the list no longer shows. Refused for
+    the same reason while something else still points at it — a non-archived
+    project, as of A2 — and the sentence names that too.
     """
     party = _party_or_404(db, membership, party_id)
     try:
         party_service.refuse_archive_with_active_children(db, party)
+        # A2: and whatever else still points at it. The registry lives in
+        # `party_service`; each owner registers its own source at the bottom
+        # of its own module, so this call does not grow a branch per referrer
+        # (`services/project_service.py` registers projects).
+        party_service.refuse_archive_with_references(db, party)
     except party_service.PartyError as error:
         _refuse(error)
 

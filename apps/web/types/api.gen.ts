@@ -2108,7 +2108,9 @@ export interface paths {
          *
          *     Refused while it still has active entries below it, naming them: an
          *     archived organisation with a live department would leave that department
-         *     resolving its address from a row the list no longer shows.
+         *     resolving its address from a row the list no longer shows. Refused for
+         *     the same reason while something else still points at it — a non-archived
+         *     project, as of A2 — and the sentence names that too.
          */
         post: operations["archive_party_parties__party_id__archive_post"];
         delete?: never;
@@ -2461,6 +2463,160 @@ export interface paths {
         get: operations["list_vat_checks_parties__party_id__vat_checks_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Projects
+         * @description Search by name or project number; filter by status and by client.
+         */
+        get: operations["list_projects_projects_get"];
+        put?: never;
+        /**
+         * Create Project
+         * @description Add a project. The number is allocated in this transaction (rule 5).
+         */
+        post: operations["create_project_projects_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Project */
+        get: operations["read_project_projects__project_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Project */
+        patch: operations["update_project_projects__project_id__patch"];
+        trace?: never;
+    };
+    "/projects/{project_id}/days": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Days */
+        get: operations["list_days_projects__project_id__days_get"];
+        put?: never;
+        /** Create Day */
+        post: operations["create_day_projects__project_id__days_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}/days/range": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Day Range
+         * @description "The 5th to the 12th, shoot days, no weekends" — one transaction.
+         *
+         *     Days that already exist are reported rather than refused: adding a block
+         *     over three days that are already in the plan is a normal act, and
+         *     refusing the whole range because of them would make somebody enter the
+         *     gaps by hand.
+         *
+         *     **One audit event with counts**, not one per day. Fifteen rows in the log
+         *     for one action is how a log stops being read.
+         */
+        post: operations["create_day_range_projects__project_id__days_range_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}/days/{day_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Day */
+        patch: operations["update_day_projects__project_id__days__day_id__patch"];
+        trace?: never;
+    };
+    "/projects/{project_id}/days/{day_id}/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Remove Day
+         * @description Take a day out of the plan. The row stays; `is_active` goes false.
+         *
+         *     Not a DELETE, and not only for the reason the other tables have one:
+         *     anything that counts days — the budget's `days:<type>` globals above all
+         *     — needs the row to stop counting without the record of who took it out
+         *     disappearing with it.
+         */
+        post: operations["remove_day_projects__project_id__days__day_id__remove_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Change Status
+         * @description Move a project between planning, active, wrapped and archived.
+         *
+         *     Its own endpoint and its own audit action, so that "when did this go
+         *     active" and "when was it archived" are answerable from the log without
+         *     diffing every `project.updated` event.
+         */
+        post: operations["change_status_projects__project_id__status_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5348,6 +5504,264 @@ export interface components {
             requires_special: boolean;
             /** Requires Upper */
             requires_upper: boolean;
+        };
+        /** ProjectCreate */
+        ProjectCreate: {
+            /** Client Party Id */
+            client_party_id?: string | null;
+            /** Description */
+            description?: string | null;
+            /** End Date */
+            end_date?: string | null;
+            /** Name */
+            name: string;
+            /** Notes */
+            notes?: string | null;
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /**
+             * Status
+             * @default planning
+             * @enum {string}
+             */
+            status: "planning" | "active" | "wrapped" | "archived";
+        };
+        /** ProjectDayList */
+        ProjectDayList: {
+            /** Counts */
+            counts: {
+                [key: string]: number;
+            };
+            /** Days */
+            days: components["schemas"]["ProjectDayResponse"][];
+        };
+        /**
+         * ProjectDayRangeRequest
+         * @description "Add the 5th to the 12th as shoot days", in one transaction.
+         */
+        ProjectDayRangeRequest: {
+            /**
+             * From
+             * Format: date
+             */
+            from: string;
+            /**
+             * Skip Weekends
+             * @default false
+             */
+            skip_weekends: boolean;
+            /**
+             * To
+             * Format: date
+             */
+            to: string;
+            /**
+             * Type
+             * @default shoot
+             * @enum {string}
+             */
+            type: "prep" | "shoot" | "travel" | "wrap" | "post" | "office" | "off";
+        };
+        /**
+         * ProjectDayRangeResponse
+         * @description What the range did, in numbers and in a sentence.
+         *
+         *     `existing` and `skipped` are both reported because the number of days
+         *     created is otherwise different from the number asked for with no
+         *     explanation — rule 17c applied to a bulk action.
+         */
+        ProjectDayRangeResponse: {
+            /** Created */
+            created: components["schemas"]["ProjectDayResponse"][];
+            /** Detail */
+            detail: string;
+            /** Existing */
+            existing: string[];
+            /** Skipped */
+            skipped: string[];
+        };
+        /** ProjectDayResponse */
+        ProjectDayResponse: {
+            /** Call Time */
+            call_time?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /** Location */
+            location?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /** Type */
+            type: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Wrap Time */
+            wrap_time?: string | null;
+        };
+        /**
+         * ProjectDayUpdate
+         * @description A day's editable fields. `date` and `type` can move too — a shoot day
+         *     that slips a week is the same planned day on another date, and making
+         *     somebody delete and re-add it would lose its call time and its notes.
+         */
+        ProjectDayUpdate: {
+            /** Call Time */
+            call_time?: string | null;
+            /** Date */
+            date?: string | null;
+            /** Location */
+            location?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Type */
+            type?: ("prep" | "shoot" | "travel" | "wrap" | "post" | "office" | "off") | null;
+            /** Wrap Time */
+            wrap_time?: string | null;
+        };
+        /**
+         * ProjectDayWrite
+         * @description One day, created on its own. `date` and `type` identify it.
+         */
+        ProjectDayWrite: {
+            /** Call Time */
+            call_time?: string | null;
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Location */
+            location?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /**
+             * Type
+             * @default shoot
+             * @enum {string}
+             */
+            type: "prep" | "shoot" | "travel" | "wrap" | "post" | "office" | "off";
+            /** Wrap Time */
+            wrap_time?: string | null;
+        };
+        /** ProjectPage */
+        ProjectPage: {
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Projects */
+            projects: components["schemas"]["ProjectResponse"][];
+            /** Total */
+            total: number;
+        };
+        /** ProjectResponse */
+        ProjectResponse: {
+            /**
+             * Budget Count
+             * @default 0
+             */
+            budget_count: number;
+            /** Client Name */
+            client_name?: string | null;
+            /** Client Party Id */
+            client_party_id?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Day Counts */
+            day_counts?: {
+                [key: string]: number;
+            };
+            /** Description */
+            description?: string | null;
+            /** End Date */
+            end_date?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Notes */
+            notes?: string | null;
+            /** Project Number */
+            project_number: string;
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /** Status */
+            status: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** ProjectStatusRequest */
+        ProjectStatusRequest: {
+            /** Reason */
+            reason?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "planning" | "active" | "wrapped" | "archived";
+        };
+        /**
+         * ProjectUpdate
+         * @description Everything but the status and the number.
+         *
+         *     The status moves through `POST /projects/{id}/status`, which writes a
+         *     `project.status_changed` event of its own: "this project went active on
+         *     the 3rd" is a different question from "somebody corrected the name", and
+         *     one audit action for both would make the first unanswerable.
+         */
+        ProjectUpdate: {
+            /** Client Party Id */
+            client_party_id?: string | null;
+            /** Description */
+            description?: string | null;
+            /** End Date */
+            end_date?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Start Date */
+            start_date?: string | null;
         };
         /** RefreshRequest */
         RefreshRequest: {
@@ -10155,6 +10569,370 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PartyVatCheckResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_projects_projects_get: {
+        parameters: {
+            query?: {
+                search?: string | null;
+                /** @description planning | active | wrapped | archived */
+                status?: string | null;
+                client_party_id?: string | null;
+                /** @description Archived projects are left out unless asked for. They are never deleted, so the list would otherwise fill up with them. */
+                include_archived?: boolean;
+                limit?: number;
+                offset?: number;
+            };
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_project_projects_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_project_projects__project_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_project_projects__project_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_days_projects__project_id__days_get: {
+        parameters: {
+            query?: {
+                /** @description Removed days are kept and audited, but a schedule shows the plan as it stands. */
+                include_removed?: boolean;
+            };
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectDayList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_day_projects__project_id__days_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectDayWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectDayResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_day_range_projects__project_id__days_range_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectDayRangeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectDayRangeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_day_projects__project_id__days__day_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+                day_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectDayUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectDayResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_day_projects__project_id__days__day_id__remove_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+                day_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectDayResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    change_status_projects__project_id__status_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectStatusRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectResponse"];
                 };
             };
             /** @description Validation Error */

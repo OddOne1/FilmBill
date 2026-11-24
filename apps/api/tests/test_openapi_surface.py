@@ -90,6 +90,13 @@ EXPECTED_TAGS = {
     #: `/parties`: fourteen endpoints would otherwise have been invisible to
     #: the suite that proves cross-company isolation.
     "parties",
+    #: A2. Projects and their production days. A top-level path for the same
+    #: reason `/parties` and `/catalog` are — a production is not a company
+    #: setting — with the same consequence for
+    #: `test_company_isolation._is_company_scoped`, which had to learn about
+    #: `/projects` or ten endpoints would have been invisible to the suite
+    #: that proves cross-company isolation.
+    "projects",
     #: P1a. Settings → Company → Tax: codes, classes, read-only rules and the
     #: proposal preview. Its own tag because the tax engine is one subject
     #: that P2 (document and line tax), P5 (the advisor's archive) and P6
