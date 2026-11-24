@@ -346,3 +346,50 @@ the job log, which this session could not download (GitHub answers 403 to
 an unauthenticated log request) — so they are *inferred from the guards*,
 not read. To see them: Actions → run 45410891382 → API tests → the two steps
 above print "Tests passed: …" and "Real-database tests passed: …, skipped: …".
+
+---
+
+## After the acceptance walk (2026-11-24): the CSV round trip and followed cells
+
+Mathias exported "Example (S1)", edited it in a spreadsheet and imported it
+back. Quantities and periods came back ten times too large, DoP and Gaffer
+were refused, and a `5` typed into Studio A's period did nothing. Reproduced
+from the code and his file:
+
+1. **The export wrote `1.0000` into a German-convention file** (`;` and a
+   BOM). In that convention a dot is a thousands separator, so the
+   spreadsheet saved one day as `10.000` [Likely — the spreadsheet step was
+   not reproduced here, but every changed value fits it: 1→10.000, 2→20.000,
+   3→30.000]. **The import then read `10.000` as ten**, silently. Fixed:
+   the export writes decimal commas with no grouping (`1200,00`, `2,5`, `3`),
+   and the import refuses dot-grouped numbers with no comma (`10.000`) as
+   ambiguous, with a sentence, instead of guessing.
+2. **A line following a global was exported with its stale stored number**,
+   and the import let the ref win, so a number typed over it did nothing.
+   Fixed: the export writes the number charged and the global's key in new
+   `quantity_global` / `period_global` columns (not `=key`, which a
+   spreadsheet reads as a formula). An empty global column means "stop
+   following" and the typed number applies; a file without those columns
+   says in the preview that it leaves the followed value alone.
+3. **Sub-sections have no code**, so their lines were exported with an empty
+   `section_code` and could never be re-imported. Fixed: a row without a code
+   is placed by `section_name`; a name used by two sections is refused.
+4. **The sheet showed `=shoot_days` instead of the days charged.** It now
+   shows the global's value with the key as a tag; clicking or tabbing into
+   the cell opens `=key` for editing.
+
+Tests: nine new real-DB API tests (one built from the shape of his file) and
+one web test. Mutations, each with a real FAIL line, each reverted: export
+back to dots → `assert '180.00' == '180,00'`; ambiguity guard removed →
+`assert 0 == 1` (no error row); ref columns ignored on update →
+`assert 'crew_days' is None`; sections not found by name → the round trip's
+7 updates came back with errors; followed cell shows the stored number →
+`expected '1' to be '3'`. API 2459 passed / 30 skipped, `-m realdb` 1133,
+web 650 — same declared environment as above.
+
+**Not fixed, flagged:** A1's catalog CSV import has the same `1.234` rule by
+decision (D-less, documented in `normalise_decimal_text`: read as English).
+The budget import now refuses that shape; the catalog import still reads it
+as a decimal. Worth the same guard when the catalog import is next touched.
+The budget already imported on the server keeps its ten-times values — the
+import changed real rows; the audit log has every old value.

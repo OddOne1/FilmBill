@@ -53,6 +53,8 @@ from ..billing.budget import (
     BudgetImportContext,
     BudgetImportPlan,
     BudgetImportRow,
+    de_amount,
+    de_quantity,
     export_csv,
     plan_from_file,
 )
@@ -1097,42 +1099,38 @@ def export_rows(db: Session, budget: Budget) -> list[dict]:
     walk(answer["result"].children)
 
     sections = {section.id: section for section in active_sections(db, budget)}
+    values = global_values(db, budget)
     rows: list[dict] = []
     for line in active_lines(db, list(sections)):
         section = sections.get(line.section_id)
         computed = by_id.get(str(line.id))
+        # A line that follows a global is written with the number it is
+        # CHARGED at (the global's value) and the key in its own column, so
+        # the file says what the sheet says and reads back as a ref.
+        quantity = values.get(line.quantity_ref, line.quantity) if line.quantity_ref else line.quantity
+        period = values.get(line.period_ref, line.period_value) if line.period_ref else line.period_value
         rows.append(
             {
-                "section_code": section.code if section is not None else "",
+                "section_code": (section.code or "") if section is not None else "",
                 "section_name": section.name if section is not None else "",
                 "description": line.description,
                 "kind": line.kind,
-                "quantity": _plain(line.quantity),
-                "period_value": _plain(line.period_value),
+                "quantity": de_quantity(quantity),
+                "quantity_global": line.quantity_ref or "",
+                "period_value": de_quantity(period),
+                "period_global": line.period_ref or "",
                 "period_unit": line.period_unit,
-                "factor": _plain(line.factor),
-                "unit_price": _plain(line.unit_price),
-                "unit_cost": _plain(line.unit_cost),
+                "factor": de_quantity(line.factor),
+                "unit_price": de_amount(line.unit_price),
+                "unit_cost": de_amount(line.unit_cost),
                 "discount_mode": line.discount_mode or "",
-                "discount_value": _plain(line.discount_value),
-                "price": _plain(computed.net) if computed is not None else "",
-                "cost": _plain(computed.cost_net) if computed is not None else "",
-                "margin": _plain(computed.margin) if computed is not None else "",
+                "discount_value": de_quantity(line.discount_value),
+                "price": de_amount(computed.net) if computed is not None else "",
+                "cost": de_amount(computed.cost_net) if computed is not None else "",
+                "margin": de_amount(computed.margin) if computed is not None else "",
             }
         )
     return rows
-
-
-def _plain(value) -> str:
-    """A `Decimal` as plain positional digits, or `""`.
-
-    `format(value, "f")`, the same call `core/money._serialise` makes and for
-    the same reason: `str(Decimal("1E+2"))` is `"1E+2"` and no spreadsheet
-    reads that as money.
-    """
-    if value is None:
-        return ""
-    return format(value, "f")
 
 
 def export_file(db: Session, budget: Budget) -> bytes:
@@ -1146,26 +1144,39 @@ def import_context(db: Session, budget: Budget) -> BudgetImportContext:
     """What already exists in this budget, as plain data for the pure planner."""
     sections = active_sections(db, budget)
     sections_by_code: dict[str, str] = {}
+    sections_by_name: dict[str, str] = {}
+    ambiguous_names: set[str] = set()
     for section in sections:
         if section.code:
             sections_by_code.setdefault(section.code.strip().lower(), str(section.id))
+        name = section.name.strip().lower()
+        if name in sections_by_name:
+            ambiguous_names.add(name)
+        sections_by_name.setdefault(name, str(section.id))
 
-    code_of = {
-        section.id: (section.code or "").strip().lower() for section in sections
-    }
     lines_by_key: dict[tuple, str] = {}
+    line_refs: dict[str, tuple[str, str]] = {}
     seen: set[tuple] = set()
     ambiguous: set[tuple] = set()
     for line in active_lines(db, [section.id for section in sections]):
-        key = (code_of.get(line.section_id, ""), line.description.strip().lower())
+        key = (str(line.section_id), line.description.strip().lower())
         if key in seen:
             ambiguous.add(key)
         seen.add(key)
         lines_by_key.setdefault(key, str(line.id))
+        line_refs[str(line.id)] = (line.quantity_ref or "", line.period_ref or "")
 
     return BudgetImportContext(
+        line_refs=line_refs,
         sections_by_code=sections_by_code,
+        sections_by_name={
+            name: section_id
+            for name, section_id in sections_by_name.items()
+            if name not in ambiguous_names
+        },
+        ambiguous_section_names=frozenset(ambiguous_names),
         lines_by_key=lines_by_key,
+        global_keys=frozenset(row.key for row in active_globals(db, budget)),
         ambiguous_keys=frozenset(ambiguous),
         kinds=frozenset(ITEM_KINDS),
         period_units=frozenset(PERIOD_UNITS),
@@ -1254,7 +1265,9 @@ def _create_from_row(
         description=values.description,
         kind=values.kind or KIND_OTHER,
         quantity=values.quantity if values.quantity is not None else ONE,
+        quantity_ref=values.quantity_ref or None,
         period_value=values.period_value if values.period_value is not None else ONE,
+        period_ref=values.period_ref or None,
         period_unit=values.period_unit or "day",
         factor=values.factor if values.factor is not None else ONE,
         factor_source="manual",
@@ -1292,6 +1305,20 @@ def _update_from_row(db: Session, row: BudgetImportRow, *, actor: audit.Actor) -
     if line is None:  # pragma: no cover - the plan resolved it one statement ago
         return
     before = audit.snapshot(line, LINE_AUDITED)
+    # Refs first: a present ref column decides whether the number column
+    # applies at all. A line that follows a global keeps its stored number
+    # untouched (it is the fallback if the ref is later cleared); the file's
+    # number for it is the global's value, written by the export to be read.
+    skip: set[str] = set()
+    for ref_field, value_field in (("quantity_ref", "quantity"), ("period_ref", "period_value")):
+        ref = getattr(values, ref_field)
+        if ref is None:
+            if getattr(line, ref_field):
+                skip.add(value_field)
+            continue
+        setattr(line, ref_field, ref or None)
+        if ref:
+            skip.add(value_field)
     for field_name in (
         "kind",
         "quantity",
@@ -1302,6 +1329,8 @@ def _update_from_row(db: Session, row: BudgetImportRow, *, actor: audit.Actor) -
         "unit_cost",
         "notes",
     ):
+        if field_name in skip:
+            continue
         value = getattr(values, field_name)
         if value is not None:
             setattr(line, field_name, value)

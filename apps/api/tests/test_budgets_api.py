@@ -968,18 +968,259 @@ def test_the_export_carries_the_engines_own_numbers(pg_client, world, project):
     assert response.content.startswith("﻿".encode("utf-8")), (
         "no BOM — a German Excel reads a BOM-less UTF-8 CSV as Windows-1252"
     )
-    text = response.content.decode("utf-8-sig")
-    header, *rows = [line for line in text.splitlines() if line.strip()]
-    assert header.split(";")[:3] == ["section_code", "section_name", "description"]
-    dop = next(line for line in rows if ";DoP;" in line)
-    cells = dop.split(";")
-    assert cells[0] == "1100"
-    # price, cost, margin — the engine's own, as the fixture has them.
-    assert cells[-3:] == [
-        S1["expect"]["lines"]["dop"]["net"],
-        S1["expect"]["lines"]["dop"]["cost_net"],
-        S1["expect"]["lines"]["dop"]["margin"],
+    rows = _csv_rows(response.content)
+    dop = next(row for row in rows if row["description"] == "DoP")
+    assert dop["section_code"] == "1100"
+    # price, cost, margin — the engine's own, as the fixture has them, with
+    # the decimal comma this German-convention file uses.
+    assert [dop["price"], dop["cost"], dop["margin"]] == [
+        _comma(S1["expect"]["lines"]["dop"]["net"]),
+        _comma(S1["expect"]["lines"]["dop"]["cost_net"]),
+        _comma(S1["expect"]["lines"]["dop"]["margin"]),
     ]
+
+
+def _csv_rows(payload: bytes) -> list[dict]:
+    import csv as _csv
+
+    text = payload.decode("utf-8-sig")
+    return list(_csv.DictReader(io.StringIO(text), delimiter=";"))
+
+
+def _comma(value: str) -> str:
+    return value.replace(".", ",")
+
+
+def test_the_export_writes_numbers_a_german_spreadsheet_reads_as_they_are(
+    pg_client, world, project
+):
+    """`;` and a BOM make this a German-convention file, and in that
+    convention a dot is a thousands separator. The first version wrote
+    `1.0000` for one day; a spreadsheet saved it back as `10.000`, and the
+    import read ten (A2 acceptance, 2026-11-24). So: decimal commas, no
+    grouping, no trailing zeros on a quantity."""
+    budget = _example(pg_client, world, project)
+    rows = _csv_rows(
+        pg_client.get(f"/budgets/{budget['id']}/export.csv", headers=_headers(world)).content
+    )
+    lenses = next(row for row in rows if row["description"] == "Lens set")
+    assert lenses["quantity"] == "2"
+    assert lenses["period_value"] == "3"
+    assert lenses["factor"] == "1"
+    assert lenses["unit_price"] == "180,00"
+    assert lenses["price"] == "1080,00"
+    for row in rows:
+        for column in ("quantity", "period_value", "factor", "unit_price", "unit_cost", "price"):
+            assert "." not in row[column], (column, row)
+
+
+def test_a_dot_grouped_number_is_refused_not_read_as_a_decimal(
+    pg_client, world, project
+):
+    """The shape of the file from the acceptance: `10.000` where the line
+    had one. In this file format that is ten thousand; read as English it is
+    ten. Either reading is a guess, so it is an error row and nothing is
+    written."""
+    budget = _example(pg_client, world, project)
+    payload = (
+        "section_code;section_name;description;quantity;period_value;factor\r\n"
+        "1200;Equipment;Alexa 35;10.000;30.000;10.000\r\n"
+    ).encode("utf-8")
+
+    preview = pg_client.post(
+        f"/budgets/{budget['id']}/import/preview",
+        headers=_headers(world),
+        files={"file": ("lines.csv", io.BytesIO(payload), "text/csv")},
+    ).json()
+
+    assert preview["errors"] == 1
+    assert preview["updates"] == 0
+    assert "ambiguous" in preview["rows"][0]["message"]
+    alexa = next(
+        row for row in _sheet(pg_client, world, budget["id"])["lines"]
+        if row["description"] == "Alexa 35"
+    )
+    assert alexa["quantity"] == "1.0000"
+
+
+def test_a_line_that_follows_a_global_exports_the_charged_number_and_the_key(
+    pg_client, world, project
+):
+    budget = _example(pg_client, world, project)
+    _global(pg_client, world, budget["id"], key="crew_days", label="Crew days", value="4", source="manual")
+    sheet = _sheet(pg_client, world, budget["id"])
+    dop = next(row for row in sheet["lines"] if row["description"] == "DoP")
+    pg_client.patch(
+        f"/budgets/{budget['id']}/lines/{dop['id']}",
+        headers=_headers(world),
+        json={"period_ref": "crew_days"},
+    )
+
+    rows = _csv_rows(
+        pg_client.get(f"/budgets/{budget['id']}/export.csv", headers=_headers(world)).content
+    )
+    exported = next(row for row in rows if row["description"] == "DoP")
+    assert exported["period_value"] == "4", "the number charged, not the stale stored 3"
+    assert exported["period_global"] == "crew_days"
+    assert exported["quantity_global"] == ""
+
+
+def test_a_round_trip_keeps_a_ref_and_the_totals(pg_client, world, project):
+    original = _example(pg_client, world, project)
+    _global(pg_client, world, original["id"], key="crew_days", label="Crew days", value="4", source="manual")
+    dop = next(
+        row for row in _sheet(pg_client, world, original["id"])["lines"]
+        if row["description"] == "DoP"
+    )
+    pg_client.patch(
+        f"/budgets/{original['id']}/lines/{dop['id']}",
+        headers=_headers(world),
+        json={"period_ref": "crew_days"},
+    )
+    payload = pg_client.get(
+        f"/budgets/{original['id']}/export.csv", headers=_headers(world)
+    ).content
+    copy = pg_client.post(
+        f"/budgets/{original['id']}/duplicate", headers=_headers(world), json={}
+    ).json()
+
+    body = _import(pg_client, world, copy["id"], payload)
+
+    assert (body["creates"], body["updates"], body["errors"]) == (0, 6, 0)
+    copied = next(
+        row for row in _sheet(pg_client, world, copy["id"])["lines"]
+        if row["description"] == "DoP"
+    )
+    assert copied["period_ref"] == "crew_days"
+    assert copied["period_value"] == "3.0000", "the stored fallback is left alone"
+    before = _calc(pg_client, world, original["id"])["result"]
+    after = _calc(pg_client, world, copy["id"])["result"]
+    assert (before["net"], before["cost"]) == (after["net"], after["cost"])
+
+
+def test_an_emptied_global_column_makes_the_typed_number_apply(
+    pg_client, world, project
+):
+    """The Studio row of the acceptance file: a `5` typed over a followed
+    value did nothing. Now an empty `period_global` says "stop following"
+    and the 5 applies — and the preview says so."""
+    budget = _example(pg_client, world, project)
+    _global(pg_client, world, budget["id"], key="crew_days", label="Crew days", value="4", source="manual")
+    studio = next(
+        row for row in _sheet(pg_client, world, budget["id"])["lines"]
+        if row["description"] == "Studio A"
+    )
+    pg_client.patch(
+        f"/budgets/{budget['id']}/lines/{studio['id']}",
+        headers=_headers(world),
+        json={"period_ref": "crew_days"},
+    )
+    payload = (
+        "section_code;description;period_value;period_global\r\n"
+        "1300;Studio A;5;\r\n"
+    ).encode("utf-8")
+
+    body = _import(pg_client, world, budget["id"], payload)
+
+    assert "no longer follows a global" in body["rows"][0]["message"]
+    after = next(
+        row for row in _sheet(pg_client, world, budget["id"])["lines"]
+        if row["description"] == "Studio A"
+    )
+    assert after["period_ref"] is None
+    assert after["period_value"] == "5.0000"
+
+
+def test_a_file_without_the_global_columns_says_it_leaves_a_followed_value(
+    pg_client, world, project
+):
+    budget = _example(pg_client, world, project)
+    _global(pg_client, world, budget["id"], key="crew_days", label="Crew days", value="4", source="manual")
+    studio = next(
+        row for row in _sheet(pg_client, world, budget["id"])["lines"]
+        if row["description"] == "Studio A"
+    )
+    pg_client.patch(
+        f"/budgets/{budget['id']}/lines/{studio['id']}",
+        headers=_headers(world),
+        json={"period_ref": "crew_days"},
+    )
+    payload = "section_code;description;period_value\r\n1300;Studio A;5\r\n".encode("utf-8")
+
+    body = _import(pg_client, world, budget["id"], payload)
+
+    assert "is not applied" in body["rows"][0]["message"]
+    after = next(
+        row for row in _sheet(pg_client, world, budget["id"])["lines"]
+        if row["description"] == "Studio A"
+    )
+    assert after["period_ref"] == "crew_days"
+    assert after["period_value"] == "2.0000"
+
+
+def test_a_global_column_naming_nothing_is_an_error_row(pg_client, world, project):
+    budget = _example(pg_client, world, project)
+    payload = (
+        "section_code;description;period_global\r\n1300;Studio A;no_such_key\r\n"
+    ).encode("utf-8")
+    preview = pg_client.post(
+        f"/budgets/{budget['id']}/import/preview",
+        headers=_headers(world),
+        files={"file": ("lines.csv", io.BytesIO(payload), "text/csv")},
+    ).json()
+    assert preview["errors"] == 1
+    assert "no_such_key" in preview["rows"][0]["message"]
+
+
+def test_a_sub_section_without_a_code_round_trips_by_its_name(
+    pg_client, world, project
+):
+    """The DoP and Gaffer rows of the acceptance file were refused: they sat
+    in sub-sections ("Event", "Documentary") with no code, and the export
+    wrote an empty section_code the import could not place."""
+    original = _example(pg_client, world, project)
+    sheet = _sheet(pg_client, world, original["id"])
+    crew = next(row for row in sheet["sections"] if row["code"] == "1100")
+    event = _section(pg_client, world, original["id"], name="Event", parent_id=crew["id"])
+    _line(
+        pg_client, world, original["id"],
+        section_id=event["id"], description="Runner", quantity="1",
+        period_value="2", factor="1", allow_negative=False,
+        unit_price="200.00", unit_cost="150.00",
+    )
+    payload = pg_client.get(
+        f"/budgets/{original['id']}/export.csv", headers=_headers(world)
+    ).content
+    runner = next(row for row in _csv_rows(payload) if row["description"] == "Runner")
+    assert (runner["section_code"], runner["section_name"]) == ("", "Event")
+
+    copy = pg_client.post(
+        f"/budgets/{original['id']}/duplicate", headers=_headers(world), json={}
+    ).json()
+    body = _import(pg_client, world, copy["id"], payload)
+
+    assert (body["creates"], body["updates"], body["errors"]) == (0, 7, 0), body["rows"]
+    before = _calc(pg_client, world, original["id"])["result"]
+    after = _calc(pg_client, world, copy["id"])["result"]
+    assert (before["net"], before["cost"]) == (after["net"], after["cost"])
+
+
+def test_a_section_name_used_twice_is_refused_by_name(pg_client, world, project):
+    budget = _example(pg_client, world, project)
+    sheet = _sheet(pg_client, world, budget["id"])
+    for code in ("1100", "1200"):
+        parent = next(row for row in sheet["sections"] if row["code"] == code)
+        _section(pg_client, world, budget["id"], name="Extras", parent_id=parent["id"])
+    payload = (
+        "section_code;section_name;description\r\n;Extras;Coffee\r\n"
+    ).encode("utf-8")
+    preview = pg_client.post(
+        f"/budgets/{budget['id']}/import/preview",
+        headers=_headers(world),
+        files={"file": ("lines.csv", io.BytesIO(payload), "text/csv")},
+    ).json()
+    assert preview["errors"] == 1
+    assert "more than one section called" in preview["rows"][0]["message"]
 
 
 def test_a_csv_round_trip_into_a_duplicate_keeps_the_totals(

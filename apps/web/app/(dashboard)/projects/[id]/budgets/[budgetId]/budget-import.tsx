@@ -94,9 +94,12 @@ export function BudgetImport({
         </button>
       </div>
       <p className="mt-2 text-xs text-text-tertiary">
-        Columns as in the export: <code>section_code</code> and <code>description</code> are
-        required and identify the line; a blank column keeps what the line has. German decimal
-        commas are fine.
+        Columns as in the export. A line is found by <code>section_code</code> (or{' '}
+        <code>section_name</code> for a sub-section without a code) and <code>description</code>;
+        a blank number keeps what the line has. Write numbers with a decimal comma (
+        <code>2,5</code>) or without separators (<code>10000</code>) — <code>10.000</code> is
+        refused because it could mean ten or ten thousand. <code>period_global</code> /{' '}
+        <code>quantity_global</code> name the global a line follows; empty means it follows none.
       </p>
 
       {error && (

@@ -84,7 +84,18 @@ describe('the numbers on the sheet', () => {
       .find((row) => row.getAttribute('data-line') === 'l-dop')!
     expect(within(dop).getByTestId('line-price').textContent).toBe(formatAmount('2550.00'))
     expect(within(dop).getByTestId('line-cost').textContent).toBe(formatAmount('1800.00'))
-    // The period points at a global and says so.
+  })
+
+  it('a cell that follows a global shows the number charged and the key, not the stored number', async () => {
+    render(<BudgetPage />)
+    await screen.findByTestId('budget-sheet')
+    const dop = screen.getAllByTestId('line-row').find((row) => row.getAttribute('data-line') === 'l-dop')!
+    const cell = within(dop).getByLabelText('Period — DoP')
+    expect(within(cell).getByTestId('followed-value').textContent).toBe('3')
+    expect(cell.textContent).toContain('shoot_days')
+
+    // Focusing it opens the ref for editing.
+    fireEvent.focus(cell)
     expect((within(dop).getByLabelText('Period — DoP') as HTMLInputElement).value).toBe('=shoot_days')
   })
 
@@ -138,7 +149,9 @@ describe('editing', () => {
     vi.mocked(api.patch).mockResolvedValue({} as never)
     render(<BudgetPage />)
     await screen.findByTestId('budget-sheet')
+    fireEvent.focus(screen.getByLabelText('Period — DoP'))
     const period = screen.getByLabelText('Period — DoP')
+    expect(period.tagName).toBe('INPUT')
     fireEvent.change(period, { target: { value: '4' } })
     fireEvent.blur(period)
     await waitFor(() => expect(api.patch).toHaveBeenCalled())

@@ -136,7 +136,10 @@ export function makeSheet(overrides: { locked?: boolean } = {}): BudgetSheet {
       { id: 's-eq', budget_id: 'b1', code: '1200', name: 'Equipment', parent_id: null, position: 20, is_active: true },
     ],
     lines: [
-      line({ id: 'l-dop', description: 'DoP', position: 10, period_ref: 'shoot_days', unit_price: '850.00', unit_cost: '600.00' }),
+      // Follows `shoot_days` (3). Its stored period is a stale 1 — what the
+      // line had before it was pointed at the global — so a cell that showed
+      // the stored number instead of the charged one would say 1.
+      line({ id: 'l-dop', description: 'DoP', position: 10, period_value: '1.0000', period_ref: 'shoot_days', unit_price: '850.00', unit_cost: '600.00' }),
       line({ id: 'l-gaffer', description: 'Gaffer', position: 20, unit_price: '550.00', unit_cost: '420.00' }),
       line({
         id: 'l-alexa',

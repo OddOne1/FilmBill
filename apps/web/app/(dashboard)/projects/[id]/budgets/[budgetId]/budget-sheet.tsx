@@ -134,6 +134,12 @@ export function BudgetSheetEditor({ sheet, calc, editable, onChange, onError }: 
     return map
   }, [calc])
   const [collapsed, setCollapsed] = React.useState<Set<string>>(new Set())
+  // `key → value` of the budget's globals, as the API sent them (computed
+  // ones are counted by the server on every read). A lookup, not a sum.
+  const globalValues = React.useMemo(
+    () => new Map(sheet.globals.map((row) => [row.key, row.value])),
+    [sheet.globals],
+  )
   const container = React.useRef<HTMLDivElement>(null)
 
   const sections = [...sheet.sections].sort((a, b) => a.position - b.position)
@@ -324,6 +330,7 @@ export function BudgetSheetEditor({ sheet, calc, editable, onChange, onError }: 
               depth={depth}
               result={results.lines.get(line.id)}
               explanation={explanations.get(line.id)}
+              globalValues={globalValues}
               editable={editable}
               sections={sections}
               onPatch={(body) => void patchLine(line, body)}
@@ -415,6 +422,7 @@ function LineRow({
   depth,
   result,
   explanation,
+  globalValues,
   editable,
   sections,
   onPatch,
@@ -429,6 +437,7 @@ function LineRow({
   depth: number
   result: CalcLineResult | undefined
   explanation: FactorExplanation | undefined
+  globalValues: Map<string, string>
   editable: boolean
   sections: BudgetSection[]
   onPatch: (body: BudgetLineUpdate) => void
@@ -438,6 +447,8 @@ function LineRow({
   onRemove: () => void
   focusCell: (row: number, column: Column) => void
 }) {
+  /** Which ref cell is open for typing; the others show their number. */
+  const [editingRef, setEditingRef] = React.useState<Column | null>(null)
   const difference = line.catalog_difference
   const differsTitle = difference
     ? `Differs from the catalog item “${difference.item_name}”` +
@@ -487,7 +498,14 @@ function LineRow({
     }
   }
 
-  const cell = (column: Column, shown: string, label: string, align: 'left' | 'right' = 'right', title?: string) => {
+  const cell = (
+    column: Column,
+    shown: string,
+    label: string,
+    align: 'left' | 'right' = 'right',
+    title?: string,
+    autoFocus = false,
+  ) => {
     if (!editable) {
       return (
         <span title={title} className={align === 'right' ? 'block text-right' : undefined}>
@@ -502,7 +520,9 @@ function LineRow({
         defaultValue={shown}
         key={`${column}-${shown}`}
         title={title}
+        autoFocus={autoFocus}
         onBlur={(event) => {
+          if (editingRef === column) setEditingRef(null)
           if (event.target.value === shown) return
           const body = bodyFor(column, event.target.value)
           if (body) onPatch(body)
@@ -524,6 +544,49 @@ function LineRow({
     )
   }
 
+  /** A quantity or period that follows a global: the number it is charged
+   *  at (the global's value, as the API sent it) with the key beside it.
+   *  Focusing it — a click, or Tab/Enter from the next cell — opens the
+   *  `=key` text for editing; typing a number there stops following. */
+  const followed = (column: 'quantity' | 'period', ref: string, label: string) => {
+    if (editable && editingRef === column) {
+      return cell(column, `=${ref}`, label, 'right', undefined, true)
+    }
+    const value = globalValues.get(ref)
+    const content = (
+      <>
+        <span data-testid="followed-value" className="tabular-nums">
+          {value ? trimZeros(value) : NO_VALUE}
+        </span>
+        <span className="ml-1 max-w-[4.5rem] truncate rounded bg-bg-secondary px-1 text-[10px] text-text-tertiary">
+          {ref}
+        </span>
+      </>
+    )
+    const title = value
+      ? `Follows the global “${ref}” (${trimZeros(value)}). Edit it in the Globals panel, or click to point this cell elsewhere.`
+      : `Points at the global “${ref}”, which this budget does not have.`
+    if (!editable) {
+      return (
+        <span title={title} className="flex items-center justify-end">
+          {content}
+        </span>
+      )
+    }
+    return (
+      <button
+        type="button"
+        aria-label={`${label} — ${line.description}`}
+        data-cell={`${row}:${column}`}
+        title={title}
+        onFocus={() => setEditingRef(column)}
+        className="flex w-full items-center justify-end rounded border border-transparent px-1 py-0.5 hover:border-border"
+      >
+        {content}
+      </button>
+    )
+  }
+
   return (
     <tr data-testid="line-row" data-line={line.id} className="border-b border-border/60">
       <td className="py-0.5 pr-2" style={{ paddingLeft: depth * 16 + 20 }}>
@@ -540,8 +603,14 @@ function LineRow({
           )}
         </div>
       </td>
-      <td className="w-20 py-0.5 pr-2">{cell('quantity', quantityShown, 'Quantity')}</td>
-      <td className="w-20 py-0.5 pr-2">{cell('period', periodShown, 'Period')}</td>
+      <td className="w-24 py-0.5 pr-2">
+        {line.quantity_ref
+          ? followed('quantity', line.quantity_ref, 'Quantity')
+          : cell('quantity', quantityShown, 'Quantity')}
+      </td>
+      <td className="w-24 py-0.5 pr-2">
+        {line.period_ref ? followed('period', line.period_ref, 'Period') : cell('period', periodShown, 'Period')}
+      </td>
       <td className="w-24 py-0.5 pr-2">
         {editable ? (
           <select
