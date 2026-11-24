@@ -1699,8 +1699,13 @@ def test_every_tracking_route_404s_for_another_company_s_budget(
         ("post", f"/budgets/{budget_id}/actuals/{stranger}/void", {"reason": "x"}),
         ("put", f"/budgets/{budget_id}/lines/{stranger}/etc", {"etc": "1.00"}),
         ("get", f"/budgets/{budget_id}/actuals/export.csv", None),
+        # B1.1 "Mark finished".
+        ("post", f"/budgets/{budget_id}/lines/{stranger}/finish", {}),
+        ("post", f"/budgets/{budget_id}/lines/{stranger}/reopen", None),
+        ("post", f"/budgets/{budget_id}/sections/{stranger}/finish", None),
+        ("post", f"/budgets/{budget_id}/sections/{stranger}/reopen", None),
     ]
-    assert len(requests) == 15
+    assert len(requests) == 19
 
     for method, url, body in requests:
         response = getattr(pg_client, method)(
@@ -1713,13 +1718,13 @@ def test_every_tracking_route_404s_for_another_company_s_budget(
 
 
 def test_the_isolation_walk_covers_every_route_in_the_router(client):
-    """The walk above sends 15 of the router's 17 operations.
+    """The walk above sends 19 of the router's 21 operations.
 
     The two it does not are the CSV preview and apply, which take a file
     upload; `test_company_isolation.py` sends both as multipart against a
-    budget of another company. Stated here so that adding an eighteenth
+    budget of another company. Stated here so that adding a twenty-second
     route fails this assertion rather than quietly going unchecked (rule
-    17b).
+    17b). B1.1 added the four finish/reopen routes (17 → 21).
     """
     from fastapi.openapi.utils import get_openapi
 
@@ -1734,7 +1739,7 @@ def test_the_isolation_walk_covers_every_route_in_the_router(client):
         for path, methods in schema["paths"].items()
         for method in methods
     ]
-    assert len(operations) == 17, sorted(operations)
+    assert len(operations) == 21, sorted(operations)
 
 
 # ─── The ledger ─────────────────────────────────────────────────────────────

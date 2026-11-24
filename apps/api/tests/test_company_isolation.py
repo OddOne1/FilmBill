@@ -441,6 +441,12 @@ CASES: dict[str, object] = {
         "body": {"reason": "Stolen"}
     },
     "PUT /budgets/{budget_id}/lines/{line_id}/etc": {"body": {"etc": "1.00"}},
+    # B1.1 "Mark finished": B's own line and section, so a handler that
+    # looked them up by id alone would FIND them.
+    "POST /budgets/{budget_id}/lines/{line_id}/finish": {"body": {}},
+    "POST /budgets/{budget_id}/lines/{line_id}/reopen": {"body": None},
+    "POST /budgets/{budget_id}/sections/{section_id}/finish": {"body": None},
+    "POST /budgets/{budget_id}/sections/{section_id}/reopen": {"body": None},
     "GET /budgets/{budget_id}/actuals/export.csv": {"body": None},
     "POST /budgets/{budget_id}/actuals/import/preview": {
         "files": {

@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { api, ApiError } from '@/lib/api'
 import { formatAmount, NO_VALUE } from '@/lib/money'
+import { FinishedMarker } from './budget-glossary-ui'
 import {
   isCalcGroupResult,
   type BudgetCalculated,
@@ -124,9 +125,12 @@ export interface BudgetSheetProps {
   /** Re-fetch the sheet and the calculated view after a write. */
   onChange: () => Promise<void> | void
   onError: (message: string | null) => void
+  /** Lines the API says are finished (B1.1), so the marker shows in this
+   *  phase too. A lookup of the tracking view's own flag. */
+  finishedLines?: Set<string>
 }
 
-export function BudgetSheetEditor({ sheet, calc, editable, onChange, onError }: BudgetSheetProps) {
+export function BudgetSheetEditor({ sheet, calc, editable, onChange, onError, finishedLines }: BudgetSheetProps) {
   const results = React.useMemo(() => indexResults(calc), [calc])
   const explanations = React.useMemo(() => {
     const map = new Map<string, FactorExplanation>()
@@ -331,6 +335,7 @@ export function BudgetSheetEditor({ sheet, calc, editable, onChange, onError }: 
               result={results.lines.get(line.id)}
               explanation={explanations.get(line.id)}
               globalValues={globalValues}
+              finished={finishedLines?.has(line.id) ?? false}
               editable={editable}
               sections={sections}
               onPatch={(body) => void patchLine(line, body)}
@@ -423,6 +428,7 @@ function LineRow({
   result,
   explanation,
   globalValues,
+  finished,
   editable,
   sections,
   onPatch,
@@ -438,6 +444,7 @@ function LineRow({
   result: CalcLineResult | undefined
   explanation: FactorExplanation | undefined
   globalValues: Map<string, string>
+  finished: boolean
   editable: boolean
   sections: BudgetSection[]
   onPatch: (body: BudgetLineUpdate) => void
@@ -592,6 +599,7 @@ function LineRow({
       <td className="py-0.5 pr-2" style={{ paddingLeft: depth * 16 + 20 }}>
         <div className="flex items-center gap-1">
           {cell('description', line.description, 'Description', 'left')}
+          {finished && <FinishedMarker />}
           {difference && (
             <span
               data-testid="differs-from-catalog"

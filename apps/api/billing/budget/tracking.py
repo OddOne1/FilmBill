@@ -130,6 +130,7 @@ __all__ = [
     "TrackingResult",
     "closes_commitment",
     "committed_open_of",
+    "is_finished",
     "track_budget",
     "track_line",
 ]
@@ -240,6 +241,12 @@ class LineTracking:
     #: The ETC the user set, or `None`. Carried so a screen can show it
     #: beside the forecast it produced without a second request.
     etc: Optional[Decimal] = None
+    #: "Mark finished" (B1.1): an ETC of exactly 0.00. Decided here, once,
+    #: so the screen does not compare strings to tell a finished line from
+    #: one whose still-to-spend merely happens to be zero by the default
+    #: rule — those are different statements (SCOPE D83) and only this one
+    #: says "nothing more is expected".
+    finished: bool = False
 
 
 @dataclass(frozen=True)
@@ -364,6 +371,11 @@ def closes_commitment(
     return settled >= commitment.amount
 
 
+def is_finished(etc: Optional[Decimal]) -> bool:
+    """An ETC of 0.00 means "finished"; `None` (the default rule) does not."""
+    return etc is not None and quantize_amount(etc) == ZERO
+
+
 def track_line(line: LineInput) -> LineTracking:
     """One line's numbers. The definitions in the module docstring, applied."""
     estimate_cost = quantize_amount(line.estimate_cost)
@@ -404,6 +416,7 @@ def track_line(line: LineInput) -> LineTracking:
         variance_percent=_percent(variance, estimate_cost),
         over_budget=efc > estimate_cost,
         etc=None if line.etc is None else quantize_amount(line.etc),
+        finished=is_finished(line.etc),
     )
 
 

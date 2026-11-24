@@ -32,6 +32,7 @@ from .tracking import (
     TrackingResult,
     closes_commitment,
     committed_open_of,
+    is_finished,
     track_budget,
     track_line,
 )
@@ -89,6 +90,7 @@ __all__ = [
     "TrackingResult",
     "closes_commitment",
     "committed_open_of",
+    "is_finished",
     "track_budget",
     "track_line",
 ]

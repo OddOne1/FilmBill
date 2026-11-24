@@ -123,10 +123,14 @@ POST /budgets/{budget_id}/import
 POST /budgets/{budget_id}/import/preview
 POST /budgets/{budget_id}/lines
 POST /budgets/{budget_id}/lines/{line_id}/duplicate
+POST /budgets/{budget_id}/lines/{line_id}/finish
 POST /budgets/{budget_id}/lines/{line_id}/remove
+POST /budgets/{budget_id}/lines/{line_id}/reopen
 POST /budgets/{budget_id}/lock
 POST /budgets/{budget_id}/sections
+POST /budgets/{budget_id}/sections/{section_id}/finish
 POST /budgets/{budget_id}/sections/{section_id}/remove
+POST /budgets/{budget_id}/sections/{section_id}/reopen
 POST /budgets/{budget_id}/set-primary
 POST /budgets/{budget_id}/unlock
 POST /calc/preview

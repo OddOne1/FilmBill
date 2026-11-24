@@ -49,6 +49,20 @@ export function InfoTip({ id }: { id: GlossaryId }) {
   )
 }
 
+/** "finished" beside a line, in every phase (B1.1). The words are the
+ *  glossary's; whether a line is finished is the API's `finished` flag. */
+export function FinishedMarker() {
+  return (
+    <span
+      data-testid="line-finished"
+      title={glossary('finished').explanation}
+      className="ml-1.5 shrink-0 rounded bg-status-success/10 px-1 text-[10px] font-medium text-status-success"
+    >
+      finished
+    </span>
+  )
+}
+
 /** A term's label with its info icon. */
 export function Term({ id, suffix }: { id: GlossaryId; suffix?: string }) {
   return (

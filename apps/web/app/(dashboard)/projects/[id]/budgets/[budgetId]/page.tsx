@@ -94,6 +94,13 @@ export default function BudgetPage() {
   }
 
   const budget: Budget | undefined = sheet?.budget
+  // The API's own `finished` flag per line, collected for the estimate
+  // sheet's marker. A lookup, not a calculation.
+  const finishedLines = new Set(
+    Object.values(tracking?.lines ?? {})
+      .filter((row) => row.finished)
+      .map((row) => row.id),
+  )
   const editable = access.canEditBudgets && !!budget && !budget.is_locked
   const currency = budget?.currency ?? ''
 
@@ -286,14 +293,28 @@ export default function BudgetPage() {
               <HowToRead />
               {phase === 'estimate' ? (
                 <div className="grid gap-4 xl:grid-cols-[1fr_20rem]">
-                  <BudgetSheetEditor sheet={sheet} calc={calc} editable={editable} onChange={reload} onError={setError} />
+                  <BudgetSheetEditor
+                    sheet={sheet}
+                    calc={calc}
+                    editable={editable}
+                    onChange={reload}
+                    onError={setError}
+                    finishedLines={finishedLines}
+                  />
                   <div className="mt-4 space-y-4">
                     <GlobalsPanel sheet={sheet} calc={calc} editable={editable} onChange={reload} onError={setError} />
                     <AdjustmentsPanel sheet={sheet} calc={calc} editable={editable} onChange={reload} onError={setError} />
                   </div>
                 </div>
               ) : (
-                <PhaseSheet sheet={sheet} tracking={tracking} phase={phase} onOpenLine={setDrawerLine} />
+                <PhaseSheet
+                  sheet={sheet}
+                  tracking={tracking}
+                  phase={phase}
+                  onOpenLine={setDrawerLine}
+                  canEdit={access.canEditBudgets}
+                  onChange={reload}
+                />
               )}
             </>
           )}

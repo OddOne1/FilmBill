@@ -5,6 +5,7 @@ import { AlertTriangle, ChevronDown, ChevronRight, X } from 'lucide-react'
 import { api, ApiError } from '@/lib/api'
 import { formatAmount, NO_VALUE } from '@/lib/money'
 import type {
+  BulkFinish,
   BudgetActual,
   BudgetCommitment,
   BudgetLedger,
@@ -25,7 +26,7 @@ import {
   unsignedPercent,
   varianceWords,
 } from '@/lib/budget-glossary'
-import { InfoTip, Term } from './budget-glossary-ui'
+import { FinishedMarker, InfoTip, Term } from './budget-glossary-ui'
 import type { GlossaryId } from '@/lib/budget-glossary'
 
 /**
@@ -119,9 +120,10 @@ function OverBudget() {
   )
 }
 
-/** What a line row says beside its name: the amount still to spend when
- *  somebody set it by hand. */
+/** What a line row says beside its name: "finished", or the amount still to
+ *  spend when somebody set it by hand. */
 function LineMarkers({ row }: { row: LineTracking | undefined }) {
+  if (row?.finished) return <FinishedMarker />
   if (row?.remaining_rule !== 'etc') return null
   return (
     <span
@@ -140,13 +142,32 @@ export function PhaseSheet({
   tracking,
   phase,
   onOpenLine,
+  canEdit = false,
+  onChange,
 }: {
   sheet: BudgetSheet
   tracking: BudgetTracking | null
   phase: Exclude<Phase, 'estimate'>
   onOpenLine: (line: BudgetLine) => void
+  canEdit?: boolean
+  onChange?: () => Promise<void> | void
 }) {
   const [collapsed, setCollapsed] = React.useState<Set<string>>(new Set())
+  const [bulk, setBulk] = React.useState<{ sectionId: string; answer: BulkFinish } | null>(null)
+  const [bulkError, setBulkError] = React.useState<string | null>(null)
+  const linesById = React.useMemo(() => new Map(sheet.lines.map((line) => [line.id, line])), [sheet.lines])
+
+  const runBulk = async (section: BudgetSection, action: 'finish' | 'reopen') => {
+    setBulkError(null)
+    try {
+      const answer = await api.post<BulkFinish>(`/budgets/${sheet.budget.id}/sections/${section.id}/${action}`)
+      setBulk({ sectionId: section.id, answer })
+      await onChange?.()
+    } catch (err) {
+      setBulk(null)
+      setBulkError(err instanceof ApiError ? err.detail : 'That did not work')
+    }
+  }
   const sections = [...sheet.sections].sort((a, b) => a.position - b.position)
   const topLevel = sections.filter((section) => !section.parent_id)
   const childrenOf = (id: string) => sections.filter((section) => section.parent_id === id)
@@ -182,7 +203,42 @@ export function PhaseSheet({
               {section.code && <span className="font-mono text-xs text-text-tertiary">{section.code}</span>}
               <span className="text-sm font-medium text-text-primary">{section.name}</span>
               {rollup?.over_budget && <OverBudget />}
+              {canEdit && (
+                <span className="ml-2 inline-flex gap-2 text-[11px] font-normal">
+                  <button
+                    type="button"
+                    data-testid="section-finish-all"
+                    onClick={() => void runBulk(section, 'finish')}
+                    className="text-text-secondary underline-offset-2 hover:text-text-primary hover:underline"
+                  >
+                    Finish all lines in this section
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="section-reopen-all"
+                    onClick={() => void runBulk(section, 'reopen')}
+                    className="text-text-secondary underline-offset-2 hover:text-text-primary hover:underline"
+                  >
+                    Reopen all
+                  </button>
+                </span>
+              )}
             </div>
+            {bulk?.sectionId === section.id && (
+              <div data-testid="bulk-result" role="status" className="mt-1 text-xs font-normal text-text-secondary" style={{ paddingLeft: depth * 16 + 20 }}>
+                {bulk.answer.message}
+                {(bulk.answer.skipped ?? []).length > 0 && (
+                  <ul className="mt-0.5 list-disc pl-4">
+                    {(bulk.answer.skipped ?? []).map((row) => (
+                      <li key={row.line_id} data-testid="bulk-skipped">
+                        {linesById.get(row.line_id)?.description ?? row.description}: {formatAmount(row.committed_open)} ordered,
+                        not yet invoiced
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
           </td>
           <td className="py-1.5 pr-2 text-right tabular-nums text-text-secondary">{formatAmount(rollup?.estimate_cost)}</td>
           <td data-testid="phase-section-value" className="py-1.5 pr-2 text-right font-medium tabular-nums">
@@ -239,6 +295,11 @@ export function PhaseSheet({
       <p data-testid="phase-explained" className="mb-2 text-xs text-text-secondary">
         {PHASE_SENTENCE[phase]} {PHASE_CLICK_HINT}
       </p>
+      {bulkError && (
+        <p role="alert" className="mb-2 text-sm text-danger">
+          {bulkError}
+        </p>
+      )}
       {!tracking && (
         <p className="mb-2 text-xs text-text-tertiary">The cost figures could not be loaded, so the columns are empty.</p>
       )}
@@ -298,6 +359,10 @@ export function LineDrawer({
   const [adding, setAdding] = React.useState<EntryKind | null>(null)
   const [etc, setEtc] = React.useState<string>(row?.etc ?? '')
   const [error, setError] = React.useState<string | null>(null)
+  const [confirmFinish, setConfirmFinish] = React.useState(false)
+  // "Is anything still ordered?" — a string check on the API's amount, not
+  // arithmetic: only an exact zero means nothing is open.
+  const hasOpenOrder = !!row && !/^0+(\.0+)?$/.test(row.committed_open)
 
   React.useEffect(() => setEtc(row?.etc ?? ''), [row?.etc])
 
@@ -327,6 +392,31 @@ export function LineDrawer({
       await refresh()
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : 'Still to spend could not be saved')
+    }
+  }
+
+  const finish = async (confirmed: boolean) => {
+    if (hasOpenOrder && !confirmed) {
+      setConfirmFinish(true)
+      return
+    }
+    setError(null)
+    try {
+      await api.post(`/budgets/${budgetId}/lines/${line.id}/finish`, { confirm_open_commitment: confirmed })
+      setConfirmFinish(false)
+      await refresh()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : 'The line could not be marked finished')
+    }
+  }
+
+  const reopen = async () => {
+    setError(null)
+    try {
+      await api.post(`/budgets/${budgetId}/lines/${line.id}/reopen`)
+      await refresh()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : 'The line could not be reopened')
     }
   }
 
@@ -384,10 +474,66 @@ export function LineDrawer({
         </dd>
       </dl>
       <p data-testid="drawer-rule" className="mt-2 text-xs text-text-tertiary">
-        {row?.remaining_rule === 'etc'
-          ? 'Still to spend is the amount you set for this line.'
-          : 'Still to spend is worked out for you: what is left of the planned cost, or what is still on order if that is more.'}
+        {row?.finished
+          ? 'Finished: nothing more is expected on this line.'
+          : row?.remaining_rule === 'etc'
+            ? 'Still to spend is the amount you set for this line.'
+            : 'Still to spend is worked out for you: what is left of the planned cost, or what is still on order if that is more.'}
       </p>
+
+      {canEdit && row && (
+        <div className="mt-3">
+          {row.finished ? (
+            <button
+              type="button"
+              data-testid="line-reopen"
+              onClick={() => void reopen()}
+              className="rounded-md border border-border px-3 py-1.5 text-xs"
+            >
+              Reopen
+            </button>
+          ) : (
+            <button
+              type="button"
+              data-testid="line-finish"
+              onClick={() => void finish(false)}
+              className="rounded-md border border-border px-3 py-1.5 text-xs"
+            >
+              Mark finished
+            </button>
+          )}
+          {!row.finished && (
+            <p className="mt-1 text-[11px] text-text-tertiary">
+              Marking it finished says nothing more will be spent, so its forecast final cost becomes what was spent.
+            </p>
+          )}
+          {confirmFinish && (
+            <div data-testid="finish-confirm" role="alertdialog" aria-label="Finish a line with an open order" className="mt-2 rounded-md border border-status-warning/60 p-2 text-xs">
+              <p>
+                {formatAmount(row.committed_open)} is still ordered and not yet invoiced on this line. Finish it anyway? Its
+                forecast will no longer count that order.
+              </p>
+              <div className="mt-2 flex gap-2">
+                <button
+                  type="button"
+                  data-testid="finish-confirm-yes"
+                  onClick={() => void finish(true)}
+                  className="rounded-md border border-border px-2 py-1"
+                >
+                  Finish anyway
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmFinish(false)}
+                  className="rounded-md border border-border px-2 py-1"
+                >
+                  Keep it open
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {canEdit && (
         <div className="mt-4 rounded-md border border-border p-3">

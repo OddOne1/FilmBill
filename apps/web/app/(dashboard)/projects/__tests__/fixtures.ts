@@ -307,6 +307,7 @@ function lineTracking(overrides: Partial<LineTracking> & { id: string }): LineTr
     variance_percent: null,
     over_budget: false,
     etc: null,
+    finished: false,
     ...overrides,
   }
 }

@@ -1419,6 +1419,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/budgets/{budget_id}/lines/{line_id}/finish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Finish Line
+         * @description Mark a line finished: nothing more is expected, still to spend 0.00.
+         *
+         *     Allowed on a locked budget (D85). A line with an order still open is
+         *     refused unless `confirm_open_commitment` is true. The response is the
+         *     line's forecast after the change.
+         */
+        post: operations["finish_line_budgets__budget_id__lines__line_id__finish_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/budgets/{budget_id}/lines/{line_id}/remove": {
         parameters: {
             query?: never;
@@ -1430,6 +1454,26 @@ export interface paths {
         put?: never;
         /** Remove Line */
         post: operations["remove_line_budgets__budget_id__lines__line_id__remove_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/budgets/{budget_id}/lines/{line_id}/reopen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reopen Line
+         * @description Undo "Mark finished": still to spend is worked out again.
+         */
+        post: operations["reopen_line_budgets__budget_id__lines__line_id__reopen_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1487,6 +1531,29 @@ export interface paths {
         patch: operations["update_section_budgets__budget_id__sections__section_id__patch"];
         trace?: never;
     };
+    "/budgets/{budget_id}/sections/{section_id}/finish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Finish Section
+         * @description Finish all lines in a section, skipping any with an order still open.
+         *
+         *     The skipped lines come back by name with their open amount. One audit
+         *     event, `budget_line.finished_bulk`, with the counts.
+         */
+        post: operations["finish_section_budgets__budget_id__sections__section_id__finish_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/budgets/{budget_id}/sections/{section_id}/remove": {
         parameters: {
             query?: never;
@@ -1505,6 +1572,26 @@ export interface paths {
          *     The sentence says how many lines and what to do with them.
          */
         post: operations["remove_section_budgets__budget_id__sections__section_id__remove_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/budgets/{budget_id}/sections/{section_id}/reopen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reopen Section
+         * @description Reopen every finished line in a section. One audit event.
+         */
+        post: operations["reopen_section_budgets__budget_id__sections__section_id__reopen_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5133,6 +5220,32 @@ export interface components {
             notes?: string | null;
         };
         /**
+         * BulkFinishResponse
+         * @description What `Finish all lines` / `Reopen all` did to a section.
+         *
+         *     `changed` are the lines whose state moved; `already` were in the asked-for
+         *     state; `skipped` (finish only) still have an open order and were left
+         *     open — finishing them would hide money that is still owed.
+         */
+        BulkFinishResponse: {
+            /** Already */
+            already: string[];
+            /** Changed */
+            changed: string[];
+            /** Message */
+            message: string;
+            /**
+             * Section Id
+             * Format: uuid
+             */
+            section_id: string;
+            /**
+             * Skipped
+             * @default []
+             */
+            skipped: components["schemas"]["SkippedLine"][];
+        };
+        /**
          * CalcAdjustment
          * @description A discount or surcharge on a whole group, or on the document.
          */
@@ -6186,6 +6299,19 @@ export interface components {
             /** Rule */
             rule: string;
         };
+        /**
+         * FinishRequest
+         * @description Mark one line finished. A line that still has an order open (ordered,
+         *     not yet invoiced) is refused unless `confirm_open_commitment` says the
+         *     person has seen that and wants it finished anyway.
+         */
+        FinishRequest: {
+            /**
+             * Confirm Open Commitment
+             * @default false
+             */
+            confirm_open_commitment: boolean;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -6582,6 +6708,11 @@ export interface components {
              * @example 1250.00
              */
             exposure: string;
+            /**
+             * Finished
+             * @default false
+             */
+            finished: boolean;
             /**
              * Id
              * Format: uuid
@@ -8249,6 +8380,26 @@ export interface components {
             } | null;
             /** Timezone */
             timezone?: string | null;
+        };
+        /**
+         * SkippedLine
+         * @description A line a bulk finish left alone, and why.
+         */
+        SkippedLine: {
+            /**
+             * Committed Open
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            committed_open: string;
+            /** Description */
+            description: string;
+            /**
+             * Line Id
+             * Format: uuid
+             */
+            line_id: string;
         };
         /**
          * TaxClassResponse
@@ -11128,6 +11279,44 @@ export interface operations {
             };
         };
     };
+    finish_line_budgets__budget_id__lines__line_id__finish_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+                line_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FinishRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LineTrackingResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     remove_line_budgets__budget_id__lines__line_id__remove_post: {
         parameters: {
             query?: never;
@@ -11149,6 +11338,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BudgetLineResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reopen_line_budgets__budget_id__lines__line_id__reopen_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+                line_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LineTrackingResponse"];
                 };
             };
             /** @description Validation Error */
@@ -11274,6 +11497,40 @@ export interface operations {
             };
         };
     };
+    finish_section_budgets__budget_id__sections__section_id__finish_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+                section_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkFinishResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     remove_section_budgets__budget_id__sections__section_id__remove_post: {
         parameters: {
             query?: never;
@@ -11295,6 +11552,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BudgetSectionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reopen_section_budgets__budget_id__sections__section_id__reopen_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+                section_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkFinishResponse"];
                 };
             };
             /** @description Validation Error */

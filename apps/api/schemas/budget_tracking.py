@@ -219,6 +219,37 @@ class CloseRequest(BaseModel):
     reason: Optional[str] = Field(default=None, max_length=500)
 
 
+class FinishRequest(BaseModel):
+    """Mark one line finished. A line that still has an order open (ordered,
+    not yet invoiced) is refused unless `confirm_open_commitment` says the
+    person has seen that and wants it finished anyway."""
+
+    confirm_open_commitment: bool = False
+
+
+class SkippedLine(BaseModel):
+    """A line a bulk finish left alone, and why."""
+
+    line_id: uuid.UUID
+    description: str
+    committed_open: Money
+
+
+class BulkFinishResponse(BaseModel):
+    """What `Finish all lines` / `Reopen all` did to a section.
+
+    `changed` are the lines whose state moved; `already` were in the asked-for
+    state; `skipped` (finish only) still have an open order and were left
+    open — finishing them would hide money that is still owed.
+    """
+
+    section_id: uuid.UUID
+    changed: list[uuid.UUID]
+    already: list[uuid.UUID]
+    skipped: list[SkippedLine] = []
+    message: str
+
+
 class EtcRequest(BaseModel):
     """`null` clears the ETC and the default rule takes over.
 
@@ -255,6 +286,10 @@ class LineTrackingResponse(BaseModel):
     variance_percent: Optional[Money] = None
     over_budget: bool
     etc: Optional[Money] = None
+    #: "Mark finished": still-to-spend set to exactly 0.00 (B1.1, D83).
+    #: Decided by `tracking.is_finished`, so the screen never compares
+    #: strings to tell it apart from a default-rule zero.
+    finished: bool = False
 
 
 class RollupTrackingResponse(BaseModel):

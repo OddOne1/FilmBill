@@ -367,6 +367,7 @@ export type BudgetImportResult = Schemas['BudgetImportResultResponse']
  *  thing a client noticed. */
 export type BudgetTracking = Schemas['BudgetTrackingResponse']
 export type LineTracking = Schemas['LineTrackingResponse']
+export type BulkFinish = Schemas['BulkFinishResponse']
 export type RollupTracking = Schemas['RollupTrackingResponse']
 export type BudgetCommitment = Schemas['BudgetCommitmentResponse']
 export type BudgetActual = Schemas['BudgetActualResponse']

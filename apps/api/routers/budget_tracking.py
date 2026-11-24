@@ -71,9 +71,11 @@ from ..schemas.budget_tracking import (
     BudgetCommitmentUpdate,
     BudgetLedgerResponse,
     BudgetTrackingResponse,
+    BulkFinishResponse,
     CloseRequest,
     CostEntryDuplicate,
     EtcRequest,
+    FinishRequest,
     LineTrackingResponse,
     RollupTrackingResponse,
     VoidRequest,
@@ -149,6 +151,25 @@ def _line_or_404(
     if row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Budget line not found"
+        )
+    return row
+
+
+def _section_or_404(
+    db: Session, membership: Membership, budget: Budget, section_id: uuid.UUID
+) -> BudgetSection:
+    row = (
+        scoped(db.query(BudgetSection), membership)
+        .filter(
+            BudgetSection.id == section_id,
+            BudgetSection.budget_id == budget.id,
+            BudgetSection.is_active.is_(True),
+        )
+        .first()
+    )
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Budget section not found"
         )
     return row
 
@@ -824,6 +845,130 @@ def set_etc(
             detail="That line is not part of the budget's calculation.",
         )
     return LineTrackingResponse(**vars(found))
+
+
+# ─── Mark finished (B1.1) ───────────────────────────────────────────────────
+
+
+def _line_forecast(db: Session, budget: Budget, line: BudgetLine) -> LineTrackingResponse:
+    result = tracking_service.tracking(db, budget)
+    found = result.lines.get(str(line.id))
+    if found is None:  # pragma: no cover - an active line is always priced
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="That line is not part of the budget's calculation.",
+        )
+    return LineTrackingResponse(**vars(found))
+
+
+@router.post(
+    "/budgets/{budget_id}/lines/{line_id}/finish",
+    response_model=LineTrackingResponse,
+)
+def finish_line(
+    budget_id: uuid.UUID,
+    line_id: uuid.UUID,
+    body: FinishRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    membership: Membership = Depends(require("budgets.edit")),
+):
+    """Mark a line finished: nothing more is expected, still to spend 0.00.
+
+    Allowed on a locked budget (D85). A line with an order still open is
+    refused unless `confirm_open_commitment` is true. The response is the
+    line's forecast after the change.
+    """
+    budget = _writable(db, _budget_or_404(db, membership, budget_id))
+    line = _line_or_404(db, membership, budget, line_id)
+    try:
+        tracking_service.finish_line(
+            db,
+            budget,
+            line,
+            confirm_open_commitment=body.confirm_open_commitment,
+            actor=_actor(request, membership),
+        )
+        answer = _line_forecast(db, budget, line)
+    except budget_service.BudgetError as error:
+        _refuse_tracking_error(error)
+    db.commit()
+    return answer
+
+
+@router.post(
+    "/budgets/{budget_id}/lines/{line_id}/reopen",
+    response_model=LineTrackingResponse,
+)
+def reopen_line(
+    budget_id: uuid.UUID,
+    line_id: uuid.UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    membership: Membership = Depends(require("budgets.edit")),
+):
+    """Undo "Mark finished": still to spend is worked out again."""
+    budget = _writable(db, _budget_or_404(db, membership, budget_id))
+    line = _line_or_404(db, membership, budget, line_id)
+    try:
+        tracking_service.reopen_line(db, line, actor=_actor(request, membership))
+        answer = _line_forecast(db, budget, line)
+    except budget_service.BudgetError as error:
+        _refuse_tracking_error(error)
+    db.commit()
+    return answer
+
+
+@router.post(
+    "/budgets/{budget_id}/sections/{section_id}/finish",
+    response_model=BulkFinishResponse,
+)
+def finish_section(
+    budget_id: uuid.UUID,
+    section_id: uuid.UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    membership: Membership = Depends(require("budgets.edit")),
+):
+    """Finish all lines in a section, skipping any with an order still open.
+
+    The skipped lines come back by name with their open amount. One audit
+    event, `budget_line.finished_bulk`, with the counts.
+    """
+    budget = _writable(db, _budget_or_404(db, membership, budget_id))
+    section = _section_or_404(db, membership, budget, section_id)
+    try:
+        answer = tracking_service.finish_section(
+            db, budget, section, actor=_actor(request, membership)
+        )
+    except budget_service.BudgetError as error:
+        _refuse_tracking_error(error)
+    db.commit()
+    return BulkFinishResponse(**answer)
+
+
+@router.post(
+    "/budgets/{budget_id}/sections/{section_id}/reopen",
+    response_model=BulkFinishResponse,
+)
+def reopen_section(
+    budget_id: uuid.UUID,
+    section_id: uuid.UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    membership: Membership = Depends(require("budgets.edit")),
+):
+    """Reopen every finished line in a section. One audit event."""
+    budget = _writable(db, _budget_or_404(db, membership, budget_id))
+    section = _section_or_404(db, membership, budget, section_id)
+    try:
+        answer = tracking_service.reopen_section(
+            db, budget, section, actor=_actor(request, membership)
+        )
+    except budget_service.BudgetError as error:
+        _refuse_tracking_error(error)
+    db.commit()
+    return BulkFinishResponse(**answer)
 
 
 # ─── The forecast ───────────────────────────────────────────────────────────

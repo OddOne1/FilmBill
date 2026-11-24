@@ -68,6 +68,7 @@ from ..billing.budget import (
     STATUS_CLOSED,
     STATUS_OPEN,
     closes_commitment,
+    is_finished,
     track_budget,
 )
 from ..billing.budget.csv_actuals import (
@@ -158,6 +159,12 @@ ACTUAL_CREATED = "budget_actual.created"
 ACTUAL_UPDATED = "budget_actual.updated"
 ACTUAL_VOIDED = "budget_actual.voided"
 LINE_ETC_SET = "budget_line.etc_set"
+#: B1.1 "Mark finished". One line: its own event with before/after. A
+#: section's worth: ONE event with counts and the ids, on the section.
+LINE_FINISHED = "budget_line.finished"
+LINE_REOPENED = "budget_line.reopened"
+LINE_FINISHED_BULK = "budget_line.finished_bulk"
+LINE_REOPENED_BULK = "budget_line.reopened_bulk"
 ACTUALS_IMPORT_APPLIED = "budget.actuals_import_applied"
 
 
@@ -1131,6 +1138,211 @@ def set_etc(
         fields=LINE_ETC_AUDITED,
     )
     return line
+
+
+# ─── Mark finished (B1.1) ───────────────────────────────────────────────────
+
+#: What "finished" is stored as: an ETC of exactly zero (SCOPE D83). Not a
+#: flag of its own — a second column for the same statement would be a
+#: second answer to "is this line done", and the two could disagree.
+FINISHED_ETC = Decimal("0.00")
+
+
+def _open_on(result, line: BudgetLine) -> Decimal:
+    """The line's "ordered, not yet invoiced", from the one forecast.
+
+    Read off `tracking(...)` rather than recomputed here: what is still owed
+    on a line is `committed_open_of`'s rule and only that module spells it.
+    """
+    found = result.lines.get(str(line.id))
+    return found.committed_open if found is not None else ZERO
+
+
+def _lines_under(db: Session, budget: Budget, section: BudgetSection) -> list[BudgetLine]:
+    """A section's own active lines and its sub-sections' — "all lines in
+    this section" means what the section row's total covers."""
+    sections = active_sections(db, budget)
+    wanted = {section.id}
+    wanted.update(row.id for row in sections if row.parent_id == section.id)
+    return active_lines(db, list(wanted))
+
+
+def finish_line(
+    db: Session,
+    budget: Budget,
+    line: BudgetLine,
+    *,
+    confirm_open_commitment: bool,
+    actor: audit.Actor,
+) -> BudgetLine:
+    """Mark one line finished: still-to-spend becomes 0.00.
+
+    A line with an order still open asks first: finishing it says "nothing
+    more will be spent" while a supplier is still owed money for it, which
+    is sometimes true (the order will be cancelled) and is never something
+    to do by accident. The refusal names the amount.
+    """
+    if is_finished(line.etc):
+        raise TrackingError(f"{line.description} is already marked finished.")
+    open_amount_ = _open_on(tracking(db, budget), line)
+    if open_amount_ > ZERO and not confirm_open_commitment:
+        raise TrackingError(
+            f"{line.description} still has {open_amount_} ordered and not yet "
+            f"invoiced. Finishing it says nothing more will be spent on it. "
+            f"Confirm to finish it anyway, or wait for the invoice."
+        )
+    before = audit.snapshot(line, LINE_ETC_AUDITED)
+    line.etc = FINISHED_ETC
+    db.flush()
+    audit.record(
+        db,
+        actor,
+        line,
+        LINE_FINISHED,
+        before,
+        audit.snapshot(line, LINE_ETC_AUDITED),
+        reason=(
+            f"marked finished with {open_amount_} still ordered, confirmed"
+            if open_amount_ > ZERO
+            else "marked finished"
+        ),
+        fields=LINE_ETC_AUDITED,
+    )
+    return line
+
+
+def reopen_line(db: Session, line: BudgetLine, *, actor: audit.Actor) -> BudgetLine:
+    """Undo "Mark finished": still-to-spend goes back to being worked out."""
+    if not is_finished(line.etc):
+        raise TrackingError(
+            f"{line.description} is not marked finished, so there is nothing "
+            f"to reopen."
+        )
+    before = audit.snapshot(line, LINE_ETC_AUDITED)
+    line.etc = None
+    db.flush()
+    audit.record(
+        db,
+        actor,
+        line,
+        LINE_REOPENED,
+        before,
+        audit.snapshot(line, LINE_ETC_AUDITED),
+        reason="reopened — still to spend is worked out again",
+        fields=LINE_ETC_AUDITED,
+    )
+    return line
+
+
+def _plural(count: int, word: str) -> str:
+    return f"{count} {word}" if count == 1 else f"{count} {word}s"
+
+
+def finish_section(
+    db: Session, budget: Budget, section: BudgetSection, *, actor: audit.Actor
+) -> dict:
+    """Finish every line in a section, except those with an order still open.
+
+    The skip is the point of the rule: a bulk action nobody reads line by
+    line must not hide money that is still owed. Skipped lines are listed
+    with their open amount so the screen can say which and why; each can
+    still be finished one by one, where the confirmation is asked.
+
+    ONE audit event, on the section, with counts and ids.
+    """
+    result = tracking(db, budget)
+    changed: list[BudgetLine] = []
+    already: list[BudgetLine] = []
+    skipped: list[tuple[BudgetLine, Decimal]] = []
+    for line in _lines_under(db, budget, section):
+        if is_finished(line.etc):
+            already.append(line)
+            continue
+        open_amount_ = _open_on(result, line)
+        if open_amount_ > ZERO:
+            skipped.append((line, open_amount_))
+            continue
+        changed.append(line)
+
+    for line in changed:
+        line.etc = FINISHED_ETC
+    db.flush()
+
+    message = f"{_plural(len(changed), 'line')} marked finished."
+    if skipped:
+        message += (
+            f" {_plural(len(skipped), 'line')} skipped: still ordered, not invoiced."
+        )
+    audit.record(
+        db,
+        actor,
+        section,
+        LINE_FINISHED_BULK,
+        None,
+        {
+            "finished": len(changed),
+            "already_finished": len(already),
+            "skipped_open_commitment": len(skipped),
+            "finished_line_ids": [str(line.id) for line in changed],
+            "skipped_line_ids": [str(line.id) for line, _ in skipped],
+        },
+        reason=message,
+    )
+    return {
+        "section_id": section.id,
+        "changed": [line.id for line in changed],
+        "already": [line.id for line in already],
+        "skipped": [
+            {
+                "line_id": line.id,
+                "description": line.description,
+                "committed_open": amount,
+            }
+            for line, amount in skipped
+        ],
+        "message": message,
+    }
+
+
+def reopen_section(
+    db: Session, budget: Budget, section: BudgetSection, *, actor: audit.Actor
+) -> dict:
+    """Reopen every finished line in a section. ONE audit event, on the section.
+
+    Only FINISHED lines move. A line whose still-to-spend was typed by hand
+    (a non-zero amount) is not finished and keeps what was typed.
+    """
+    changed: list[BudgetLine] = []
+    already: list[BudgetLine] = []
+    for line in _lines_under(db, budget, section):
+        if is_finished(line.etc):
+            changed.append(line)
+        else:
+            already.append(line)
+    for line in changed:
+        line.etc = None
+    db.flush()
+    message = f"{_plural(len(changed), 'line')} reopened."
+    audit.record(
+        db,
+        actor,
+        section,
+        LINE_REOPENED_BULK,
+        None,
+        {
+            "reopened": len(changed),
+            "not_finished": len(already),
+            "reopened_line_ids": [str(line.id) for line in changed],
+        },
+        reason=message,
+    )
+    return {
+        "section_id": section.id,
+        "changed": [line.id for line in changed],
+        "already": [line.id for line in already],
+        "skipped": [],
+        "message": message,
+    }
 
 
 # ─── CSV ────────────────────────────────────────────────────────────────────
