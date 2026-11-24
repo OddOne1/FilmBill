@@ -1133,6 +1133,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/budgets/{budget_id}/duplicates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Check Duplicates
+         * @description Entries that look like the one about to be saved. Writes nothing.
+         *
+         *     What the Add dialogs ask BEFORE they save, so the warning is in front of
+         *     the person while they can still change their mind. It is the same
+         *     comparison the create endpoints run afterwards (`duplicates_of`, keyed by
+         *     `csv_actuals.duplicate_key`), so the warning before and the warning
+         *     after cannot disagree — and it still never blocks: the dialog offers
+         *     "save anyway".
+         */
+        get: operations["check_duplicates_budgets__budget_id__duplicates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/budgets/{budget_id}/export.csv": {
         parameters: {
             query?: never;
@@ -10643,6 +10670,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BudgetResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    check_duplicates_budgets__budget_id__duplicates_get: {
+        parameters: {
+            query: {
+                amount: number | string;
+                party_id?: string | null;
+                payee_text?: string | null;
+                reference?: string | null;
+            };
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CostEntryDuplicate"][];
                 };
             };
             /** @description Validation Error */

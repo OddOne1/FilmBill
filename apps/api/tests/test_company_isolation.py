@@ -409,6 +409,7 @@ CASES: dict[str, object] = {
     # for an id that names nothing.
     "GET /budgets/{budget_id}/tracking": {"body": None},
     "GET /budgets/{budget_id}/ledger": {"body": None},
+    "GET /budgets/{budget_id}/duplicates": {"query": {"amount": "100.00"}},
     "GET /budgets/{budget_id}/commitments": {"body": None},
     "POST /budgets/{budget_id}/commitments": {
         "body": {"amount": "1.00", "commitment_date": "2026-06-01"},

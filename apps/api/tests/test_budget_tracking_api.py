@@ -1666,6 +1666,7 @@ def test_every_tracking_route_404s_for_another_company_s_budget(
     requests = [
         ("get", f"/budgets/{budget_id}/tracking", None),
         ("get", f"/budgets/{budget_id}/ledger", None),
+        ("get", f"/budgets/{budget_id}/duplicates?amount=1.00", None),
         ("get", f"/budgets/{budget_id}/commitments", None),
         (
             "post",
@@ -1699,7 +1700,7 @@ def test_every_tracking_route_404s_for_another_company_s_budget(
         ("put", f"/budgets/{budget_id}/lines/{stranger}/etc", {"etc": "1.00"}),
         ("get", f"/budgets/{budget_id}/actuals/export.csv", None),
     ]
-    assert len(requests) == 14
+    assert len(requests) == 15
 
     for method, url, body in requests:
         response = getattr(pg_client, method)(
@@ -1712,13 +1713,13 @@ def test_every_tracking_route_404s_for_another_company_s_budget(
 
 
 def test_the_isolation_walk_covers_every_route_in_the_router(client):
-    """The walk above sends 14 of the router's 16 operations.
+    """The walk above sends 15 of the router's 17 operations.
 
     The two it does not are the CSV preview and apply, which take a file
-    upload and are covered by `test_a_budget_of_another_company_is_a_404`'s
-    shape in the walk's `export.csv` entry — stated here so that adding a
-    seventeenth route fails this assertion rather than quietly going
-    unchecked (rule 17b).
+    upload; `test_company_isolation.py` sends both as multipart against a
+    budget of another company. Stated here so that adding an eighteenth
+    route fails this assertion rather than quietly going unchecked (rule
+    17b).
     """
     from fastapi.openapi.utils import get_openapi
 
@@ -1733,7 +1734,7 @@ def test_the_isolation_walk_covers_every_route_in_the_router(client):
         for path, methods in schema["paths"].items()
         for method in methods
     ]
-    assert len(operations) == 16, sorted(operations)
+    assert len(operations) == 17, sorted(operations)
 
 
 # ─── The ledger ─────────────────────────────────────────────────────────────
@@ -2135,3 +2136,39 @@ def test_the_amount_check_constraint_actually_fires(pg_db, world):
     with pytest.raises(IntegrityError):
         pg_db.commit()
     pg_db.rollback()
+
+
+def test_the_pre_save_check_finds_what_the_create_would_warn_about(
+    pg_client, world, simple
+):
+    """The Add dialogs ask BEFORE saving. Same comparison, so the warning
+    before and the warning after cannot disagree — and the check writes
+    nothing."""
+    budget_id = simple["budget"]["id"]
+    _actual(
+        pg_client,
+        world,
+        budget_id,
+        section_id=simple["section"]["id"],
+        amount="250.00",
+        payee_text="Kamera GmbH",
+        reference="RE-2026-114",
+    )
+    found = pg_client.get(
+        f"/budgets/{budget_id}/duplicates",
+        headers=_headers(world),
+        params={"amount": "250.00", "payee_text": "kamera gmbh", "reference": "re-2026-114"},
+    )
+    assert found.status_code == 200, found.text
+    assert [row["kind"] for row in found.json()] == ["actual"]
+
+    none = pg_client.get(
+        f"/budgets/{budget_id}/duplicates",
+        headers=_headers(world),
+        params={"amount": "251.00", "payee_text": "Kamera GmbH", "reference": "RE-2026-114"},
+    )
+    assert none.json() == []
+    assert (
+        len(pg_client.get(f"/budgets/{budget_id}/actuals", headers=_headers(world)).json())
+        == 1
+    )

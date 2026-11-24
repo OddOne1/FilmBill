@@ -30,6 +30,7 @@ a number asks for the tracking view again.
 
 import uuid
 from datetime import date
+from decimal import Decimal
 from typing import Optional
 
 from fastapi import (
@@ -664,6 +665,47 @@ def void_actual(
         _refuse_tracking_error(error)
     db.commit()
     return _actual_response(db, row, _Names(db, budget))
+
+
+# ─── The duplicate check ────────────────────────────────────────────────────
+
+
+@router.get(
+    "/budgets/{budget_id}/duplicates", response_model=list[CostEntryDuplicate]
+)
+def check_duplicates(
+    budget_id: uuid.UUID,
+    amount: Decimal = Query(..., gt=0),
+    party_id: Optional[uuid.UUID] = None,
+    payee_text: Optional[str] = Query(default=None, max_length=255),
+    reference: Optional[str] = Query(default=None, max_length=128),
+    db: Session = Depends(get_db),
+    membership: Membership = Depends(require("budgets.view")),
+):
+    """Entries that look like the one about to be saved. Writes nothing.
+
+    What the Add dialogs ask BEFORE they save, so the warning is in front of
+    the person while they can still change their mind. It is the same
+    comparison the create endpoints run afterwards (`duplicates_of`, keyed by
+    `csv_actuals.duplicate_key`), so the warning before and the warning
+    after cannot disagree — and it still never blocks: the dialog offers
+    "save anyway".
+    """
+    budget = _budget_or_404(db, membership, budget_id)
+    try:
+        tracking_service.party_in_company(db, budget, party_id)
+    except budget_service.BudgetError as error:
+        _refuse_tracking_error(error)
+    return _warnings(
+        tracking_service.duplicates_of(
+            db,
+            budget,
+            party_id=party_id,
+            payee_text=payee_text,
+            reference=reference,
+            amount=amount,
+        )
+    )
 
 
 # ─── The ledger ─────────────────────────────────────────────────────────────

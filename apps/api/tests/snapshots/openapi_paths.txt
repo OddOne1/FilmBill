@@ -13,6 +13,7 @@ GET /budgets/{budget_id}/actuals
 GET /budgets/{budget_id}/actuals/export.csv
 GET /budgets/{budget_id}/calculated
 GET /budgets/{budget_id}/commitments
+GET /budgets/{budget_id}/duplicates
 GET /budgets/{budget_id}/export.csv
 GET /budgets/{budget_id}/ledger
 GET /budgets/{budget_id}/tracking
