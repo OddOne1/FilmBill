@@ -57,6 +57,12 @@ EXPECTED_TAGS = {
     #: `/calc/...` rather than `/company/.../calc` because it reads no
     #: company-scoped row at all; the membership check is still there, so
     #: `test_company_isolation` had to learn about the path (see that file).
+    #: A2. The Budget sheet: sections, lines, globals, adjustments, the
+    #: calculated view and the CSV. A tag of its own rather than `projects`,
+    #: because "what can read a cost rate" has to be answerable from one
+    #: tag — budgets expose cost and margin and are closed to staff, which
+    #: is the one permission boundary in A2 that is not about editing.
+    "budgets",
     "calc",
     #: A1. The price list: items, categories, units and rental factor
     #: tables. A top-level PATH rather than `/company/...` for the same

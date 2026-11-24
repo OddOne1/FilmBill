@@ -7,6 +7,7 @@ from .routers import (
     admin,
     audit,
     auth,
+    budgets,
     calc,
     catalog,
     companies,
@@ -90,6 +91,7 @@ app.include_router(companies.router)
 app.include_router(number_series.router)
 app.include_router(parties.router)
 app.include_router(projects.router)
+app.include_router(budgets.router)
 app.include_router(catalog.router)
 app.include_router(calc.router)
 app.include_router(tax.router)

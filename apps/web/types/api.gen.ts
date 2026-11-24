@@ -769,6 +769,478 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/budgets/{budget_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Budget
+         * @description The whole editable sheet: sections, lines, globals, adjustments.
+         *
+         *     The NUMBERS are not in here — `GET .../calculated` has them. Two
+         *     requests, because the sheet's rows are what an edit PATCHes and the
+         *     totals are what an edit invalidates, and a single response would make
+         *     "which of these did my edit change" unanswerable.
+         */
+        get: operations["read_budget_budgets__budget_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Budget
+         * @description Name and notes. Allowed while locked — the lock stops the numbers.
+         */
+        patch: operations["update_budget_budgets__budget_id__patch"];
+        trace?: never;
+    };
+    "/budgets/{budget_id}/adjustments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Adjustment
+         * @description A discount or surcharge, on a section or on the whole budget.
+         *
+         *     **It moves the price and never the cost** — the engine's behaviour, not a
+         *     choice made here. A contingency or a production fee that has to raise the
+         *     COST side is an ordinary line of kind `fee` instead (D78).
+         */
+        post: operations["create_adjustment_budgets__budget_id__adjustments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/budgets/{budget_id}/adjustments/{adjustment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Adjustment */
+        patch: operations["update_adjustment_budgets__budget_id__adjustments__adjustment_id__patch"];
+        trace?: never;
+    };
+    "/budgets/{budget_id}/adjustments/{adjustment_id}/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Remove Adjustment */
+        post: operations["remove_adjustment_budgets__budget_id__adjustments__adjustment_id__remove_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/budgets/{budget_id}/calculated": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Calculated
+         * @description Every number the sheet and the top sheet show, from the one engine.
+         *
+         *     Refs are resolved to plain numbers here, BEFORE the engine is called
+         *     (D70): a dangling one is a 422 naming the key rather than a line priced
+         *     at one day.
+         */
+        get: operations["calculated_budgets__budget_id__calculated_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/budgets/{budget_id}/duplicate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Duplicate Budget
+         * @description A scenario from a scenario. Numerically identical, and unlocked.
+         */
+        post: operations["duplicate_budget_budgets__budget_id__duplicate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/budgets/{budget_id}/export.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Budget Csv
+         * @description The sheet as a CSV, with the engine's own price, cost and margin.
+         *
+         *     `;` and a UTF-8 BOM, like the catalog's export and for the same reason:
+         *     Excel on a German-language Windows opens that correctly by
+         *     double-clicking, and a comma-separated UTF-8 file without a BOM arrives
+         *     as one column of mojibake.
+         */
+        get: operations["export_budget_csv_budgets__budget_id__export_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/budgets/{budget_id}/globals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Global */
+        post: operations["create_global_budgets__budget_id__globals_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/budgets/{budget_id}/globals/{global_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Global
+         * @description A manual global's value, or any global's label.
+         *
+         *     A COMPUTED global's value is refused: it is the project's day count, and
+         *     a typed-over one would disagree with the Days tab the moment anybody
+         *     looked at both.
+         */
+        patch: operations["update_global_budgets__budget_id__globals__global_id__patch"];
+        trace?: never;
+    };
+    "/budgets/{budget_id}/globals/{global_id}/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Remove Global
+         * @description Refused while a line still points at it, with the lines named.
+         *
+         *     Removing it silently would turn every line that used it into a 422 on
+         *     the next calculation, and the person who hit that would have no way to
+         *     know what had been taken away.
+         */
+        post: operations["remove_global_budgets__budget_id__globals__global_id__remove_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/budgets/{budget_id}/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Apply Import
+         * @description Apply exactly what the preview showed. Never deletes.
+         *
+         *     A row naming an unknown section code is an ERROR and not an invention: a
+         *     typo would otherwise become a permanent section nobody meant to create.
+         */
+        post: operations["apply_import_budgets__budget_id__import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/budgets/{budget_id}/import/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Import
+         * @description What the file would do. Writes nothing.
+         *
+         *     A1's plan-then-apply pattern: the preview returns a `digest` of exactly
+         *     what it plans, the apply sends it back, and an apply whose plan no longer
+         *     matches is refused. Applying something other than what was shown is the
+         *     one thing an import must not do.
+         */
+        post: operations["preview_import_budgets__budget_id__import_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/budgets/{budget_id}/lines": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Line
+         * @description A line, from the catalog or free-text.
+         *
+         *     **The catalog's rates are COPIED here and never read again.** With an
+         *     `item_id` and no prices, the item's rates for the line's period unit are
+         *     copied onto the line; with prices, the prices given win, because somebody
+         *     who typed a number meant it.
+         */
+        post: operations["create_line_budgets__budget_id__lines_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/budgets/{budget_id}/lines/{line_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Line
+         * @description One cell, or a drag to another section — the same endpoint.
+         *
+         *     The sheet's cell editing and its drag-and-drop are the same act to the
+         *     person doing them. The audit action is `budget_line.moved` when the
+         *     section or the position changed and `budget_line.updated` otherwise, so
+         *     the log still distinguishes them.
+         */
+        patch: operations["update_line_budgets__budget_id__lines__line_id__patch"];
+        trace?: never;
+    };
+    "/budgets/{budget_id}/lines/{line_id}/duplicate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Duplicate Line
+         * @description "Another one of those" — the second most common act on a sheet.
+         */
+        post: operations["duplicate_line_budgets__budget_id__lines__line_id__duplicate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/budgets/{budget_id}/lines/{line_id}/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Remove Line */
+        post: operations["remove_line_budgets__budget_id__lines__line_id__remove_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/budgets/{budget_id}/lock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Lock Budget */
+        post: operations["lock_budget_budgets__budget_id__lock_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/budgets/{budget_id}/sections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Section */
+        post: operations["create_section_budgets__budget_id__sections_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/budgets/{budget_id}/sections/{section_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Section */
+        patch: operations["update_section_budgets__budget_id__sections__section_id__patch"];
+        trace?: never;
+    };
+    "/budgets/{budget_id}/sections/{section_id}/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Remove Section
+         * @description Take a section out of the sheet. Refused while it still holds lines.
+         *
+         *     Refused rather than cascading, because a section that quietly took its
+         *     lines with it would change the total by an amount nobody asked about.
+         *     The sentence says how many lines and what to do with them.
+         */
+        post: operations["remove_section_budgets__budget_id__sections__section_id__remove_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/budgets/{budget_id}/set-primary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Set Primary */
+        post: operations["set_primary_budgets__budget_id__set_primary_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/budgets/{budget_id}/unlock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Unlock Budget
+         * @description Unlocking is an ordinary audited action, not an escape hatch.
+         *
+         *     The point of the lock is that a locked budget cannot be edited by
+         *     ACCIDENT, not that it cannot be edited — and the audit row is what makes
+         *     the difference visible afterwards.
+         */
+        post: operations["unlock_budget_budgets__budget_id__unlock_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/calc/preview": {
         parameters: {
             query?: never;
@@ -2511,6 +2983,52 @@ export interface paths {
         patch: operations["update_project_projects__project_id__patch"];
         trace?: never;
     };
+    "/projects/{project_id}/budgets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Budgets
+         * @description Several per project is normal — "with the crane", "without".
+         */
+        get: operations["list_budgets_projects__project_id__budgets_get"];
+        put?: never;
+        /** Create Budget */
+        post: operations["create_budget_projects__project_id__budgets_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}/budgets/example": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Example Budget
+         * @description The S1 budget from SCOPE §12, so the arithmetic can be checked by eye.
+         *
+         *     Its own endpoint rather than a flag on the create, because it is a
+         *     different act: "give me something to look at" on an empty project. It is
+         *     labelled as an example in its own notes — a budget that looked real and
+         *     was not is the kind of thing that ends up quoted to a client.
+         */
+        post: operations["create_example_budget_projects__project_id__budgets_example_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{project_id}/days": {
         parameters: {
             query?: never;
@@ -3190,6 +3708,14 @@ export interface components {
             /** Label */
             label?: string | null;
         };
+        /** Body_apply_import_budgets__budget_id__import_post */
+        Body_apply_import_budgets__budget_id__import_post: {
+            /**
+             * File
+             * Format: binary
+             */
+            file: string;
+        };
         /** Body_apply_item_import_catalog_items_import_post */
         Body_apply_item_import_catalog_items_import_post: {
             /**
@@ -3197,6 +3723,14 @@ export interface components {
              * @description The digest from the preview. When given and the file no longer plans the same thing, nothing is written.
              */
             digest?: string | null;
+            /**
+             * File
+             * Format: binary
+             */
+            file: string;
+        };
+        /** Body_preview_import_budgets__budget_id__import_preview_post */
+        Body_preview_import_budgets__budget_id__import_preview_post: {
             /**
              * File
              * Format: binary
@@ -3234,6 +3768,627 @@ export interface components {
              * Format: binary
              */
             file: string;
+        };
+        /** BudgetAdjustmentCreate */
+        BudgetAdjustmentCreate: {
+            /**
+             * Base
+             * @default subtotal
+             * @enum {string}
+             */
+            base: "subtotal" | "subtotal_incl_previous" | "kinds";
+            /** Kinds */
+            kinds?: string[];
+            /** Label */
+            label: string;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "percent" | "amount";
+            /** Position */
+            position?: number | null;
+            /** Section Id */
+            section_id?: string | null;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "discount" | "surcharge";
+            /**
+             * Value
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1.5000
+             */
+            value: string;
+        };
+        /** BudgetAdjustmentResponse */
+        BudgetAdjustmentResponse: {
+            /** Base */
+            base: string;
+            /**
+             * Budget Id
+             * Format: uuid
+             */
+            budget_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /** Kinds */
+            kinds?: string[];
+            /** Label */
+            label: string;
+            /** Mode */
+            mode: string;
+            /** Position */
+            position: number;
+            /** Section Id */
+            section_id?: string | null;
+            /** Type */
+            type: string;
+            /**
+             * Value
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 1
+             * @example 1.5000
+             */
+            value: string;
+        };
+        /** BudgetAdjustmentUpdate */
+        BudgetAdjustmentUpdate: {
+            /** Base */
+            base?: ("subtotal" | "subtotal_incl_previous" | "kinds") | null;
+            /** Kinds */
+            kinds?: string[] | null;
+            /** Label */
+            label?: string | null;
+            /** Mode */
+            mode?: ("percent" | "amount") | null;
+            /** Position */
+            position?: number | null;
+            /** Type */
+            type?: ("discount" | "surcharge") | null;
+            /** Value */
+            value?: string | null;
+        };
+        /**
+         * BudgetCalculatedResponse
+         * @description Every number the sheet and the top sheet show.
+         *
+         *     `result` is the engine's own output, in the shape `/calc/preview` returns
+         *     it — the same renderer, the same rounding, one implementation. **The web
+         *     app renders these and computes nothing** (rule 2).
+         */
+        BudgetCalculatedResponse: {
+            /**
+             * Budget Id
+             * Format: uuid
+             */
+            budget_id: string;
+            /** Currency */
+            currency: string;
+            /** Factors */
+            factors?: components["schemas"]["FactorExplanation"][];
+            result: components["schemas"]["CalcPreviewResponse"];
+            /** Top Sheet */
+            top_sheet: components["schemas"]["TopSheetRow"][];
+        };
+        /** BudgetCreate */
+        BudgetCreate: {
+            /** Currency */
+            currency?: string | null;
+            /**
+             * Is Primary
+             * @default false
+             */
+            is_primary: boolean;
+            /** Name */
+            name: string;
+            /** Notes */
+            notes?: string | null;
+        };
+        /** BudgetDuplicateRequest */
+        BudgetDuplicateRequest: {
+            /** Name */
+            name?: string | null;
+        };
+        /** BudgetGlobalCreate */
+        BudgetGlobalCreate: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /**
+             * Source
+             * @default manual
+             */
+            source: string;
+            /** Unit */
+            unit?: string | null;
+            /**
+             * Value
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1.5000
+             */
+            value: string;
+        };
+        /** BudgetGlobalResponse */
+        BudgetGlobalResponse: {
+            /**
+             * Budget Id
+             * Format: uuid
+             */
+            budget_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /**
+             * Is Computed
+             * @default false
+             */
+            is_computed: boolean;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /**
+             * Referenced By
+             * @default 0
+             */
+            referenced_by: number;
+            /** Source */
+            source: string;
+            /** Unit */
+            unit?: string | null;
+            /**
+             * Value
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 1
+             * @example 1.5000
+             */
+            value: string;
+        };
+        /** BudgetGlobalUpdate */
+        BudgetGlobalUpdate: {
+            /** Label */
+            label?: string | null;
+            /** Unit */
+            unit?: string | null;
+            /** Value */
+            value?: string | null;
+        };
+        /** BudgetImportPreviewResponse */
+        BudgetImportPreviewResponse: {
+            /** Creates */
+            creates: number;
+            /**
+             * Delimiter
+             * @default ;
+             */
+            delimiter: string;
+            /** Digest */
+            digest: string;
+            /** Errors */
+            errors: number;
+            /** Ignored Columns */
+            ignored_columns?: string[];
+            /** Rows */
+            rows: components["schemas"]["BudgetImportRowResponse"][];
+            /** Updates */
+            updates: number;
+        };
+        /**
+         * BudgetImportResultResponse
+         * @description What was applied. The same shape as the preview, on purpose: the test
+         *     that proves "applied equals previewed" compares the two directly.
+         */
+        BudgetImportResultResponse: {
+            /**
+             * Applied
+             * @default true
+             */
+            applied: boolean;
+            /** Creates */
+            creates: number;
+            /**
+             * Delimiter
+             * @default ;
+             */
+            delimiter: string;
+            /** Digest */
+            digest: string;
+            /** Errors */
+            errors: number;
+            /** Ignored Columns */
+            ignored_columns?: string[];
+            /** Rows */
+            rows: components["schemas"]["BudgetImportRowResponse"][];
+            /** Updates */
+            updates: number;
+        };
+        /**
+         * BudgetImportRowResponse
+         * @description One row of the preview table, and of the applied result.
+         *
+         *     `action` is `create`, `update` or `error`. An error row is reported and
+         *     skipped rather than failing the file, for A1's reason: one typo in row 40
+         *     of a 200-row sheet must not waste the other 199.
+         */
+        BudgetImportRowResponse: {
+            /** Action */
+            action: string;
+            /** Description */
+            description: string;
+            /** Line Number */
+            line_number: number;
+            /** Message */
+            message: string;
+            /** Section Code */
+            section_code: string;
+        };
+        /**
+         * BudgetLineCreate
+         * @description A line, from the catalog or free-text.
+         *
+         *     With `item_id` and no rates, the item's rates for the line's period unit
+         *     are COPIED onto the line. With rates, the rates given win: somebody who
+         *     typed a price meant it.
+         */
+        BudgetLineCreate: {
+            /**
+             * Allow Negative
+             * @default false
+             */
+            allow_negative: boolean;
+            /** Description */
+            description?: string | null;
+            /** Discount Mode */
+            discount_mode?: ("percent" | "amount") | null;
+            /** Discount Value */
+            discount_value?: string | null;
+            /**
+             * Factor
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 1
+             * @example 1.5000
+             */
+            factor: string;
+            /** Factor Source */
+            factor_source?: ("manual" | "catalog") | null;
+            /** Item Id */
+            item_id?: string | null;
+            /** Kind */
+            kind?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Period Ref */
+            period_ref?: string | null;
+            /** Period Unit */
+            period_unit?: ("day" | "flat" | "half_day" | "hour" | "km" | "month" | "night" | "piece" | "week") | null;
+            /**
+             * Period Value
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 1
+             * @example 1.5000
+             */
+            period_value: string;
+            /** Position */
+            position?: number | null;
+            /**
+             * Quantity
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 1
+             * @example 1.5000
+             */
+            quantity: string;
+            /** Quantity Ref */
+            quantity_ref?: string | null;
+            /**
+             * Section Id
+             * Format: uuid
+             */
+            section_id: string;
+            /** Tags */
+            tags?: string[];
+            /** Tax Ref */
+            tax_ref?: string | null;
+            /** Unit Cost */
+            unit_cost?: string | null;
+            /** Unit Price */
+            unit_price?: string | null;
+        };
+        /** BudgetLineResponse */
+        BudgetLineResponse: {
+            /**
+             * Allow Negative
+             * @default false
+             */
+            allow_negative: boolean;
+            catalog_difference?: components["schemas"]["CatalogDifference"] | null;
+            /** Description */
+            description: string;
+            /** Discount Mode */
+            discount_mode?: string | null;
+            /** Discount Value */
+            discount_value?: string | null;
+            /**
+             * Factor
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 1
+             * @example 1.5000
+             */
+            factor: string;
+            /** Factor Source */
+            factor_source: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /** Item Id */
+            item_id?: string | null;
+            /** Kind */
+            kind: string;
+            /** Notes */
+            notes?: string | null;
+            /** Period Ref */
+            period_ref?: string | null;
+            /** Period Unit */
+            period_unit: string;
+            /**
+             * Period Value
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 1
+             * @example 1.5000
+             */
+            period_value: string;
+            /** Position */
+            position: number;
+            /**
+             * Quantity
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 1
+             * @example 1.5000
+             */
+            quantity: string;
+            /** Quantity Ref */
+            quantity_ref?: string | null;
+            /**
+             * Section Id
+             * Format: uuid
+             */
+            section_id: string;
+            /** Tags */
+            tags?: string[];
+            /** Tax Ref */
+            tax_ref: string;
+            /**
+             * Unit Cost
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            unit_cost: string;
+            /**
+             * Unit Price
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            unit_price: string;
+        };
+        /**
+         * BudgetLineUpdate
+         * @description Every editable field of a line, including where it sits.
+         *
+         *     `section_id` and `position` are in here rather than on a separate
+         *     `/move` endpoint: the sheet's drag-and-drop and its cell editing are the
+         *     same act to the person doing them, and two endpoints would mean two
+         *     audit actions for one visible change. The audit action is
+         *     `budget_line.moved` when either of them changes.
+         */
+        BudgetLineUpdate: {
+            /** Allow Negative */
+            allow_negative?: boolean | null;
+            /** Clear */
+            clear?: ("quantity_ref" | "period_ref" | "discount" | "item_id" | "notes" | "tax_ref")[];
+            /** Description */
+            description?: string | null;
+            /** Discount Mode */
+            discount_mode?: ("percent" | "amount") | null;
+            /** Discount Value */
+            discount_value?: string | null;
+            /** Factor */
+            factor?: string | null;
+            /** Factor Source */
+            factor_source?: ("manual" | "catalog") | null;
+            /** Kind */
+            kind?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Period Ref */
+            period_ref?: string | null;
+            /** Period Unit */
+            period_unit?: ("day" | "flat" | "half_day" | "hour" | "km" | "month" | "night" | "piece" | "week") | null;
+            /** Period Value */
+            period_value?: string | null;
+            /** Position */
+            position?: number | null;
+            /** Quantity */
+            quantity?: string | null;
+            /** Quantity Ref */
+            quantity_ref?: string | null;
+            /** Section Id */
+            section_id?: string | null;
+            /** Tags */
+            tags?: string[] | null;
+            /** Tax Ref */
+            tax_ref?: string | null;
+            /** Unit Cost */
+            unit_cost?: string | null;
+            /** Unit Price */
+            unit_price?: string | null;
+        };
+        /** BudgetLockRequest */
+        BudgetLockRequest: {
+            /** Reason */
+            reason?: string | null;
+        };
+        /** BudgetResponse */
+        BudgetResponse: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Currency */
+            currency: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /**
+             * Is Locked
+             * @default false
+             */
+            is_locked: boolean;
+            /**
+             * Is Primary
+             * @default false
+             */
+            is_primary: boolean;
+            /**
+             * Line Count
+             * @default 0
+             */
+            line_count: number;
+            /** Locked At */
+            locked_at?: string | null;
+            /** Name */
+            name: string;
+            /** Notes */
+            notes?: string | null;
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /**
+             * Section Count
+             * @default 0
+             */
+            section_count: number;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** BudgetSectionCreate */
+        BudgetSectionCreate: {
+            /** Code */
+            code?: string | null;
+            /** Name */
+            name: string;
+            /** Parent Id */
+            parent_id?: string | null;
+            /** Position */
+            position?: number | null;
+        };
+        /** BudgetSectionResponse */
+        BudgetSectionResponse: {
+            /**
+             * Budget Id
+             * Format: uuid
+             */
+            budget_id: string;
+            /** Code */
+            code?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /** Name */
+            name: string;
+            /** Parent Id */
+            parent_id?: string | null;
+            /** Position */
+            position: number;
+        };
+        /** BudgetSectionUpdate */
+        BudgetSectionUpdate: {
+            /** Code */
+            code?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Parent Id */
+            parent_id?: string | null;
+            /** Position */
+            position?: number | null;
+        };
+        /**
+         * BudgetSheetResponse
+         * @description The whole editable sheet in one request.
+         *
+         *     One request rather than four, because every screen that shows one of
+         *     these shows all of them, and four round trips to render a spreadsheet is
+         *     four chances for a half-loaded screen.
+         */
+        BudgetSheetResponse: {
+            /** Adjustments */
+            adjustments: components["schemas"]["BudgetAdjustmentResponse"][];
+            budget: components["schemas"]["BudgetResponse"];
+            /** Globals */
+            globals: components["schemas"]["BudgetGlobalResponse"][];
+            /** Lines */
+            lines: components["schemas"]["BudgetLineResponse"][];
+            /** Sections */
+            sections: components["schemas"]["BudgetSectionResponse"][];
+        };
+        /**
+         * BudgetUpdate
+         * @description A budget's own fields. Editable even while locked — "Estimate v3
+         *     (approved 24.11.)" is exactly the kind of thing somebody wants to write
+         *     on a frozen sheet. The lock stops the NUMBERS moving.
+         */
+        BudgetUpdate: {
+            /** Name */
+            name?: string | null;
+            /** Notes */
+            notes?: string | null;
         };
         /**
          * CalcAdjustment
@@ -3655,6 +4810,22 @@ export interface components {
             message: string;
             /** Where */
             where?: string | null;
+        };
+        /**
+         * CatalogDifference
+         * @description "This line's rates are no longer the price list's."
+         *
+         *     A report and never a correction: nothing re-prices a line from the
+         *     catalog, because a budget that moved when somebody edited an item would
+         *     be a budget nobody could compare with last week's.
+         */
+        CatalogDifference: {
+            /** Catalog Unit Cost */
+            catalog_unit_cost?: string | null;
+            /** Catalog Unit Price */
+            catalog_unit_price?: string | null;
+            /** Item Name */
+            item_name: string;
         };
         /**
          * CodeReferrers
@@ -4157,6 +5328,34 @@ export interface components {
             smtp_use_tls?: boolean | null;
             /** Smtp User */
             smtp_user?: string | null;
+        };
+        /**
+         * FactorExplanation
+         * @description Why a catalog factor is the number it is.
+         *
+         *     Carried with the number because "2.8" is not something anybody can
+         *     disagree with, and "2.8, from the 5-day row, because the table has no 6"
+         *     is. `rule` is `billing/catalog/factors`'s own vocabulary: `exact`,
+         *     `next_lower`, `highest_listed`, `below_lowest`, `no_table`.
+         */
+        FactorExplanation: {
+            /** Days */
+            days: number;
+            /**
+             * Factor
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 1
+             * @example 1.5000
+             */
+            factor: string;
+            /** Group Name */
+            group_name?: string | null;
+            /** Line Id */
+            line_id: string;
+            /** Matched Days */
+            matched_days?: number | null;
+            /** Rule */
+            rule: string;
         };
         /**
          * FactorLookupResponse
@@ -5824,6 +7023,7 @@ export interface components {
             /**
              * Factor
              * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
              * @example 1.5000
              */
             factor: string;
@@ -6545,6 +7745,43 @@ export interface components {
              * @default bearer
              */
             token_type: string;
+        };
+        /**
+         * TopSheetRow
+         * @description One top-level section on the top sheet.
+         */
+        TopSheetRow: {
+            /** Code */
+            code?: string | null;
+            /**
+             * Cost
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            cost: string;
+            /**
+             * Margin
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            margin: string;
+            /** Margin Percent */
+            margin_percent?: string | null;
+            /** Name */
+            name: string;
+            /**
+             * Price
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            price: string;
+            /** Section Id */
+            section_id: string;
+            /** Share Of Subtotal */
+            share_of_subtotal?: string | null;
         };
         /**
          * TwoFactorBackupCodesResponse
@@ -7694,6 +8931,832 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TokenResponse"] | components["schemas"]["TwoFactorRequiredResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_budget_budgets__budget_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetSheetResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_budget_budgets__budget_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BudgetUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_adjustment_budgets__budget_id__adjustments_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BudgetAdjustmentCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetAdjustmentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_adjustment_budgets__budget_id__adjustments__adjustment_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+                adjustment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BudgetAdjustmentUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetAdjustmentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_adjustment_budgets__budget_id__adjustments__adjustment_id__remove_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+                adjustment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetAdjustmentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    calculated_budgets__budget_id__calculated_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetCalculatedResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    duplicate_budget_budgets__budget_id__duplicate_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BudgetDuplicateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_budget_csv_budgets__budget_id__export_csv_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_global_budgets__budget_id__globals_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BudgetGlobalCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetGlobalResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_global_budgets__budget_id__globals__global_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+                global_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BudgetGlobalUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetGlobalResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_global_budgets__budget_id__globals__global_id__remove_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+                global_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetGlobalResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    apply_import_budgets__budget_id__import_post: {
+        parameters: {
+            query: {
+                expected_digest: string;
+            };
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_apply_import_budgets__budget_id__import_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetImportResultResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_import_budgets__budget_id__import_preview_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_preview_import_budgets__budget_id__import_preview_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetImportPreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_line_budgets__budget_id__lines_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BudgetLineCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetLineResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_line_budgets__budget_id__lines__line_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+                line_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BudgetLineUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetLineResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    duplicate_line_budgets__budget_id__lines__line_id__duplicate_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+                line_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetLineResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_line_budgets__budget_id__lines__line_id__remove_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+                line_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetLineResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    lock_budget_budgets__budget_id__lock_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BudgetLockRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_section_budgets__budget_id__sections_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BudgetSectionCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetSectionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_section_budgets__budget_id__sections__section_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+                section_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BudgetSectionUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetSectionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_section_budgets__budget_id__sections__section_id__remove_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+                section_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetSectionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_primary_budgets__budget_id__set_primary_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unlock_budget_budgets__budget_id__unlock_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BudgetLockRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetResponse"];
                 };
             };
             /** @description Validation Error */
@@ -10714,6 +12777,109 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProjectResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_budgets_projects__project_id__budgets_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_budget_projects__project_id__budgets_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BudgetCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_example_budget_projects__project_id__budgets_example_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetResponse"];
                 };
             };
             /** @description Validation Error */

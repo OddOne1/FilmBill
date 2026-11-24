@@ -36,6 +36,11 @@ from .company_factories import (
     auth_headers,
     grant,
     make_bank_account,
+    make_budget,
+    make_budget_adjustment,
+    make_budget_global,
+    make_budget_line,
+    make_budget_section,
     make_company,
     make_item,
     make_item_category,
@@ -83,7 +88,14 @@ from .company_factories import (
 #: A2 adds `/projects`, and for the fourth time the same reasoning: a
 #: project list is not a company setting, so it is a top-level path, and a
 #: top-level path that is not named here is invisible to this file.
-_SCOPED_PREFIXES = ("/company/", "/parties", "/catalog", "/calc", "/projects")
+_SCOPED_PREFIXES = (
+    "/company/",
+    "/parties",
+    "/catalog",
+    "/calc",
+    "/projects",
+    "/budgets",
+)
 _SCOPED_EXACT = ("/companies", "/company", "/parties", "/projects")
 
 
@@ -306,6 +318,89 @@ CASES: dict[str, object] = {
         "body": {"location": "Stolen"}
     },
     "POST /projects/{project_id}/days/{day_id}/remove": {"body": None},
+    # A2's Budget. Twenty-four operations, every `{budget_id}`,
+    # `{section_id}`, `{line_id}`, `{global_id}` and `{adjustment_id}`
+    # substituted with a row belonging to company B — a handler that dropped
+    # its `company_id` filter FINDS them, and a 200 on
+    # `PATCH /budgets/{id}/lines/{id}` would mean A had just re-priced B's
+    # production.
+    "GET /projects/{project_id}/budgets": {"body": None},
+    "POST /projects/{project_id}/budgets": {"body": {"name": "Stolen"}},
+    "POST /projects/{project_id}/budgets/example": {"body": None},
+    "GET /budgets/{budget_id}": {"body": None},
+    "PATCH /budgets/{budget_id}": {"body": {"name": "Stolen"}},
+    "GET /budgets/{budget_id}/calculated": {"body": None},
+    "GET /budgets/{budget_id}/export.csv": {"body": None},
+    "POST /budgets/{budget_id}/lock": {"body": {}},
+    "POST /budgets/{budget_id}/unlock": {"body": {}},
+    "POST /budgets/{budget_id}/set-primary": {"body": None},
+    "POST /budgets/{budget_id}/duplicate": {"body": {}},
+    "POST /budgets/{budget_id}/sections": {"body": {"name": "Stolen"}},
+    "PATCH /budgets/{budget_id}/sections/{section_id}": {
+        "body": {"name": "Stolen"}
+    },
+    "POST /budgets/{budget_id}/sections/{section_id}/remove": {"body": None},
+    # A nil UUID for the section, not a placeholder: `_send` substitutes
+    # placeholders in the PATH only, and the budget lookup happens before
+    # the section lookup — so this still proves the budget boundary, and a
+    # malformed uuid in the body would have made it a 422 for the wrong
+    # reason.
+    "POST /budgets/{budget_id}/lines": {
+        "body": {
+            "section_id": "00000000-0000-0000-0000-000000000000",
+            "description": "Stolen",
+        }
+    },
+    "PATCH /budgets/{budget_id}/lines/{line_id}": {
+        "body": {"description": "Stolen"}
+    },
+    "POST /budgets/{budget_id}/lines/{line_id}/duplicate": {"body": None},
+    "POST /budgets/{budget_id}/lines/{line_id}/remove": {"body": None},
+    "POST /budgets/{budget_id}/globals": {
+        "body": {"key": "stolen", "label": "Stolen"}
+    },
+    "PATCH /budgets/{budget_id}/globals/{global_id}": {
+        "body": {"label": "Stolen"}
+    },
+    "POST /budgets/{budget_id}/globals/{global_id}/remove": {"body": None},
+    "POST /budgets/{budget_id}/adjustments": {
+        "body": {
+            "label": "Stolen",
+            "type": "discount",
+            "mode": "percent",
+            "value": "5",
+        }
+    },
+    "PATCH /budgets/{budget_id}/adjustments/{adjustment_id}": {
+        "body": {"label": "Stolen"}
+    },
+    "POST /budgets/{budget_id}/adjustments/{adjustment_id}/remove": {
+        "body": None
+    },
+    # The two multipart endpoints, `files` rather than `body` for the reason
+    # the catalog's import carries: a JSON body would be refused as malformed
+    # multipart with a 422, and a 422 is not a 404.
+    "POST /budgets/{budget_id}/import/preview": {
+        "files": {
+            "file": (
+                "lines.csv",
+                b"section_code;description\n1100;Stolen\n",
+                "text/csv",
+            )
+        }
+    },
+    # `expected_digest` is a required query parameter; without it the 422 for
+    # the missing field would arrive before the company check could 404.
+    "POST /budgets/{budget_id}/import": {
+        "query": {"expected_digest": "0000000000000000"},
+        "files": {
+            "file": (
+                "lines.csv",
+                b"section_code;description\n1100;Stolen\n",
+                "text/csv",
+            )
+        }
+    },
     # Pure arithmetic, no stored row — and still a company endpoint.
     "POST /calc/preview": {
         "body": {
@@ -324,6 +419,11 @@ OTHER_COMPANY_ROWS = {
     "{series_id}": "series_in_b",
     "{project_id}": "project_in_b",
     "{day_id}": "day_in_b",
+    "{budget_id}": "budget_in_b",
+    "{section_id}": "section_in_b",
+    "{line_id}": "line_in_b",
+    "{global_id}": "global_in_b",
+    "{adjustment_id}": "adjustment_in_b",
     "{tax_code_id}": "tax_code_in_b",
     "{tax_class_id}": "tax_class_in_b",
     "{party_id}": "party_in_b",
@@ -443,6 +543,14 @@ def two_companies(pg_db):
     # shooting schedule.
     project_in_b = make_project(pg_db, company_b, client=party_in_b)
     day_in_b = make_project_day(pg_db, company_b, project_in_b)
+    # And a budget of B's with one of everything in it, so each
+    # `/budgets/...{id}` lookup has a real neighbour to find rather than an
+    # id that names nothing.
+    budget_in_b = make_budget(pg_db, company_b, project_in_b)
+    section_in_b = make_budget_section(pg_db, company_b, budget_in_b)
+    line_in_b = make_budget_line(pg_db, company_b, section_in_b)
+    global_in_b = make_budget_global(pg_db, company_b, budget_in_b)
+    adjustment_in_b = make_budget_adjustment(pg_db, company_b, budget_in_b)
     check_in_b = PartyVatCheck(
         company_id=company_b.id,
         party_id=party_in_b.id,
@@ -475,6 +583,11 @@ def two_companies(pg_db):
         "group_in_b": group_in_b,
         "project_in_b": project_in_b,
         "day_in_b": day_in_b,
+        "budget_in_b": budget_in_b,
+        "section_in_b": section_in_b,
+        "line_in_b": line_in_b,
+        "global_in_b": global_in_b,
+        "adjustment_in_b": adjustment_in_b,
     }
 
 
