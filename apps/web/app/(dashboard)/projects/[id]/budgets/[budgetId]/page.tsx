@@ -20,14 +20,15 @@ import { AdjustmentsPanel, GlobalsPanel } from './budget-panels'
 import { BudgetImport } from './budget-import'
 import { CostForecast, LineDrawer, PhaseSheet, PhaseSwitch, type Phase } from './budget-tracking'
 import { CostsTab } from './budget-costs'
+import { HowToRead, Term } from './budget-glossary-ui'
 
 /**
  * One budget: the Sheet, its Costs, and the Top sheet.
  *
  * Three requests, always fetched together after any write: `GET /budgets/{id}`
  * (the rows an edit PATCHes), `GET /budgets/{id}/calculated` (the engine's
- * numbers) and `GET /budgets/{id}/tracking` (committed, actual, EFC and
- * variance — B1). The third is optional for the screen: if it fails, the
+ * numbers) and `GET /budgets/{id}/tracking` (ordered, spent, the forecast
+ * final cost and under/over — B1). The third is optional for the screen: if it fails, the
  * estimate sheet still works and the cost columns say they are empty. A calculation the API refuses — a line pointing at a
  * global that no longer exists — is shown as the API's own sentence above
  * the sheet, and the sheet stays editable so it can be fixed.
@@ -282,6 +283,7 @@ export default function BudgetPage() {
               <div className="mt-4 flex items-center gap-3">
                 <PhaseSwitch phase={phase} onChange={setPhase} />
               </div>
+              <HowToRead />
               {phase === 'estimate' ? (
                 <div className="grid gap-4 xl:grid-cols-[1fr_20rem]">
                   <BudgetSheetEditor sheet={sheet} calc={calc} editable={editable} onChange={reload} onError={setError} />
@@ -338,11 +340,21 @@ function TopSheet({ calc, currency }: { calc: BudgetCalculated | null; currency:
           <tr className="border-b border-border text-left text-xs text-text-tertiary">
             <th className="py-2 pr-3 font-medium">Code</th>
             <th className="py-2 pr-3 font-medium">Section</th>
-            <th className="py-2 pr-3 text-right font-medium">Price ({currency})</th>
-            <th className="py-2 pr-3 text-right font-medium">Cost</th>
-            <th className="py-2 pr-3 text-right font-medium">Margin</th>
-            <th className="py-2 pr-3 text-right font-medium">Margin %</th>
-            <th className="py-2 text-right font-medium">Share</th>
+            <th className="py-2 pr-3 text-right font-medium">
+              <Term id="price" suffix={` (${currency})`} />
+            </th>
+            <th className="py-2 pr-3 text-right font-medium">
+              <Term id="cost" />
+            </th>
+            <th className="py-2 pr-3 text-right font-medium">
+              <Term id="margin" />
+            </th>
+            <th className="py-2 pr-3 text-right font-medium">
+              <Term id="margin_percent" />
+            </th>
+            <th className="py-2 text-right font-medium">
+              <Term id="share" />
+            </th>
           </tr>
         </thead>
         <tbody>

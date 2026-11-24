@@ -88,9 +88,9 @@ export function BudgetLockedNotice({ lockedAt }: { lockedAt?: string | null }) {
       This budget is locked{lockedAt ? ` since ${lockedAt.slice(0, 10)}` : ''}:
       its lines, sections, globals and adjustments cannot be changed. Its
       name still can. Unlock it to edit — unlocking is recorded in the audit
-      log. Costs are still open: orders, invoices and ETCs can be entered
-      against a locked estimate, because the locked estimate is what they
-      are measured against.
+      log. Costs are still open: orders, invoices and what is still to spend
+      can be entered against a locked budget, because the locked plan is
+      what they are measured against.
     </Notice>
   )
 }

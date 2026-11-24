@@ -16,32 +16,46 @@ import type {
   RollupTracking,
 } from '@/types'
 import { EntryForm, type EntryKind } from './budget-costs'
+import {
+  glossary,
+  PHASE_CLICK_HINT,
+  PHASE_COLUMN,
+  PHASE_GLOSSARY,
+  PHASE_SENTENCE,
+  unsignedPercent,
+  varianceWords,
+} from '@/lib/budget-glossary'
+import { InfoTip, Term } from './budget-glossary-ui'
+import type { GlossaryId } from '@/lib/budget-glossary'
 
 /**
  * Cost planning on the sheet (slice B1).
  *
- * **Nothing here computes money.** Committed, actual, EFC, variance, the
- * over-budget flag, the unallocated amounts, the forecast margin — every
- * number is read out of `GET /budgets/{id}/tracking`, keyed by line and by
- * section id, and printed. The browser does not subtract an EFC from an
- * estimate to get a variance: the API's `tracking.py` does, with the same
+ * **Nothing here computes money.** Ordered, spent, the forecast final cost,
+ * under/over, the over-budget flag, the amounts not on a line, the forecast
+ * profit — every number is read out of `GET /budgets/{id}/tracking`, keyed by
+ * line and by section id, and printed. The browser does not subtract a
+ * forecast from a plan to get a variance: the API's `tracking.py` does, with the same
  * rounding the engine uses, and a second subtraction here is how a row and
  * its total end up a cent apart.
  *
  * The Estimate phase is not drawn by this file at all — it is A2's sheet,
  * unchanged. The other four phases draw this read-only view over the same
  * sections and lines.
+ *
+ * Every word a person reads for a cost figure comes from
+ * `lib/budget-glossary.ts` (B1.1); the API's field names are unchanged.
  */
 
 export const PHASES = ['estimate', 'committed', 'actual', 'efc', 'variance'] as const
 export type Phase = (typeof PHASES)[number]
 
 export const PHASE_LABELS: Record<Phase, string> = {
-  estimate: 'Estimate',
-  committed: 'Committed',
-  actual: 'Actual',
-  efc: 'EFC',
-  variance: 'Variance',
+  estimate: glossary(PHASE_GLOSSARY.estimate).label,
+  committed: glossary(PHASE_GLOSSARY.committed).label,
+  actual: glossary(PHASE_GLOSSARY.actual).label,
+  efc: glossary(PHASE_GLOSSARY.efc).label,
+  variance: glossary(PHASE_GLOSSARY.variance).label,
 }
 
 /** What each phase reads off a tracking row. A lookup, not arithmetic. */
@@ -61,34 +75,33 @@ function phaseValue(row: LineTracking | RollupTracking | undefined, phase: Phase
   }
 }
 
-const PHASE_EXPLAINED: Record<Exclude<Phase, 'estimate'>, string> = {
-  committed:
-    'What is still owed on open orders: each commitment less the invoices linked to it, never below zero.',
-  actual: 'What has been invoiced or paid — every non-voided actual.',
-  efc:
-    'Estimate at completion: actual plus what is still to be spent — your ETC where you set one, otherwise the larger of what is left of the estimate and what is on order.',
-  variance: 'Estimate cost minus EFC. Positive is under budget; negative is over.',
+/** A phase's value as a person reads it: under/over in words, the rest as amounts. */
+function phaseText(row: LineTracking | RollupTracking | undefined, phase: Phase): string {
+  const value = phaseValue(row, phase)
+  return phase === 'variance' ? varianceWords(value) : formatAmount(value)
 }
 
 export function PhaseSwitch({ phase, onChange }: { phase: Phase; onChange: (phase: Phase) => void }) {
   return (
     <div role="radiogroup" aria-label="Phase" className="inline-flex rounded-md border border-border p-0.5 text-xs">
       {PHASES.map((key) => (
-        <button
-          key={key}
-          type="button"
-          role="radio"
-          aria-checked={phase === key}
-          data-testid={`phase-${key}`}
-          onClick={() => onChange(key)}
-          className={
-            phase === key
-              ? 'rounded bg-accent px-2.5 py-1 font-medium text-white'
-              : 'rounded px-2.5 py-1 text-text-secondary hover:text-text-primary'
-          }
-        >
-          {PHASE_LABELS[key]}
-        </button>
+        <span key={key} className="inline-flex items-center pr-1">
+          <button
+            type="button"
+            role="radio"
+            aria-checked={phase === key}
+            data-testid={`phase-${key}`}
+            onClick={() => onChange(key)}
+            className={
+              phase === key
+                ? 'rounded bg-accent px-2.5 py-1 font-medium text-white'
+                : 'rounded px-2.5 py-1 text-text-secondary hover:text-text-primary'
+            }
+          >
+            {PHASE_LABELS[key]}
+          </button>
+          <InfoTip id={PHASE_GLOSSARY[key]} />
+        </span>
       ))}
     </div>
   )
@@ -98,10 +111,25 @@ function OverBudget() {
   return (
     <span
       data-testid="over-budget"
-      title="Forecast to cost more than its estimate"
+      title="Forecast to cost more than planned"
       className="ml-1.5 inline-flex items-center gap-0.5 rounded bg-danger/10 px-1 text-[10px] font-medium text-danger"
     >
       <AlertTriangle className="h-3 w-3" /> over
+    </span>
+  )
+}
+
+/** What a line row says beside its name: the amount still to spend when
+ *  somebody set it by hand. */
+function LineMarkers({ row }: { row: LineTracking | undefined }) {
+  if (row?.remaining_rule !== 'etc') return null
+  return (
+    <span
+      data-testid="line-has-etc"
+      title="You set what is still to spend on this line yourself"
+      className="ml-1.5 rounded bg-accent/10 px-1 text-[10px] font-medium text-accent"
+    >
+      still to spend {formatAmount(row.etc)}
     </span>
   )
 }
@@ -158,12 +186,12 @@ export function PhaseSheet({
           </td>
           <td className="py-1.5 pr-2 text-right tabular-nums text-text-secondary">{formatAmount(rollup?.estimate_cost)}</td>
           <td data-testid="phase-section-value" className="py-1.5 pr-2 text-right font-medium tabular-nums">
-            {formatAmount(phaseValue(rollup, phase))}
+            {phaseText(rollup, phase)}
           </td>
           <td className="py-1.5 text-right text-xs tabular-nums text-text-tertiary">
             {rollup && rollup.unallocated !== undefined && rollup.unallocated !== '0.00' ? (
-              <span data-testid="phase-unallocated" title="Costs booked on this section with no line">
-                {formatAmount(rollup.unallocated)} unallocated
+              <span data-testid="phase-unallocated" title={glossary('not_on_a_line').explanation}>
+                {formatAmount(rollup.unallocated)} not on a line
               </span>
             ) : null}
           </td>
@@ -191,19 +219,11 @@ export function PhaseSheet({
                     {line.description}
                   </button>
                   {row?.over_budget && <OverBudget />}
-                  {row?.remaining_rule === 'etc' && (
-                    <span
-                      data-testid="line-has-etc"
-                      title="You set an estimate to complete for this line"
-                      className="ml-1.5 rounded bg-accent/10 px-1 text-[10px] font-medium text-accent"
-                    >
-                      ETC {formatAmount(row.etc)}
-                    </span>
-                  )}
+                  <LineMarkers row={row} />
                 </td>
                 <td className="py-1 pr-2 text-right tabular-nums text-text-secondary">{formatAmount(row?.estimate_cost)}</td>
                 <td data-testid="phase-line-value" className="py-1 pr-2 text-right tabular-nums">
-                  {formatAmount(phaseValue(row, phase))}
+                  {phaseText(row, phase)}
                 </td>
                 <td />
               </tr>
@@ -217,7 +237,7 @@ export function PhaseSheet({
   return (
     <div className="mt-4 overflow-x-auto">
       <p data-testid="phase-explained" className="mb-2 text-xs text-text-secondary">
-        {PHASE_EXPLAINED[phase]} Click a line to see its orders and invoices.
+        {PHASE_SENTENCE[phase]} {PHASE_CLICK_HINT}
       </p>
       {!tracking && (
         <p className="mb-2 text-xs text-text-tertiary">The cost figures could not be loaded, so the columns are empty.</p>
@@ -226,8 +246,12 @@ export function PhaseSheet({
         <thead>
           <tr className="border-b border-border text-left text-xs text-text-tertiary">
             <th className="py-2 pr-2 font-medium">Description</th>
-            <th className="py-2 pr-2 text-right font-medium">Estimate cost</th>
-            <th className="py-2 pr-2 text-right font-medium">{PHASE_LABELS[phase]}</th>
+            <th data-testid="phase-head-planned" className="py-2 pr-2 text-right font-medium">
+              <Term id="planned" />
+            </th>
+            <th data-testid="phase-head-value" className="py-2 pr-2 text-right font-medium">
+              <Term id={PHASE_COLUMN[phase]} />
+            </th>
             <th className="py-2" />
           </tr>
         </thead>
@@ -240,7 +264,7 @@ export function PhaseSheet({
               </td>
               <td className="py-2 pr-2 text-right tabular-nums">{formatAmount(tracking.budget.estimate_cost)}</td>
               <td data-testid="phase-total" className="py-2 pr-2 text-right tabular-nums">
-                {formatAmount(phaseValue(tracking.budget, phase))}
+                {phaseText(tracking.budget, phase)}
               </td>
               <td />
             </tr>
@@ -251,7 +275,7 @@ export function PhaseSheet({
   )
 }
 
-/** A line's own orders and invoices, its ETC, and its forecast. */
+/** A line's own orders and invoices, what is still to spend, and its forecast. */
 export function LineDrawer({
   sheet,
   line,
@@ -302,7 +326,7 @@ export function LineDrawer({
       await api.put(`/budgets/${budgetId}/lines/${line.id}/etc`, { etc: value })
       await refresh()
     } catch (err) {
-      setError(err instanceof ApiError ? err.detail : 'The ETC could not be saved')
+      setError(err instanceof ApiError ? err.detail : 'Still to spend could not be saved')
     }
   }
 
@@ -341,41 +365,41 @@ export function LineDrawer({
       </div>
 
       <dl className="mt-4 grid grid-cols-[1fr_auto] gap-y-1 text-sm">
-        <dt className="text-text-secondary">Estimate cost</dt>
+        <dt className="text-text-secondary"><Term id="planned" /></dt>
         <dd className="text-right tabular-nums">{formatAmount(row?.estimate_cost)}</dd>
-        <dt className="text-text-secondary">Committed (open)</dt>
+        <dt className="text-text-secondary"><Term id="ordered_open" /></dt>
         <dd className="text-right tabular-nums">{formatAmount(row?.committed_open)}</dd>
-        <dt className="text-text-secondary">Actual</dt>
+        <dt className="text-text-secondary"><Term id="spent" /></dt>
         <dd className="text-right tabular-nums">{formatAmount(row?.actual)}</dd>
-        <dt className="text-text-secondary">Still to spend</dt>
-        <dd className="text-right tabular-nums">{formatAmount(row?.remaining)}</dd>
-        <dt className="font-medium text-text-primary">EFC</dt>
+        <dt className="text-text-secondary"><Term id="still_to_spend" /></dt>
+        <dd data-testid="drawer-remaining" className="text-right tabular-nums">{formatAmount(row?.remaining)}</dd>
+        <dt className="font-medium text-text-primary"><Term id="forecast" /></dt>
         <dd data-testid="drawer-efc" className="text-right font-medium tabular-nums">
           {formatAmount(row?.efc)}
         </dd>
-        <dt className="text-text-secondary">Variance</dt>
+        <dt className="text-text-secondary"><Term id="variance" /></dt>
         <dd data-testid="drawer-variance" className={`text-right tabular-nums ${row?.over_budget ? 'text-danger' : ''}`}>
-          {formatAmount(row?.variance)}
-          {row?.variance_percent ? ` (${formatAmount(row.variance_percent)} %)` : ''}
+          {varianceWords(row?.variance)}
+          {row?.variance_percent ? ` (${unsignedPercent(row.variance_percent)} %)` : ''}
         </dd>
       </dl>
       <p data-testid="drawer-rule" className="mt-2 text-xs text-text-tertiary">
         {row?.remaining_rule === 'etc'
-          ? 'Still to spend is the ETC you set.'
-          : 'Still to spend follows the default rule: what is left of the estimate, or what is on order if that is more. This rule is provisional (SCOPE D83).'}
+          ? 'Still to spend is the amount you set for this line.'
+          : 'Still to spend is worked out for you: what is left of the planned cost, or what is still on order if that is more.'}
       </p>
 
       {canEdit && (
         <div className="mt-4 rounded-md border border-border p-3">
           <label className="text-xs text-text-secondary" htmlFor="etc-input">
-            Estimate to complete
+            Set still to spend yourself
           </label>
           <div className="mt-1 flex items-center gap-2">
             <input
               id="etc-input"
-              aria-label={`ETC — ${line.description}`}
+              aria-label={`Still to spend — ${line.description}`}
               value={etc}
-              placeholder="default rule"
+              placeholder="worked out"
               onChange={(event) => setEtc(event.target.value)}
               className="w-32 rounded border border-border bg-transparent px-2 py-1 text-right text-sm tabular-nums"
             />
@@ -392,7 +416,7 @@ export function LineDrawer({
               type="button"
               data-testid="etc-clear"
               disabled={row?.remaining_rule !== 'etc'}
-              title={row?.remaining_rule !== 'etc' ? 'No ETC is set — the default rule is already in use.' : undefined}
+              title={row?.remaining_rule !== 'etc' ? 'Nothing is set by hand — still to spend is already worked out for you.' : undefined}
               onClick={() => void saveEtc(null)}
               className="rounded-md border border-border px-2 py-1 text-xs disabled:opacity-50"
             >
@@ -400,7 +424,7 @@ export function LineDrawer({
             </button>
           </div>
           {row?.remaining_rule !== 'etc' && (
-            <p className="mt-1 text-[11px] text-text-tertiary">No ETC set, so Clear has nothing to clear. 0 means the line is finished.</p>
+            <p className="mt-1 text-[11px] text-text-tertiary">Nothing is set by hand, so Clear has nothing to clear.</p>
           )}
         </div>
       )}
@@ -575,9 +599,9 @@ export function EntryList({
   )
 }
 
-/** The top sheet's cost half: five columns per section, unallocated, total,
- *  the forecast margin beside the estimate margin, and a plain bar. Every
- *  figure is the API's. */
+/** The top sheet's cost half: five columns per section, the costs not on a
+ *  line, total, the forecast profit beside the planned profit, and a plain
+ *  bar. Every figure is the API's. */
 export function CostForecast({
   sheet,
   tracking,
@@ -592,13 +616,15 @@ export function CostForecast({
   }
   const total = tracking.budget
   const sections = [...sheet.sections].filter((section) => !section.parent_id).sort((a, b) => a.position - b.position)
-  const columns: [keyof RollupTracking, string][] = [
-    ['estimate_cost', 'Estimate cost'],
-    ['committed_open', 'Committed (open)'],
-    ['actual', 'Actual'],
-    ['efc', 'EFC'],
-    ['variance', 'Variance'],
+  const columns: [keyof RollupTracking, GlossaryId][] = [
+    ['estimate_cost', 'planned'],
+    ['committed_open', 'ordered_open'],
+    ['actual', 'spent'],
+    ['efc', 'forecast'],
+    ['variance', 'variance'],
   ]
+  const cell = (key: keyof RollupTracking, row: RollupTracking | undefined) =>
+    key === 'variance' ? varianceWords(row?.variance) : formatAmount(row?.[key] as string | undefined)
   return (
     <section data-testid="cost-forecast" className="mt-8 max-w-5xl">
       <h2 className="text-sm font-semibold text-text-primary">Cost forecast ({currency})</h2>
@@ -607,12 +633,12 @@ export function CostForecast({
           <tr className="border-b border-border text-left text-xs text-text-tertiary">
             <th className="py-2 pr-3 font-medium">Code</th>
             <th className="py-2 pr-3 font-medium">Section</th>
-            {columns.map(([, label]) => (
-              <th key={label} className="py-2 pr-3 text-right font-medium">
-                {label}
+            {columns.map(([key, id]) => (
+              <th key={key} data-testid={`forecast-head-${key}`} className="py-2 pr-3 text-right font-medium">
+                <Term id={id} />
               </th>
             ))}
-            <th className="py-2 font-medium">Spent and owed against the estimate</th>
+            <th className="py-2 font-medium">Spent and owed against the plan</th>
           </tr>
         </thead>
         <tbody>
@@ -631,7 +657,7 @@ export function CostForecast({
                     data-testid={`forecast-${key}`}
                     className={`py-1.5 pr-3 text-right tabular-nums ${key === 'variance' && row?.over_budget ? 'text-danger' : ''}`}
                   >
-                    {formatAmount(row?.[key] as string | undefined)}
+                    {cell(key, row)}
                   </td>
                 ))}
                 <td className="py-1.5">
@@ -642,7 +668,9 @@ export function CostForecast({
           })}
           <tr data-testid="forecast-unallocated" className="border-b border-border/60 text-text-secondary">
             <td />
-            <td className="py-1.5 pr-3 italic">Unallocated (on a section, no line)</td>
+            <td className="py-1.5 pr-3 italic">
+              <Term id="not_on_a_line" suffix=" (booked on a section)" />
+            </td>
             <td className="py-1.5 pr-3 text-right">{NO_VALUE}</td>
             <td className="py-1.5 pr-3 text-right tabular-nums">{formatAmount(total.unallocated_committed_open)}</td>
             <td className="py-1.5 pr-3 text-right tabular-nums">{formatAmount(total.unallocated_actual)}</td>
@@ -659,7 +687,7 @@ export function CostForecast({
             </td>
             {columns.map(([key]) => (
               <td key={key} data-testid={`forecast-total-${key}`} className="py-2 pr-3 text-right tabular-nums">
-                {formatAmount(total[key] as string | undefined)}
+                {cell(key, total)}
               </td>
             ))}
             <td className="py-2">
@@ -670,22 +698,22 @@ export function CostForecast({
       </table>
 
       <dl className="mt-4 ml-auto grid max-w-md grid-cols-[1fr_auto] gap-y-1 text-sm">
-        <dt className="text-text-secondary">Price (estimate)</dt>
+        <dt className="text-text-secondary"><Term id="price_agreed" /></dt>
         <dd className="text-right tabular-nums">{formatAmount(total.price)}</dd>
-        <dt className="text-text-secondary">Estimate margin</dt>
+        <dt className="text-text-secondary"><Term id="planned_profit" /></dt>
         <dd data-testid="estimate-margin" className="text-right tabular-nums">
           {formatAmount(total.estimate_margin)}
           {total.estimate_margin_percent ? ` (${formatAmount(total.estimate_margin_percent)} %)` : ''}
         </dd>
-        <dt className="font-medium text-text-primary">Forecast margin</dt>
+        <dt className="font-medium text-text-primary"><Term id="forecast_profit" /></dt>
         <dd data-testid="forecast-margin" className="text-right font-medium tabular-nums">
           {formatAmount(total.forecast_margin)}
           {total.forecast_margin_percent ? ` (${formatAmount(total.forecast_margin_percent)} %)` : ''}
         </dd>
       </dl>
       <p className="mt-2 text-xs text-text-tertiary">
-        The forecast margin is the estimate price minus the EFC. The price is the one the estimate was agreed at and does
-        not move when costs do — that is what lets this number show an overrun.
+        Forecast profit is the agreed price minus the forecast final cost. The price does not move when costs do — that is
+        what lets this number show an overrun, and what shows the money left over when a line comes in under plan.
       </p>
     </section>
   )
@@ -711,7 +739,7 @@ function SpendBar({ row }: { row: RollupTracking | undefined }) {
     <div
       data-testid="spend-bar"
       role="img"
-      aria-label={`Actual ${formatAmount(row.actual)}, open ${formatAmount(row.committed_open)}, estimate ${formatAmount(row.estimate_cost)}`}
+      aria-label={`Spent ${formatAmount(row.actual)}, ordered not yet invoiced ${formatAmount(row.committed_open)}, planned ${formatAmount(row.estimate_cost)}`}
       className="relative h-2 w-32 overflow-hidden rounded bg-bg-secondary"
     >
       <div className="absolute inset-y-0 left-0 bg-accent" style={{ width: pct(actual) }} />

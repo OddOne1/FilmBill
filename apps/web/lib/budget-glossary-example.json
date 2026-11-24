@@ -1,0 +1,18 @@
+{
+  "about": "The worked example in the budget's 'How to read this' panel. The web app prints these strings and computes nothing; apps/api/tests/test_budget_glossary_example.py runs the inputs through billing/budget/tracking.py and fails if any output here differs from what that module returns.",
+  "inputs": {
+    "planned": "1000.00",
+    "spent": "600.00",
+    "ordered_not_invoiced": "200.00"
+  },
+  "outputs": {
+    "planned": "1000.00",
+    "ordered_open": "200.00",
+    "spent": "600.00",
+    "still_to_spend": "400.00",
+    "forecast": "1000.00",
+    "variance": "0.00",
+    "finished_forecast": "600.00",
+    "finished_variance": "400.00"
+  }
+}

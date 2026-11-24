@@ -285,9 +285,9 @@ export function makeCalculated(): BudgetCalculated {
 // API's own rules (billing/budget/tracking.py) so the fixture is a response
 // the server could really send:
 //
-//   * Gaffer: estimate 1 260.00, invoiced 1 500.00 → EFC 1 500.00, variance
+//   * Gaffer: estimate 1 260.00, invoiced 1 500.00 → forecast final cost 1 500.00, variance
 //     −240.00 (−19.05 %), over budget.
-//   * Alexa 35: estimate cost 0.00 (owned), an open order of 1 000.00 → EFC
+//   * Alexa 35: estimate cost 0.00 (owned), an open order of 1 000.00 → forecast final cost
 //     1 000.00, variance −1 000.00, no percentage.
 //   * Crew also carries an invoice of 150.00 on the SECTION with no line.
 //     So Crew's variance is −390.00 while its lines' variances add up to only

@@ -115,7 +115,7 @@ describe('the phase switch', () => {
     expect(within(phaseSection('s-crew')).getByTestId('phase-unallocated').textContent).toContain(formatAmount('150.00'))
   })
 
-  it('Committed shows what is still owed on open orders, EFC the forecast, Variance the API’s variance', async () => {
+  it('Ordered shows what is still owed on open orders, the forecast final cost the forecast, under/over the API’s variance in words', async () => {
     render(<BudgetPage />)
     await screen.findByTestId('budget-sheet')
 
@@ -127,8 +127,8 @@ describe('the phase switch', () => {
     expect(screen.getByTestId('phase-total').textContent).toBe(formatAmount('4450.00'))
 
     fireEvent.click(screen.getByTestId('phase-variance'))
-    expect(within(phaseSection('s-crew')).getByTestId('phase-section-value').textContent).toBe(formatAmount('-390.00'))
-    expect(screen.getByTestId('phase-total').textContent).toBe(formatAmount('-1390.00'))
+    expect(within(phaseSection('s-crew')).getByTestId('phase-section-value').textContent).toBe(`${formatAmount('390.00')} over`)
+    expect(screen.getByTestId('phase-total').textContent).toBe(`${formatAmount('1390.00')} over`)
   })
 
   it('marks the lines the API says are over budget, and only those', async () => {
@@ -140,7 +140,7 @@ describe('the phase switch', () => {
     expect(within(phaseLine('l-dop')).queryByTestId('over-budget')).toBeNull()
   })
 
-  it('a line with an ETC shows it', async () => {
+  it('a line whose still-to-spend was set by hand shows it', async () => {
     const tracking = makeTracking()
     tracking.lines!['l-dop'] = { ...tracking.lines!['l-dop'], remaining_rule: 'etc', etc: '500.00' } as LineTracking
     mockApi({ tracking })
@@ -162,16 +162,16 @@ describe('the line drawer', () => {
     const drawer = await screen.findByTestId('line-drawer')
     expect(within(drawer).getByTestId('drawer-efc').textContent).toBe(formatAmount('1500.00'))
     expect(within(drawer).getByTestId('drawer-variance').textContent).toBe(
-      `${formatAmount('-240.00')} (${formatAmount('-19.05')} %)`,
+      `${formatAmount('240.00')} over (${formatAmount('19.05')} %)`,
     )
-    expect(within(drawer).getByTestId('drawer-rule').textContent).toContain('default rule')
+    expect(within(drawer).getByTestId('drawer-rule').textContent).toContain('worked out for you')
     await waitFor(() =>
       expect(vi.mocked(api.get).mock.calls.some((call) => call[0] === '/budgets/b1/ledger?line_id=l-gaffer')).toBe(true),
     )
     expect((await within(drawer).findAllByTestId('ledger-row')).length).toBe(1)
   })
 
-  it('setting an ETC is one PUT in the API’s decimal form, then the forecast is fetched again', async () => {
+  it('setting still-to-spend is one PUT in the API’s decimal form, then the forecast is fetched again', async () => {
     vi.mocked(api.put).mockResolvedValue({} as never)
     render(<BudgetPage />)
     await screen.findByTestId('budget-sheet')
@@ -180,7 +180,7 @@ describe('the line drawer', () => {
     const drawer = await screen.findByTestId('line-drawer')
     const before = trackingFetches()
 
-    fireEvent.change(within(drawer).getByLabelText('ETC — Gaffer'), { target: { value: '1.234,56' } })
+    fireEvent.change(within(drawer).getByLabelText('Still to spend — Gaffer'), { target: { value: '1.234,56' } })
     fireEvent.click(within(drawer).getByTestId('etc-save'))
 
     await waitFor(() => expect(api.put).toHaveBeenCalled())
@@ -188,7 +188,7 @@ describe('the line drawer', () => {
     await waitFor(() => expect(trackingFetches()).toBe(before + 1))
   })
 
-  it('Clear sends null, and says why it is unavailable when no ETC is set', async () => {
+  it('Clear says why it is unavailable when nothing is set by hand', async () => {
     render(<BudgetPage />)
     await screen.findByTestId('budget-sheet')
     fireEvent.click(screen.getByTestId('phase-efc'))
@@ -199,7 +199,7 @@ describe('the line drawer', () => {
     expect(drawer.textContent).toContain('Clear has nothing to clear')
   })
 
-  it('a line with an ETC can be cleared back to the default rule', async () => {
+  it('a hand-set still-to-spend can be cleared back to the worked-out one', async () => {
     vi.mocked(api.put).mockResolvedValue({} as never)
     const tracking = makeTracking()
     tracking.lines!['l-dop'] = { ...tracking.lines!['l-dop'], remaining_rule: 'etc', etc: '500.00' } as LineTracking
@@ -223,15 +223,15 @@ describe('the top sheet', () => {
     await screen.findByTestId('cost-forecast')
 
     const crew = forecastRow('s-crew')
-    expect(within(crew).getByTestId('forecast-variance').textContent).toBe(formatAmount('-390.00'))
-    expect(within(crew).getByTestId('forecast-variance').textContent).not.toBe(formatAmount('-240.00'))
+    expect(within(crew).getByTestId('forecast-variance').textContent).toBe(`${formatAmount('390.00')} over`)
+    expect(within(crew).getByTestId('forecast-variance').textContent).not.toBe(`${formatAmount('240.00')} over`)
     expect(within(crew).getByTestId('forecast-efc').textContent).toBe(formatAmount('3450.00'))
     expect(within(crew).getByTestId('forecast-estimate_cost').textContent).toBe(formatAmount('3060.00'))
     expect(within(forecastRow('s-eq')).getByTestId('forecast-committed_open').textContent).toBe(formatAmount('1000.00'))
-    expect(screen.getByTestId('forecast-total-variance').textContent).toBe(formatAmount('-1390.00'))
+    expect(screen.getByTestId('forecast-total-variance').textContent).toBe(`${formatAmount('1390.00')} over`)
   })
 
-  it('has an unallocated row with the API’s unallocated amount', async () => {
+  it('has a “not on a line” row with the API’s unallocated amount', async () => {
     render(<BudgetPage />)
     await screen.findByTestId('budget-sheet')
     fireEvent.click(screen.getByRole('tab', { name: 'Top sheet' }))
@@ -239,7 +239,7 @@ describe('the top sheet', () => {
     expect(within(row).getByTestId('forecast-unallocated-total').textContent).toBe(formatAmount('150.00'))
   })
 
-  it('shows the forecast margin against the estimate price, with the estimate margin beside it', async () => {
+  it('shows the forecast profit against the agreed price, with the planned profit beside it', async () => {
     render(<BudgetPage />)
     await screen.findByTestId('budget-sheet')
     fireEvent.click(screen.getByRole('tab', { name: 'Top sheet' }))
