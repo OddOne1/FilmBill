@@ -1413,3 +1413,5 @@ the top sheet, an actuals CSV in and out. SCOPE D81–D88.
   prints no figure.
 - Not checked: a click-through in a real browser.
 
+**CI.** Run #48 on `0d859e6`: success, all five jobs.
+

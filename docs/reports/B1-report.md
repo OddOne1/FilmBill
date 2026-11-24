@@ -207,5 +207,16 @@ screens; the generated types are regenerated from the OpenAPI document.
 
 **Not checked:** the screens in a real browser against a running stack — no
 click-through of the dev or server-test instance was done; the acceptance
-walk is yours. CI on GitHub for the pushed commit: see the closing section
-of the INDEX notes for the run result.
+walk is yours.
+
+## CI for the pushed commit
+
+`0d859e6` (the closing commit, fast-forwarded onto `main`): GitHub Actions
+run **#48** (`45469190934`) — **success, all five jobs**: API tests (7m10s),
+Migrations match the models, Web lint/typecheck/test/build, API types match
+the schema, Docker build (no push). The API-tests job carries both floors
+(2580 passed, 1210 real-database passed) and fails on any real-database
+skip, so its success means the real-DB tests ran and were not skipped. The
+per-step counts are in the job log, which needs a GitHub sign-in and was not
+read. The only annotations are GitHub's Node.js 20 deprecation notices for
+the actions themselves.
