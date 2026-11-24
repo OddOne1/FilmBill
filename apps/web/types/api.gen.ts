@@ -798,6 +798,137 @@ export interface paths {
         patch: operations["update_budget_budgets__budget_id__patch"];
         trace?: never;
     };
+    "/budgets/{budget_id}/actuals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Actuals */
+        get: operations["list_actuals_budgets__budget_id__actuals_get"];
+        put?: never;
+        /**
+         * Create Actual
+         * @description One invoice or receipt. Closes its commitment if that settles it.
+         */
+        post: operations["create_actual_budgets__budget_id__actuals_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/budgets/{budget_id}/actuals/export.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Actuals Csv
+         * @description The non-voided actuals, in the import's own columns.
+         *
+         *     `;` and a UTF-8 BOM, like every other export here and for the same
+         *     reason: Excel on a German-language Windows opens that correctly by
+         *     double-clicking.
+         */
+        get: operations["export_actuals_csv_budgets__budget_id__actuals_export_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/budgets/{budget_id}/actuals/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Apply Actuals Import
+         * @description Apply exactly what the preview showed. Only ever creates.
+         *
+         *     Never updates and never voids: a row that looks like an existing entry
+         *     is held back, and an entry the file does not mention is left alone. An
+         *     import that could rewrite what a shoot cost would make a stale export a
+         *     weapon.
+         */
+        post: operations["apply_actuals_import_budgets__budget_id__actuals_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/budgets/{budget_id}/actuals/import/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Actuals Import
+         * @description What the file would do. Writes nothing.
+         *
+         *     A1's plan-then-apply pattern: the preview returns a `digest` of exactly
+         *     what it plans, the apply sends it back, and an apply whose plan no longer
+         *     matches is refused.
+         */
+        post: operations["preview_actuals_import_budgets__budget_id__actuals_import_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/budgets/{budget_id}/actuals/{actual_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Actual */
+        patch: operations["update_actual_budgets__budget_id__actuals__actual_id__patch"];
+        trace?: never;
+    };
+    "/budgets/{budget_id}/actuals/{actual_id}/void": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Void Actual
+         * @description Out of every number, still in the ledger — and its commitment reopens.
+         */
+        post: operations["void_actual_budgets__budget_id__actuals__actual_id__void_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/budgets/{budget_id}/adjustments": {
         parameters: {
             query?: never;
@@ -874,6 +1005,108 @@ export interface paths {
         get: operations["calculated_budgets__budget_id__calculated_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/budgets/{budget_id}/commitments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Commitments */
+        get: operations["list_commitments_budgets__budget_id__commitments_get"];
+        put?: never;
+        /**
+         * Create Commitment
+         * @description One order. The response carries any duplicate warning beside it.
+         */
+        post: operations["create_commitment_budgets__budget_id__commitments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/budgets/{budget_id}/commitments/{commitment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Commitment */
+        patch: operations["update_commitment_budgets__budget_id__commitments__commitment_id__patch"];
+        trace?: never;
+    };
+    "/budgets/{budget_id}/commitments/{commitment_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel Commitment
+         * @description Withdrawn. It leaves `committed_gross` as well as the open amount.
+         */
+        post: operations["cancel_commitment_budgets__budget_id__commitments__commitment_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/budgets/{budget_id}/commitments/{commitment_id}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Close Commitment
+         * @description Settled, although the invoices do not add up to it.
+         *
+         *     A supplier who invoices 940 against a 1 000 order and stops: the
+         *     remaining 60 leaves the open amount the moment this is recorded, and
+         *     only the producer knows it is never coming.
+         */
+        post: operations["close_commitment_budgets__budget_id__commitments__commitment_id__close_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/budgets/{budget_id}/commitments/{commitment_id}/void": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Void Commitment
+         * @description Out of every number, still in the ledger. The reason is required.
+         */
+        post: operations["void_commitment_budgets__budget_id__commitments__commitment_id__void_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1038,6 +1271,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/budgets/{budget_id}/ledger": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Ledger
+         * @description Both kinds in one request, each in its own array.
+         *
+         *     What the Costs tab reads. Two arrays rather than one merged list because
+         *     the two have different dates and a merged list would have to invent a
+         *     third column to sort on.
+         */
+        get: operations["read_ledger_budgets__budget_id__ledger_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/budgets/{budget_id}/lines": {
         parameters: {
             query?: never;
@@ -1102,6 +1359,33 @@ export interface paths {
          * @description "Another one of those" — the second most common act on a sheet.
          */
         post: operations["duplicate_line_budgets__budget_id__lines__line_id__duplicate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/budgets/{budget_id}/lines/{line_id}/etc": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Etc
+         * @description Set or clear what is still to be spent on this line.
+         *
+         *     `null` clears it and the default rule takes over; `"0.00"` says the line
+         *     is finished. The response is the line's forecast AFTER the change, so the
+         *     drawer does not need a second request to show what moved.
+         *
+         *     Allowed on a locked budget: an ETC is a measurement of the estimate, not
+         *     a change to it.
+         */
+        put: operations["set_etc_budgets__budget_id__lines__line_id__etc_put"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1211,6 +1495,31 @@ export interface paths {
         put?: never;
         /** Set Primary */
         post: operations["set_primary_budgets__budget_id__set_primary_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/budgets/{budget_id}/tracking": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Tracking
+         * @description Committed, actual, EFC and variance for every line, section and total.
+         *
+         *     The web app renders this and computes none of it (rule 2). The estimate
+         *     side is the SAME calculation `GET .../calculated` returns — one engine
+         *     call, through `budget_service.calc_result` — so the two views cannot
+         *     disagree by a cent.
+         */
+        get: operations["read_tracking_budgets__budget_id__tracking_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3466,6 +3775,83 @@ export interface components {
             /** Note */
             note: string;
         };
+        /** ActualImportPreviewResponse */
+        ActualImportPreviewResponse: {
+            /** Creates */
+            creates: number;
+            /**
+             * Delimiter
+             * @default ;
+             */
+            delimiter: string;
+            /** Digest */
+            digest: string;
+            /** Duplicates */
+            duplicates: number;
+            /** Errors */
+            errors: number;
+            /** Ignored Columns */
+            ignored_columns?: string[];
+            /** Rows */
+            rows: components["schemas"]["ActualImportRowResponse"][];
+        };
+        /**
+         * ActualImportResultResponse
+         * @description What was applied. The same shape as the preview, on purpose: the test
+         *     that proves "applied equals previewed" compares the two directly.
+         */
+        ActualImportResultResponse: {
+            /**
+             * Applied
+             * @default true
+             */
+            applied: boolean;
+            /**
+             * Created
+             * @default 0
+             */
+            created: number;
+            /** Creates */
+            creates: number;
+            /**
+             * Delimiter
+             * @default ;
+             */
+            delimiter: string;
+            /** Digest */
+            digest: string;
+            /** Duplicates */
+            duplicates: number;
+            /** Errors */
+            errors: number;
+            /** Ignored Columns */
+            ignored_columns?: string[];
+            /** Rows */
+            rows: components["schemas"]["ActualImportRowResponse"][];
+        };
+        /**
+         * ActualImportRowResponse
+         * @description One row of the preview table, and of the applied result.
+         *
+         *     `action` is `create`, `duplicate` or `error`. A `duplicate` row is held
+         *     back unless its `line_number` is in the apply's `include_duplicates` —
+         *     the preview says so in its own sentence, and an import that wrote it
+         *     anyway would be applying something other than what was shown.
+         */
+        ActualImportRowResponse: {
+            /** Action */
+            action: string;
+            /** Description */
+            description: string;
+            /** Duplicate Of */
+            duplicate_of?: string | null;
+            /** Line Number */
+            line_number: number;
+            /** Message */
+            message: string;
+            /** Section Code */
+            section_code: string;
+        };
         /**
          * AdminUserResponse
          * @description What the superadmin user-management dashboard reads.
@@ -3708,6 +4094,14 @@ export interface components {
             /** Label */
             label?: string | null;
         };
+        /** Body_apply_actuals_import_budgets__budget_id__actuals_import_post */
+        Body_apply_actuals_import_budgets__budget_id__actuals_import_post: {
+            /**
+             * File
+             * Format: binary
+             */
+            file: string;
+        };
         /** Body_apply_import_budgets__budget_id__import_post */
         Body_apply_import_budgets__budget_id__import_post: {
             /**
@@ -3723,6 +4117,14 @@ export interface components {
              * @description The digest from the preview. When given and the file no longer plans the same thing, nothing is written.
              */
             digest?: string | null;
+            /**
+             * File
+             * Format: binary
+             */
+            file: string;
+        };
+        /** Body_preview_actuals_import_budgets__budget_id__actuals_import_preview_post */
+        Body_preview_actuals_import_budgets__budget_id__actuals_import_preview_post: {
             /**
              * File
              * Format: binary
@@ -3768,6 +4170,147 @@ export interface components {
              * Format: binary
              */
             file: string;
+        };
+        /** BudgetActualCreate */
+        BudgetActualCreate: {
+            /**
+             * Amount
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @example 1250.00
+             */
+            amount: string;
+            /** Commitment Id */
+            commitment_id?: string | null;
+            /** Description */
+            description?: string | null;
+            /**
+             * Incurred On
+             * Format: date
+             */
+            incurred_on: string;
+            /** Line Id */
+            line_id?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Paid On */
+            paid_on?: string | null;
+            /** Party Id */
+            party_id?: string | null;
+            /** Payee Text */
+            payee_text?: string | null;
+            /** Reference */
+            reference?: string | null;
+            /**
+             * Section Id
+             * Format: uuid
+             */
+            section_id: string;
+        };
+        /** BudgetActualCreated */
+        BudgetActualCreated: {
+            actual: components["schemas"]["BudgetActualResponse"];
+            /** Duplicates */
+            duplicates?: components["schemas"]["CostEntryDuplicate"][];
+        };
+        /** BudgetActualResponse */
+        BudgetActualResponse: {
+            /**
+             * Amount
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            amount: string;
+            /**
+             * Budget Id
+             * Format: uuid
+             */
+            budget_id: string;
+            /** Commitment Id */
+            commitment_id?: string | null;
+            /** Commitment Reference */
+            commitment_reference?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Description */
+            description?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Incurred On
+             * Format: date
+             */
+            incurred_on: string;
+            /**
+             * Is Voided
+             * @default false
+             */
+            is_voided: boolean;
+            /** Line Description */
+            line_description?: string | null;
+            /** Line Id */
+            line_id?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Paid On */
+            paid_on?: string | null;
+            /** Party Id */
+            party_id?: string | null;
+            /** Payee */
+            payee?: string | null;
+            /** Payee Text */
+            payee_text?: string | null;
+            /** Reference */
+            reference?: string | null;
+            /** Section Code */
+            section_code?: string | null;
+            /**
+             * Section Id
+             * Format: uuid
+             */
+            section_id: string;
+            /** Section Name */
+            section_name?: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Void Reason */
+            void_reason?: string | null;
+            /** Voided At */
+            voided_at?: string | null;
+        };
+        /** BudgetActualUpdate */
+        BudgetActualUpdate: {
+            /** Amount */
+            amount?: string | null;
+            /** Commitment Id */
+            commitment_id?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Incurred On */
+            incurred_on?: string | null;
+            /** Line Id */
+            line_id?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Paid On */
+            paid_on?: string | null;
+            /** Party Id */
+            party_id?: string | null;
+            /** Payee Text */
+            payee_text?: string | null;
+            /** Reference */
+            reference?: string | null;
+            /** Section Id */
+            section_id?: string | null;
         };
         /** BudgetAdjustmentCreate */
         BudgetAdjustmentCreate: {
@@ -3880,6 +4423,150 @@ export interface components {
             result: components["schemas"]["CalcPreviewResponse"];
             /** Top Sheet */
             top_sheet: components["schemas"]["TopSheetRow"][];
+        };
+        /** BudgetCommitmentCreate */
+        BudgetCommitmentCreate: {
+            /**
+             * Amount
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @example 1250.00
+             */
+            amount: string;
+            /**
+             * Commitment Date
+             * Format: date
+             */
+            commitment_date: string;
+            /** Description */
+            description?: string | null;
+            /** Line Id */
+            line_id?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Party Id */
+            party_id?: string | null;
+            /** Payee Text */
+            payee_text?: string | null;
+            /** Reference */
+            reference?: string | null;
+            /**
+             * Section Id
+             * Format: uuid
+             */
+            section_id: string;
+        };
+        /** BudgetCommitmentCreated */
+        BudgetCommitmentCreated: {
+            commitment: components["schemas"]["BudgetCommitmentResponse"];
+            /** Duplicates */
+            duplicates?: components["schemas"]["CostEntryDuplicate"][];
+        };
+        /** BudgetCommitmentResponse */
+        BudgetCommitmentResponse: {
+            /**
+             * Actual Count
+             * @default 0
+             */
+            actual_count: number;
+            /**
+             * Amount
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            amount: string;
+            /**
+             * Budget Id
+             * Format: uuid
+             */
+            budget_id: string;
+            /**
+             * Commitment Date
+             * Format: date
+             */
+            commitment_date: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Description */
+            description?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Is Voided
+             * @default false
+             */
+            is_voided: boolean;
+            /** Line Description */
+            line_description?: string | null;
+            /** Line Id */
+            line_id?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /**
+             * Open Amount
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            open_amount: string;
+            /** Party Id */
+            party_id?: string | null;
+            /** Payee */
+            payee?: string | null;
+            /** Payee Text */
+            payee_text?: string | null;
+            /** Reference */
+            reference?: string | null;
+            /** Section Code */
+            section_code?: string | null;
+            /**
+             * Section Id
+             * Format: uuid
+             */
+            section_id: string;
+            /** Section Name */
+            section_name?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "open" | "closed" | "cancelled";
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Void Reason */
+            void_reason?: string | null;
+            /** Voided At */
+            voided_at?: string | null;
+        };
+        /** BudgetCommitmentUpdate */
+        BudgetCommitmentUpdate: {
+            /** Amount */
+            amount?: string | null;
+            /** Commitment Date */
+            commitment_date?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Line Id */
+            line_id?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Party Id */
+            party_id?: string | null;
+            /** Payee Text */
+            payee_text?: string | null;
+            /** Reference */
+            reference?: string | null;
+            /** Section Id */
+            section_id?: string | null;
         };
         /** BudgetCreate */
         BudgetCreate: {
@@ -4041,6 +4728,22 @@ export interface components {
             message: string;
             /** Section Code */
             section_code: string;
+        };
+        /**
+         * BudgetLedgerResponse
+         * @description The Costs tab's one list: both kinds, each in its own array.
+         *
+         *     Two arrays rather than one merged list with a `kind` discriminator,
+         *     because the two have different dates — `commitment_date` and
+         *     `incurred_on` — and a merged list would have to invent a third column to
+         *     sort on. The screen interleaves them; the API does not pretend they are
+         *     the same row.
+         */
+        BudgetLedgerResponse: {
+            /** Actuals */
+            actuals?: components["schemas"]["BudgetActualResponse"][];
+            /** Commitments */
+            commitments?: components["schemas"]["BudgetCommitmentResponse"][];
         };
         /**
          * BudgetLineCreate
@@ -4377,6 +5080,18 @@ export interface components {
             lines: components["schemas"]["BudgetLineResponse"][];
             /** Sections */
             sections: components["schemas"]["BudgetSectionResponse"][];
+        };
+        /** BudgetTrackingResponse */
+        BudgetTrackingResponse: {
+            budget: components["schemas"]["RollupTrackingResponse"];
+            /** Lines */
+            lines?: {
+                [key: string]: components["schemas"]["LineTrackingResponse"];
+            };
+            /** Sections */
+            sections?: {
+                [key: string]: components["schemas"]["RollupTrackingResponse"];
+            };
         };
         /**
          * BudgetUpdate
@@ -4828,6 +5543,15 @@ export interface components {
             item_name: string;
         };
         /**
+         * CloseRequest
+         * @description Closing or cancelling by hand. The reason is optional here: the
+         *     action itself is the statement, and the audit event records both.
+         */
+        CloseRequest: {
+            /** Reason */
+            reason?: string | null;
+        };
+        /**
          * CodeReferrers
          * @description One old code that stays switched on, and what still points at it.
          */
@@ -5100,6 +5824,40 @@ export interface components {
             website?: string | null;
         };
         /**
+         * CostEntryDuplicate
+         * @description An entry that looks like the one just written. **Not** a refusal.
+         */
+        CostEntryDuplicate: {
+            /**
+             * Amount
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            amount: string;
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Description */
+            description?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "commitment" | "actual";
+            /** Payee */
+            payee?: string | null;
+            /** Reference */
+            reference?: string | null;
+        };
+        /**
          * CountryChangePlanResponse
          * @description The plan, as counts, lists and sentences.
          *
@@ -5328,6 +6086,18 @@ export interface components {
             smtp_use_tls?: boolean | null;
             /** Smtp User */
             smtp_user?: string | null;
+        };
+        /**
+         * EtcRequest
+         * @description `null` clears the ETC and the default rule takes over.
+         *
+         *     `"0.00"` is a different statement — "this line is finished" — and the
+         *     forecast distinguishes them, which is why this is a nullable field and
+         *     not a number with a sentinel.
+         */
+        EtcRequest: {
+            /** Etc */
+            etc?: string | null;
         };
         /**
          * FactorExplanation
@@ -5735,6 +6505,84 @@ export interface components {
             sku?: string | null;
             /** Unit Id */
             unit_id?: string | null;
+        };
+        /**
+         * LineTrackingResponse
+         * @description One line's cost picture. Every number the API's, none the browser's.
+         */
+        LineTrackingResponse: {
+            /**
+             * Actual
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            actual: string;
+            /**
+             * Committed Gross
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            committed_gross: string;
+            /**
+             * Committed Open
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            committed_open: string;
+            /**
+             * Efc
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            efc: string;
+            /**
+             * Estimate Cost
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            estimate_cost: string;
+            /** Etc */
+            etc?: string | null;
+            /**
+             * Exposure
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            exposure: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Over Budget */
+            over_budget: boolean;
+            /**
+             * Remaining
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            remaining: string;
+            /**
+             * Remaining Rule
+             * @enum {string}
+             */
+            remaining_rule: "etc" | "default";
+            /**
+             * Variance
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            variance: string;
+            /** Variance Percent */
+            variance_percent?: string | null;
         };
         /** LoginRequest */
         LoginRequest: {
@@ -7086,6 +7934,108 @@ export interface components {
             vat_id: components["schemas"]["ResolvedFieldResponse"];
             vat_verified: components["schemas"]["ResolvedFieldResponse"];
         };
+        /**
+         * RollupTrackingResponse
+         * @description A section's or the budget's totals, and what only a rollup has.
+         */
+        RollupTrackingResponse: {
+            /**
+             * Actual
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            actual: string;
+            /**
+             * Committed Gross
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            committed_gross: string;
+            /**
+             * Committed Open
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            committed_open: string;
+            /**
+             * Efc
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            efc: string;
+            /**
+             * Estimate Cost
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            estimate_cost: string;
+            /** Estimate Margin */
+            estimate_margin?: string | null;
+            /** Estimate Margin Percent */
+            estimate_margin_percent?: string | null;
+            /**
+             * Exposure
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            exposure: string;
+            /** Forecast Margin */
+            forecast_margin?: string | null;
+            /** Forecast Margin Percent */
+            forecast_margin_percent?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Over Budget */
+            over_budget: boolean;
+            /** Price */
+            price?: string | null;
+            /**
+             * Remaining
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            remaining: string;
+            /**
+             * Unallocated
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            unallocated: string;
+            /**
+             * Unallocated Actual
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            unallocated_actual: string;
+            /**
+             * Unallocated Committed Open
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            unallocated_committed_open: string;
+            /**
+             * Variance
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            variance: string;
+            /** Variance Percent */
+            variance_percent?: string | null;
+        };
         /** SendMagicCodeRequest */
         SendMagicCodeRequest: {
             /**
@@ -8106,6 +9056,14 @@ export interface components {
              */
             purpose: string;
         };
+        /**
+         * VoidRequest
+         * @description A void always says why — it is in the ledger for ever.
+         */
+        VoidRequest: {
+            /** Reason */
+            reason: string;
+        };
     };
     responses: never;
     parameters: never;
@@ -9014,6 +9972,276 @@ export interface operations {
             };
         };
     };
+    list_actuals_budgets__budget_id__actuals_get: {
+        parameters: {
+            query?: {
+                section_id?: string | null;
+                line_id?: string | null;
+                party_id?: string | null;
+                commitment_id?: string | null;
+                payee?: string | null;
+                date_from?: string | null;
+                date_to?: string | null;
+                /** @description Show only voided entries. */
+                voided?: boolean;
+                /** @description Show voided entries alongside live ones. */
+                include_voided?: boolean;
+                /** @description Only entries with no `paid_on`. */
+                unpaid?: boolean;
+            };
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetActualResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_actual_budgets__budget_id__actuals_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BudgetActualCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetActualCreated"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_actuals_csv_budgets__budget_id__actuals_export_csv_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    apply_actuals_import_budgets__budget_id__actuals_import_post: {
+        parameters: {
+            query: {
+                expected_digest: string;
+                include_duplicates?: number[];
+            };
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_apply_actuals_import_budgets__budget_id__actuals_import_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActualImportResultResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_actuals_import_budgets__budget_id__actuals_import_preview_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_preview_actuals_import_budgets__budget_id__actuals_import_preview_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActualImportPreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_actual_budgets__budget_id__actuals__actual_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+                actual_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BudgetActualUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetActualResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    void_actual_budgets__budget_id__actuals__actual_id__void_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+                actual_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VoidRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetActualResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     create_adjustment_budgets__budget_id__adjustments_post: {
         parameters: {
             query?: never;
@@ -9143,6 +10371,241 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BudgetCalculatedResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_commitments_budgets__budget_id__commitments_get: {
+        parameters: {
+            query?: {
+                section_id?: string | null;
+                line_id?: string | null;
+                party_id?: string | null;
+                payee?: string | null;
+                /** @description open | closed | cancelled */
+                status?: string | null;
+                date_from?: string | null;
+                date_to?: string | null;
+                /** @description Show only voided entries. */
+                voided?: boolean;
+                /** @description Show voided entries alongside live ones. */
+                include_voided?: boolean;
+            };
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetCommitmentResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_commitment_budgets__budget_id__commitments_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BudgetCommitmentCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetCommitmentCreated"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_commitment_budgets__budget_id__commitments__commitment_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+                commitment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BudgetCommitmentUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetCommitmentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_commitment_budgets__budget_id__commitments__commitment_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+                commitment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CloseRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetCommitmentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    close_commitment_budgets__budget_id__commitments__commitment_id__close_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+                commitment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CloseRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetCommitmentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    void_commitment_budgets__budget_id__commitments__commitment_id__void_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+                commitment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VoidRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetCommitmentResponse"];
                 };
             };
             /** @description Validation Error */
@@ -9411,6 +10874,48 @@ export interface operations {
             };
         };
     };
+    read_ledger_budgets__budget_id__ledger_get: {
+        parameters: {
+            query?: {
+                section_id?: string | null;
+                line_id?: string | null;
+                party_id?: string | null;
+                payee?: string | null;
+                status?: string | null;
+                date_from?: string | null;
+                date_to?: string | null;
+                include_voided?: boolean;
+            };
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetLedgerResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     create_line_budgets__budget_id__lines_post: {
         parameters: {
             query?: never;
@@ -9507,6 +11012,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BudgetLineResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_etc_budgets__budget_id__lines__line_id__etc_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+                line_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EtcRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LineTrackingResponse"];
                 };
             };
             /** @description Validation Error */
@@ -9720,6 +11263,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BudgetResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_tracking_budgets__budget_id__tracking_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetTrackingResponse"];
                 };
             };
             /** @description Validation Error */

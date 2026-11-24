@@ -1499,6 +1499,74 @@ def _every_budget_request(project_id, budget_id, section_id, line_id, global_id,
         ),
         ("post", f"/budgets/{budget_id}/import/preview", "csv"),
         ("post", f"/budgets/{budget_id}/import?expected_digest=x", "csv"),
+        # ── B1's cost-planning endpoints ────────────────────────────────
+        #
+        # Same walk, same assertion: staff reach none of them and no refusal
+        # carries a cost or a margin. They are in THIS list rather than in a
+        # second walk of their own because the property is one property —
+        # "the budget shows cost rates and margins, so staff are closed out
+        # of it altogether" — and two lists would be two places for an
+        # endpoint to be forgotten.
+        ("get", f"/budgets/{budget_id}/tracking", None),
+        ("get", f"/budgets/{budget_id}/ledger", None),
+        ("get", f"/budgets/{budget_id}/commitments", None),
+        (
+            "post",
+            f"/budgets/{budget_id}/commitments",
+            {
+                "section_id": section_id,
+                "amount": "100.00",
+                "commitment_date": "2026-06-01",
+            },
+        ),
+        (
+            "patch",
+            f"/budgets/{budget_id}/commitments/{uuid.uuid4()}",
+            {"description": "X"},
+        ),
+        (
+            "post",
+            f"/budgets/{budget_id}/commitments/{uuid.uuid4()}/close",
+            {},
+        ),
+        (
+            "post",
+            f"/budgets/{budget_id}/commitments/{uuid.uuid4()}/cancel",
+            {},
+        ),
+        (
+            "post",
+            f"/budgets/{budget_id}/commitments/{uuid.uuid4()}/void",
+            {"reason": "typo"},
+        ),
+        ("get", f"/budgets/{budget_id}/actuals", None),
+        (
+            "post",
+            f"/budgets/{budget_id}/actuals",
+            {
+                "section_id": section_id,
+                "amount": "100.00",
+                "incurred_on": "2026-06-01",
+            },
+        ),
+        (
+            "patch",
+            f"/budgets/{budget_id}/actuals/{uuid.uuid4()}",
+            {"description": "X"},
+        ),
+        (
+            "post",
+            f"/budgets/{budget_id}/actuals/{uuid.uuid4()}/void",
+            {"reason": "typo"},
+        ),
+        ("put", f"/budgets/{budget_id}/lines/{line_id}/etc", {"etc": "10.00"}),
+        ("get", f"/budgets/{budget_id}/actuals/export.csv", None),
+        ("post", f"/budgets/{budget_id}/actuals/import/preview", "csv"),
+        (
+            "post",
+            f"/budgets/{budget_id}/actuals/import?expected_digest=x",
+            "csv",
+        ),
     ]
 
 
@@ -1528,7 +1596,7 @@ def test_a_staff_user_gets_no_cost_and_no_margin_from_any_budget_endpoint(
         global_id,
         adjustment_id,
     )
-    assert len(requests) == 26, "a budget endpoint is missing from this walk"
+    assert len(requests) == 42, "a budget endpoint is missing from this walk"
 
     csv_file = "section_code;description\r\n1100;X\r\n".encode("utf-8")
     for method, url, body in requests:
@@ -1549,9 +1617,15 @@ def test_a_staff_user_gets_no_cost_and_no_margin_from_any_budget_endpoint(
 
 
 def test_the_budget_endpoint_count_in_the_staff_walk_is_the_real_one(client):
-    """The walk above asserts 26 requests; this asserts 26 is the whole
+    """The walk above asserts 42 requests; this asserts 42 is the whole
     surface, so adding an endpoint without adding it to the walk fails here
-    rather than passing silently (rule 17b)."""
+    rather than passing silently (rule 17b).
+
+    **26 → 42 at B1**, deliberately: sixteen cost-planning operations
+    (commitments, actuals, the ledger, the tracking view, a line's ETC and
+    the actuals CSV) joined the surface, and all sixteen are in the walk
+    above. The number is raised by hand every time, which is the point — a
+    count that moved on its own would notice nothing."""
     from fastapi.openapi.utils import get_openapi
 
     from apps.api.main import app
@@ -1564,7 +1638,7 @@ def test_the_budget_endpoint_count_in_the_staff_walk_is_the_real_one(client):
         if path.startswith("/budgets") or path.endswith("/budgets")
         or "/budgets/" in path
     ]
-    assert len(operations) == 26, sorted(operations)
+    assert len(operations) == 42, sorted(operations)
 
 
 def test_a_budget_of_another_company_is_a_404(pg_client, pg_db, world, project):

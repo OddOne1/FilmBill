@@ -630,21 +630,35 @@ def engine_input(db: Session, budget: Budget) -> tuple[dict, list]:
     return data, explanations
 
 
+def calc_result(db: Session, budget: Budget) -> tuple:
+    """`(CalcResult, factor explanations)` — the engine's own value objects.
+
+    The one place a budget is priced. `calculated` below turns this into the
+    wire shape; B1's `services/budget_tracking_service.py` takes the
+    `Decimal`s out of it for the estimate side of the forecast. Two callers,
+    one calculation: a tracking view that priced the budget a second time
+    could show an estimate cost that differed from the sheet's by a cent, and
+    nobody could say which was right (CLAUDE.md rule 2).
+
+    A `CalcError` — a third nesting level that got into the database somehow,
+    a duplicate id — comes out as a `BudgetError` with the engine's own
+    sentence.
+    """
+    data, explanations = engine_input(db, budget)
+    try:
+        return calculate_document(data), explanations
+    except CalcError as error:
+        raise BudgetError(str(error)) from None
+
+
 def calculated(db: Session, budget: Budget) -> dict:
     """Every number the sheet and the top sheet need. Computes nothing itself.
 
     The arithmetic is the engine's, the shares are the engine's
     `percent_share`, and this function's whole job is to assemble the input
-    and label the output. A `CalcError` — a third nesting level that got into
-    the database somehow, a duplicate id — comes out as a `BudgetError` with
-    the engine's own sentence.
+    and label the output.
     """
-    data, explanations = engine_input(db, budget)
-    try:
-        result = calculate_document(data)
-    except CalcError as error:
-        raise BudgetError(str(error)) from None
-
+    result, explanations = calc_result(db, budget)
     response = response_from_result(result)
 
     sections = {str(section.id): section for section in active_sections(db, budget)}

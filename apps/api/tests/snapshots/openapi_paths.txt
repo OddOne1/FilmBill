@@ -9,8 +9,13 @@ GET /auth/invite/{token}
 GET /auth/me
 GET /auth/password-policy
 GET /budgets/{budget_id}
+GET /budgets/{budget_id}/actuals
+GET /budgets/{budget_id}/actuals/export.csv
 GET /budgets/{budget_id}/calculated
+GET /budgets/{budget_id}/commitments
 GET /budgets/{budget_id}/export.csv
+GET /budgets/{budget_id}/ledger
+GET /budgets/{budget_id}/tracking
 GET /catalog/categories
 GET /catalog/items
 GET /catalog/items/{item_id}
@@ -57,7 +62,9 @@ PATCH /admin/users/{user_id}/reactivate
 PATCH /admin/users/{user_id}/role
 PATCH /auth/me/preferences
 PATCH /budgets/{budget_id}
+PATCH /budgets/{budget_id}/actuals/{actual_id}
 PATCH /budgets/{budget_id}/adjustments/{adjustment_id}
+PATCH /budgets/{budget_id}/commitments/{commitment_id}
 PATCH /budgets/{budget_id}/globals/{global_id}
 PATCH /budgets/{budget_id}/lines/{line_id}
 PATCH /budgets/{budget_id}/sections/{section_id}
@@ -98,8 +105,16 @@ POST /auth/register
 POST /auth/send-magic-code
 POST /auth/set-password
 POST /auth/verify-magic-code
+POST /budgets/{budget_id}/actuals
+POST /budgets/{budget_id}/actuals/import
+POST /budgets/{budget_id}/actuals/import/preview
+POST /budgets/{budget_id}/actuals/{actual_id}/void
 POST /budgets/{budget_id}/adjustments
 POST /budgets/{budget_id}/adjustments/{adjustment_id}/remove
+POST /budgets/{budget_id}/commitments
+POST /budgets/{budget_id}/commitments/{commitment_id}/cancel
+POST /budgets/{budget_id}/commitments/{commitment_id}/close
+POST /budgets/{budget_id}/commitments/{commitment_id}/void
 POST /budgets/{budget_id}/duplicate
 POST /budgets/{budget_id}/globals
 POST /budgets/{budget_id}/globals/{global_id}/remove
@@ -162,5 +177,6 @@ POST /site-settings/favicon-upload
 POST /site-settings/logo-upload
 POST /users/invite
 POST /users/me/avatar
+PUT /budgets/{budget_id}/lines/{line_id}/etc
 PUT /catalog/items/{item_id}/rates
 PUT /catalog/rental-factor-groups/{group_id}/factors

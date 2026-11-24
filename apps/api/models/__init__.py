@@ -26,7 +26,9 @@ from .catalog import (
 )
 from .project import (
     Budget,
+    BudgetActual,
     BudgetAdjustment,
+    BudgetCommitment,
     BudgetGlobal,
     BudgetLine,
     BudgetSection,
@@ -73,6 +75,8 @@ __all__ = [
     "BudgetLine",
     "BudgetGlobal",
     "BudgetAdjustment",
+    "BudgetCommitment",
+    "BudgetActual",
     "Item",
     "ItemCategory",
     "ItemRate",

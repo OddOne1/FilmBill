@@ -32,6 +32,7 @@ from typing import Any, Optional
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Date,
     DateTime,
     ForeignKey,
@@ -45,7 +46,7 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, declared_attr, mapped_column, relationship
 from sqlalchemy.types import JSON
 
 try:
@@ -437,6 +438,17 @@ class BudgetLine(CompanyScoped, Base):
         Boolean, nullable=False, server_default="false"
     )
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    #: The user's own estimate of what is still to be spent on this line
+    #: (slice B1). `None` means "use the default forecasting rule";
+    #: `Decimal("0.00")` means "this line is finished" and is NOT the same
+    #: thing — `billing/budget/tracking.py` distinguishes them, and the
+    #: column is nullable precisely so it can.
+    #:
+    #: It lives on the line rather than in a table of its own because there
+    #: is exactly one per line and it is overwritten, not accumulated: a
+    #: history of ETCs is a thing to want one day and the audit log already
+    #: has it (`budget_line.etc_set` carries the before and the after).
+    etc: Mapped[Optional[Any]] = mapped_column(AmountColumn(), nullable=True)
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="true"
     )
@@ -570,4 +582,234 @@ class BudgetAdjustment(CompanyScoped, Base):
 
     __table_args__ = (
         Index("ix_budget_adjustments_budget_section", "budget_id", "section_id"),
+    )
+
+
+#: A commitment's lifecycle, as the DEFAULT this column is created with.
+#:
+#: The authority is `billing/budget/tracking.py` — `committed_open` is
+#: defined in terms of these three words, and nothing here may contradict it.
+#: It is spelled again rather than imported for the reason `models/catalog.py`
+#: references `billing/catalog/kinds` in a comment and does not import it:
+#: `alembic/env.py` does a bare `import models` on a different `sys.path`, and
+#: a model that reaches into `billing/` on the way up makes `alembic check`
+#: — the job that notices a table with no migration (CLAUDE.md 17d) — depend
+#: on an import path that is not the application's.
+#:
+#: `test_budget_tracking_model.py` asserts that this literal and
+#: `tracking.STATUS_OPEN` are the same string, so the duplication is checked
+#: rather than trusted.
+COMMITMENT_STATUS_DEFAULT = "open"
+
+
+class BudgetEntry(CompanyScoped):
+    """What a commitment and an actual have in common. Not a table.
+
+    A mixin rather than a shared table or a `type` column, because the two
+    things genuinely differ — a commitment has a status and closes, an actual
+    has dates and may point at a commitment — and the columns below are only
+    the ones that are the same question asked twice: which budget, which
+    section, which line, who is being paid, what it says on the paperwork,
+    how much, and whether somebody has taken it back.
+
+    **`section_id` is required and `line_id` is not.** Every cost belongs
+    somewhere in the sheet's account structure, even when it matches no row:
+    a taxi nobody budgeted is still Travel. A cost with no section at all
+    would be a cost with no place in the top sheet, and the only honest thing
+    to do with it would be to print it at the bottom under "other", which is
+    where production budgets go to die.
+
+    **`party_id` or `payee_text`, and neither is required.** A supplier that
+    is a party gets the foreign key and inherits every tax identifier and
+    address P1b gave it; a one-off — a parking receipt, a crew member paid in
+    cash — gets free text, because refusing the entry until somebody creates
+    a party is how costs end up in a spreadsheet instead. The service refuses
+    both at once: two names for one payee is a row nobody can reconcile.
+
+    **Amounts are NET and in the company currency, always, and > 0.** A
+    correction is a new entry plus a void, never a negative amount: a
+    negative row would make every sum in `tracking.py` depend on which rows
+    happened to be included, and "the total is right if you add up the right
+    subset" is not a property anybody can check. Foreign currency is
+    deliberately not built (SCOPE D88).
+
+    **Nothing is ever deleted.** `voided_at` and `void_reason` move together
+    — the service refuses one without the other — and a voided entry stays
+    visible in the ledger while leaving every number.
+    """
+
+    @declared_attr
+    def budget_id(cls) -> Mapped[uuid.UUID]:
+        return mapped_column(
+            UUID(as_uuid=True),
+            ForeignKey("budgets.id", ondelete="RESTRICT"),
+            nullable=False,
+            index=True,
+        )
+
+    @declared_attr
+    def section_id(cls) -> Mapped[uuid.UUID]:
+        return mapped_column(
+            UUID(as_uuid=True),
+            ForeignKey("budget_sections.id", ondelete="RESTRICT"),
+            nullable=False,
+            index=True,
+        )
+
+    @declared_attr
+    def line_id(cls) -> Mapped[Optional[uuid.UUID]]:
+        return mapped_column(
+            UUID(as_uuid=True),
+            ForeignKey("budget_lines.id", ondelete="RESTRICT"),
+            nullable=True,
+            index=True,
+        )
+
+    @declared_attr
+    def party_id(cls) -> Mapped[Optional[uuid.UUID]]:
+        return mapped_column(
+            UUID(as_uuid=True),
+            ForeignKey("parties.id", ondelete="RESTRICT"),
+            nullable=True,
+        )
+
+    @declared_attr
+    def payee_text(cls) -> Mapped[Optional[str]]:
+        return mapped_column(String(255), nullable=True)
+
+    @declared_attr
+    def description(cls) -> Mapped[Optional[str]]:
+        return mapped_column(String(500), nullable=True)
+
+    @declared_attr
+    def reference(cls) -> Mapped[Optional[str]]:
+        """A PO number on a commitment, a supplier invoice number on an
+        actual. Free text, because it is somebody else's numbering scheme."""
+        return mapped_column(String(128), nullable=True)
+
+    @declared_attr
+    def amount(cls) -> Mapped[Any]:
+        return mapped_column(AmountColumn(), nullable=False)
+
+    @declared_attr
+    def notes(cls) -> Mapped[Optional[str]]:
+        return mapped_column(Text, nullable=True)
+
+    @declared_attr
+    def voided_at(cls) -> Mapped[Optional[datetime]]:
+        return mapped_column(DateTime(timezone=True), nullable=True)
+
+    @declared_attr
+    def void_reason(cls) -> Mapped[Optional[str]]:
+        return mapped_column(String(500), nullable=True)
+
+    @declared_attr
+    def created_at(cls) -> Mapped[datetime]:
+        return mapped_column(
+            DateTime(timezone=True), server_default=func.now(), nullable=False
+        )
+
+    @declared_attr
+    def updated_at(cls) -> Mapped[datetime]:
+        return mapped_column(
+            DateTime(timezone=True),
+            server_default=func.now(),
+            onupdate=func.now(),
+            nullable=False,
+        )
+
+    @property
+    def is_voided(self) -> bool:
+        return self.voided_at is not None
+
+
+class BudgetCommitment(BudgetEntry, Base):
+    """Money promised but not yet invoiced: a PO, a booking, an agreement.
+
+    `status` is the lifecycle `tracking.py` defines — `open` is owed,
+    `closed` is settled by the actuals linked to it, `cancelled` was
+    withdrawn and was never owed. Closed and cancelled are different states
+    rather than one `is_open` flag because they answer `committed_gross`
+    differently: a closed order was still ordered, a cancelled one was not.
+
+    **Closing is automatic and reversible.** When the non-voided actuals
+    linked to a commitment reach its amount the service closes it; when one
+    of those actuals is voided it reopens. Both are audited. It can also be
+    closed or cancelled by hand with a reason — a supplier who invoices 940
+    against a 1 000 order and then stops is a thing that happens, and the
+    only person who knows the other 60 is never coming is the producer.
+    """
+
+    __tablename__ = "budget_commitments"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    #: One of `COMMITMENT_STATUSES`. A `String(16)` and not a database enum,
+    #: for migration 0015's reason: the authority is the Python vocabulary.
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default=COMMITMENT_STATUS_DEFAULT
+    )
+    #: When the money was promised — the date on the order, not the date the
+    #: row was typed.
+    commitment_date: Mapped[date] = mapped_column(Date, nullable=False)
+
+
+    __table_args__ = (
+        # Stated on the model as well as in migration 0016, because the
+        # real-database suite builds its schema from the models: a CHECK that
+        # lived only in the migration would be absent from every test
+        # database, and `test_the_amount_check_constraint_actually_fires`
+        # found exactly that. `alembic check` does not compare CHECKs, so
+        # the two copies are kept honest by that test and not by alembic.
+        CheckConstraint("amount > 0", name="ck_budget_commitments_amount_positive"),
+        Index(
+            "ix_budget_commitments_budget_section",
+            "budget_id",
+            "section_id",
+        ),
+        Index("ix_budget_commitments_company_party", "company_id", "party_id"),
+        Index(
+            "ix_budget_commitments_budget_date", "budget_id", "commitment_date"
+        ),
+    )
+
+
+class BudgetActual(BudgetEntry, Base):
+    """Money actually spent: a supplier invoice, a receipt, a payroll line.
+
+    `commitment_id` links it to the order it settles, where there is one.
+    Nullable, because plenty of real costs arrive with no order behind them —
+    and the link is what makes `exposure = actual + committed_open` work: an
+    invoice with no link does not reduce any open commitment, which is
+    correct, because it is not settling one.
+
+    **`incurred_on` is when the cost arose; `paid_on` is when the money
+    left.** Two dates, because a budget is read by date of cost ("what has
+    this shoot cost so far") and paid by date of payment, and one column
+    would answer whichever question somebody asked second. `paid_on` is
+    nullable and that is the whole of payment status in B1 — an aging
+    report, a payment run and a bank reconciliation are P5 and P6
+    (SCOPE D88).
+    """
+
+    __tablename__ = "budget_actuals"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    commitment_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("budget_commitments.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    incurred_on: Mapped[date] = mapped_column(Date, nullable=False)
+    paid_on: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+
+    __table_args__ = (
+        CheckConstraint("amount > 0", name="ck_budget_actuals_amount_positive"),
+        Index("ix_budget_actuals_budget_section", "budget_id", "section_id"),
+        Index("ix_budget_actuals_company_party", "company_id", "party_id"),
+        Index("ix_budget_actuals_budget_incurred", "budget_id", "incurred_on"),
     )

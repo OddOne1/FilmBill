@@ -37,7 +37,9 @@ from .company_factories import (
     grant,
     make_bank_account,
     make_budget,
+    make_budget_actual,
     make_budget_adjustment,
+    make_budget_commitment,
     make_budget_global,
     make_budget_line,
     make_budget_section,
@@ -401,6 +403,63 @@ CASES: dict[str, object] = {
             )
         }
     },
+    # B1's cost planning. Every one names B's budget, and the ones that take
+    # an entry id name B's own commitment or actual — so a handler that
+    # looked an entry up by id alone would FIND a real row, rather than 404
+    # for an id that names nothing.
+    "GET /budgets/{budget_id}/tracking": {"body": None},
+    "GET /budgets/{budget_id}/ledger": {"body": None},
+    "GET /budgets/{budget_id}/commitments": {"body": None},
+    "POST /budgets/{budget_id}/commitments": {
+        "body": {"amount": "1.00", "commitment_date": "2026-06-01"},
+        # A required id in the BODY, filled with B's section in `_send`. A
+        # body without it is a 422 for the missing field, which arrives
+        # before the company check could 404 — a refusal for the wrong
+        # reason, and a green test proving nothing.
+        "body_rows": {"section_id": "section_in_b"},
+    },
+    "PATCH /budgets/{budget_id}/commitments/{commitment_id}": {
+        "body": {"notes": "Stolen"}
+    },
+    "POST /budgets/{budget_id}/commitments/{commitment_id}/close": {"body": {}},
+    "POST /budgets/{budget_id}/commitments/{commitment_id}/cancel": {"body": {}},
+    "POST /budgets/{budget_id}/commitments/{commitment_id}/void": {
+        "body": {"reason": "Stolen"}
+    },
+    "GET /budgets/{budget_id}/actuals": {"body": None},
+    "POST /budgets/{budget_id}/actuals": {
+        "body": {"amount": "1.00", "incurred_on": "2026-06-01"},
+        # A required id in the BODY, filled with B's section in `_send`. A
+        # body without it is a 422 for the missing field, which arrives
+        # before the company check could 404 — a refusal for the wrong
+        # reason, and a green test proving nothing.
+        "body_rows": {"section_id": "section_in_b"},
+    },
+    "PATCH /budgets/{budget_id}/actuals/{actual_id}": {"body": {"notes": "Stolen"}},
+    "POST /budgets/{budget_id}/actuals/{actual_id}/void": {
+        "body": {"reason": "Stolen"}
+    },
+    "PUT /budgets/{budget_id}/lines/{line_id}/etc": {"body": {"etc": "1.00"}},
+    "GET /budgets/{budget_id}/actuals/export.csv": {"body": None},
+    "POST /budgets/{budget_id}/actuals/import/preview": {
+        "files": {
+            "file": (
+                "actuals.csv",
+                b"date;amount;section_code\n2026-06-01;1,00;1100\n",
+                "text/csv",
+            )
+        }
+    },
+    "POST /budgets/{budget_id}/actuals/import": {
+        "query": {"expected_digest": "0000000000000000"},
+        "files": {
+            "file": (
+                "actuals.csv",
+                b"date;amount;section_code\n2026-06-01;1,00;1100\n",
+                "text/csv",
+            )
+        },
+    },
     # Pure arithmetic, no stored row — and still a company endpoint.
     "POST /calc/preview": {
         "body": {
@@ -433,6 +492,8 @@ OTHER_COMPANY_ROWS = {
     "{category_id}": "category_in_b",
     "{unit_id}": "unit_in_b",
     "{group_id}": "group_in_b",
+    "{commitment_id}": "commitment_in_b",
+    "{actual_id}": "actual_in_b",
 }
 
 
@@ -551,6 +612,13 @@ def two_companies(pg_db):
     line_in_b = make_budget_line(pg_db, company_b, section_in_b)
     global_in_b = make_budget_global(pg_db, company_b, budget_in_b)
     adjustment_in_b = make_budget_adjustment(pg_db, company_b, budget_in_b)
+    # And B1's: a commitment of B's and an actual settling it.
+    commitment_in_b = make_budget_commitment(
+        pg_db, company_b, budget_in_b, section_in_b, line=line_in_b
+    )
+    actual_in_b = make_budget_actual(
+        pg_db, company_b, budget_in_b, section_in_b, commitment=commitment_in_b
+    )
     check_in_b = PartyVatCheck(
         company_id=company_b.id,
         party_id=party_in_b.id,
@@ -588,6 +656,8 @@ def two_companies(pg_db):
         "line_in_b": line_in_b,
         "global_in_b": global_in_b,
         "adjustment_in_b": adjustment_in_b,
+        "commitment_in_b": commitment_in_b,
+        "actual_in_b": actual_in_b,
     }
 
 
@@ -606,11 +676,17 @@ def _send(client, operation: str, headers: dict, case: dict, world: dict):
             data=case.get("data"),
             params=case.get("query"),
         )
+    body = case.get("body")
+    if case.get("body_rows"):
+        body = {
+            **(body or {}),
+            **{name: str(world[key].id) for name, key in case["body_rows"].items()},
+        }
     return client.request(
         method,
         path,
         headers=headers,
-        json=case.get("body"),
+        json=body,
         params=case.get("query"),
     )
 

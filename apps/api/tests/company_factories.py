@@ -845,3 +845,68 @@ def make_budget_adjustment(
     db.commit()
     db.refresh(row)
     return row
+
+
+def make_budget_commitment(
+    db,
+    company: Company,
+    budget,
+    section,
+    *,
+    line=None,
+    amount: str = "500.00",
+    status: str = "open",
+    reference: Optional[str] = "PO-1",
+):
+    """One commitment, written directly — for tests that need a row of
+    another company to exist rather than tests about creating one."""
+    from datetime import date
+    from decimal import Decimal
+
+    from apps.api.models.project import BudgetCommitment
+
+    row = BudgetCommitment(
+        company_id=company.id,
+        budget_id=budget.id,
+        section_id=section.id,
+        line_id=None if line is None else line.id,
+        amount=Decimal(amount),
+        status=status,
+        reference=reference,
+        commitment_date=date(2026, 6, 1),
+    )
+    db.add(row)
+    db.flush()
+    return row
+
+
+def make_budget_actual(
+    db,
+    company: Company,
+    budget,
+    section,
+    *,
+    line=None,
+    commitment=None,
+    amount: str = "100.00",
+    reference: Optional[str] = "RE-1",
+):
+    """One actual, written directly. See `make_budget_commitment`."""
+    from datetime import date
+    from decimal import Decimal
+
+    from apps.api.models.project import BudgetActual
+
+    row = BudgetActual(
+        company_id=company.id,
+        budget_id=budget.id,
+        section_id=section.id,
+        line_id=None if line is None else line.id,
+        commitment_id=None if commitment is None else commitment.id,
+        amount=Decimal(amount),
+        reference=reference,
+        incurred_on=date(2026, 6, 2),
+    )
+    db.add(row)
+    db.flush()
+    return row
