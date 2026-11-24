@@ -1,0 +1,83 @@
+{
+  "why": "Estimate 1 000 with 1 200 invoiced: nothing more to spend, EFC 1 200, variance −200 (negative is over), over_budget true. `remaining` is 0 and not −200: a line cannot owe money back to its own estimate.",
+  "budget": {
+    "id": "b",
+    "sections": [
+      {
+        "id": "s",
+        "lines": [
+          {
+            "id": "l",
+            "estimate_cost": "1000.00",
+            "actuals": [
+              {
+                "id": "a1",
+                "amount": "1200.00"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "expect": {
+    "lines": {
+      "l": {
+        "estimate_cost": "1000.00",
+        "committed_gross": "0.00",
+        "committed_open": "0.00",
+        "actual": "1200.00",
+        "exposure": "1200.00",
+        "remaining": "0.00",
+        "remaining_rule": "default",
+        "efc": "1200.00",
+        "variance": "-200.00",
+        "variance_percent": "-20.00",
+        "over_budget": true,
+        "etc": null
+      }
+    },
+    "sections": {
+      "s": {
+        "estimate_cost": "1000.00",
+        "committed_gross": "0.00",
+        "committed_open": "0.00",
+        "actual": "1200.00",
+        "exposure": "1200.00",
+        "remaining": "0.00",
+        "efc": "1200.00",
+        "variance": "-200.00",
+        "variance_percent": "-20.00",
+        "over_budget": true,
+        "unallocated": "0.00",
+        "unallocated_actual": "0.00",
+        "unallocated_committed_open": "0.00",
+        "price": null,
+        "forecast_margin": null,
+        "forecast_margin_percent": null,
+        "estimate_margin": null,
+        "estimate_margin_percent": null
+      }
+    },
+    "budget": {
+      "estimate_cost": "1000.00",
+      "committed_gross": "0.00",
+      "committed_open": "0.00",
+      "actual": "1200.00",
+      "exposure": "1200.00",
+      "remaining": "0.00",
+      "efc": "1200.00",
+      "variance": "-200.00",
+      "variance_percent": "-20.00",
+      "over_budget": true,
+      "unallocated": "0.00",
+      "unallocated_actual": "0.00",
+      "unallocated_committed_open": "0.00",
+      "price": null,
+      "forecast_margin": null,
+      "forecast_margin_percent": null,
+      "estimate_margin": null,
+      "estimate_margin_percent": null
+    }
+  }
+}

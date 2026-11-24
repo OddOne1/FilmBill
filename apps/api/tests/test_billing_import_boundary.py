@@ -57,11 +57,17 @@ def test_importing_the_billing_package_loads_no_orm_and_no_web_framework():
         "import apps.api.billing.parties as parties\n"
         "import apps.api.billing.tax as tax\n"
         "import apps.api.billing.calc as calc\n"
+        # `budget` joined the probe with B1's `tracking.py`, which is the
+        # second pure module in the package that does money arithmetic. The
+        # AST scan below had always covered it; the SUBPROCESS had not, and
+        # the subprocess is the real check — it is the one that sees an
+        # `importlib.import_module("sqlalchemy")`.
+        "import apps.api.billing.budget as budget\n"
         # Touch EVERY exported name, so this is not merely a check on what
         # the __init__ statements do: an import inside a function body is
         # reached as well. Written against `__all__` rather than a named
         # function so it keeps covering the whole surface as the package grows.
-        "for module in (tax, parties, calc):\n"
+        "for module in (tax, parties, calc, budget):\n"
         "    assert module.__all__, f'{module.__name__} exports nothing'\n"
         "    for name in module.__all__:\n"
         "        getattr(module, name)\n"
@@ -130,9 +136,12 @@ def _python_files() -> list[Path]:
 def test_the_package_has_files_to_check():
     """A glob that matched nothing would make the scan below vacuous."""
     files = _python_files()
-    # tax (5) + parties (5) + calc (4), and the floor rises with the
-    # package rather than staying at the number it was written with.
-    assert len(files) >= 14, f"only found {files} under {BILLING}"
+    # billing/__init__ (1) + tax (6) + parties (6) + calc (4) +
+    # catalog (4) + budget (3) = 24, and the floor rises with the package
+    # rather than staying at the number it was written with. It was 14 when
+    # the package held 14 files and had not moved while it grew to 23 —
+    # which is the shape CLAUDE.md 17e is about, in miniature.
+    assert len(files) >= 23, f"only found {files} under {BILLING}"
 
 
 def _imported_modules(path: Path) -> list[tuple[int, str]]:

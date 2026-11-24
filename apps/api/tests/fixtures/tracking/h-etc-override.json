@@ -1,0 +1,84 @@
+{
+  "why": "Estimate 1 000, 400 invoiced, and the user says 200 is left: EFC 600, not the default rule's 1 000. `remaining_rule` reads `etc`, which is how a screen can say which rule produced the number — the default one is [Guessing] (SCOPE D83) and an ETC is the user overruling it.",
+  "budget": {
+    "id": "b",
+    "sections": [
+      {
+        "id": "s",
+        "lines": [
+          {
+            "id": "l",
+            "estimate_cost": "1000.00",
+            "actuals": [
+              {
+                "id": "a1",
+                "amount": "400.00"
+              }
+            ],
+            "etc": "200.00"
+          }
+        ]
+      }
+    ]
+  },
+  "expect": {
+    "lines": {
+      "l": {
+        "estimate_cost": "1000.00",
+        "committed_gross": "0.00",
+        "committed_open": "0.00",
+        "actual": "400.00",
+        "exposure": "400.00",
+        "remaining": "200.00",
+        "remaining_rule": "etc",
+        "efc": "600.00",
+        "variance": "400.00",
+        "variance_percent": "40.00",
+        "over_budget": false,
+        "etc": "200.00"
+      }
+    },
+    "sections": {
+      "s": {
+        "estimate_cost": "1000.00",
+        "committed_gross": "0.00",
+        "committed_open": "0.00",
+        "actual": "400.00",
+        "exposure": "400.00",
+        "remaining": "200.00",
+        "efc": "600.00",
+        "variance": "400.00",
+        "variance_percent": "40.00",
+        "over_budget": false,
+        "unallocated": "0.00",
+        "unallocated_actual": "0.00",
+        "unallocated_committed_open": "0.00",
+        "price": null,
+        "forecast_margin": null,
+        "forecast_margin_percent": null,
+        "estimate_margin": null,
+        "estimate_margin_percent": null
+      }
+    },
+    "budget": {
+      "estimate_cost": "1000.00",
+      "committed_gross": "0.00",
+      "committed_open": "0.00",
+      "actual": "400.00",
+      "exposure": "400.00",
+      "remaining": "200.00",
+      "efc": "600.00",
+      "variance": "400.00",
+      "variance_percent": "40.00",
+      "over_budget": false,
+      "unallocated": "0.00",
+      "unallocated_actual": "0.00",
+      "unallocated_committed_open": "0.00",
+      "price": null,
+      "forecast_margin": null,
+      "forecast_margin_percent": null,
+      "estimate_margin": null,
+      "estimate_margin_percent": null
+    }
+  }
+}

@@ -1,0 +1,92 @@
+{
+  "why": "A cost that belongs in a section and matches no line: an invoice of 150 and an open order of 200 booked on the section itself. Both reach the section's and the budget's `actual` / `committed_open` and are reported separately as `unallocated` = 350 so the number is never mistaken for a line. The section's `remaining` is the line's 1 000 plus the unallocated ORDER's 200 — what is still owed on it — which is what keeps `efc = actual + remaining` true at every level. EFC 1 350 against an estimate of 1 000: over budget.",
+  "budget": {
+    "id": "b",
+    "sections": [
+      {
+        "id": "s",
+        "lines": [
+          {
+            "id": "l",
+            "estimate_cost": "1000.00"
+          }
+        ],
+        "commitments": [
+          {
+            "id": "u1",
+            "amount": "200.00"
+          }
+        ],
+        "actuals": [
+          {
+            "id": "u2",
+            "amount": "150.00"
+          }
+        ]
+      }
+    ]
+  },
+  "expect": {
+    "lines": {
+      "l": {
+        "estimate_cost": "1000.00",
+        "committed_gross": "0.00",
+        "committed_open": "0.00",
+        "actual": "0.00",
+        "exposure": "0.00",
+        "remaining": "1000.00",
+        "remaining_rule": "default",
+        "efc": "1000.00",
+        "variance": "0.00",
+        "variance_percent": "0.00",
+        "over_budget": false,
+        "etc": null
+      }
+    },
+    "sections": {
+      "s": {
+        "estimate_cost": "1000.00",
+        "committed_gross": "200.00",
+        "committed_open": "200.00",
+        "actual": "150.00",
+        "exposure": "350.00",
+        "remaining": "1200.00",
+        "efc": "1350.00",
+        "variance": "-350.00",
+        "variance_percent": "-35.00",
+        "over_budget": true,
+        "unallocated": "350.00",
+        "unallocated_actual": "150.00",
+        "unallocated_committed_open": "200.00",
+        "price": null,
+        "forecast_margin": null,
+        "forecast_margin_percent": null,
+        "estimate_margin": null,
+        "estimate_margin_percent": null
+      }
+    },
+    "budget": {
+      "estimate_cost": "1000.00",
+      "committed_gross": "200.00",
+      "committed_open": "200.00",
+      "actual": "150.00",
+      "exposure": "350.00",
+      "remaining": "1200.00",
+      "efc": "1350.00",
+      "variance": "-350.00",
+      "variance_percent": "-35.00",
+      "over_budget": true,
+      "unallocated": "350.00",
+      "unallocated_actual": "150.00",
+      "unallocated_committed_open": "200.00",
+      "price": null,
+      "forecast_margin": null,
+      "forecast_margin_percent": null,
+      "estimate_margin": null,
+      "estimate_margin_percent": null
+    }
+  },
+  "closes_commitment": {
+    "u1": false
+  }
+}

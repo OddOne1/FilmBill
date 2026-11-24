@@ -1,0 +1,105 @@
+{
+  "why": "A voided commitment of 500 and a voided invoice of 400 are out of every number: committed_gross is 700 (c1 alone), and c1's open amount is 600 because only the live 100 settles it — the voided 400 does not. Void is the only way an entry leaves the numbers; nothing is ever deleted.",
+  "budget": {
+    "id": "b",
+    "sections": [
+      {
+        "id": "s",
+        "lines": [
+          {
+            "id": "l",
+            "estimate_cost": "1000.00",
+            "commitments": [
+              {
+                "id": "c1",
+                "amount": "700.00"
+              },
+              {
+                "id": "c2",
+                "amount": "500.00",
+                "voided": true
+              }
+            ],
+            "actuals": [
+              {
+                "id": "a1",
+                "amount": "400.00",
+                "commitment_id": "c1",
+                "voided": true
+              },
+              {
+                "id": "a2",
+                "amount": "100.00",
+                "commitment_id": "c1"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "expect": {
+    "lines": {
+      "l": {
+        "estimate_cost": "1000.00",
+        "committed_gross": "700.00",
+        "committed_open": "600.00",
+        "actual": "100.00",
+        "exposure": "700.00",
+        "remaining": "900.00",
+        "remaining_rule": "default",
+        "efc": "1000.00",
+        "variance": "0.00",
+        "variance_percent": "0.00",
+        "over_budget": false,
+        "etc": null
+      }
+    },
+    "sections": {
+      "s": {
+        "estimate_cost": "1000.00",
+        "committed_gross": "700.00",
+        "committed_open": "600.00",
+        "actual": "100.00",
+        "exposure": "700.00",
+        "remaining": "900.00",
+        "efc": "1000.00",
+        "variance": "0.00",
+        "variance_percent": "0.00",
+        "over_budget": false,
+        "unallocated": "0.00",
+        "unallocated_actual": "0.00",
+        "unallocated_committed_open": "0.00",
+        "price": null,
+        "forecast_margin": null,
+        "forecast_margin_percent": null,
+        "estimate_margin": null,
+        "estimate_margin_percent": null
+      }
+    },
+    "budget": {
+      "estimate_cost": "1000.00",
+      "committed_gross": "700.00",
+      "committed_open": "600.00",
+      "actual": "100.00",
+      "exposure": "700.00",
+      "remaining": "900.00",
+      "efc": "1000.00",
+      "variance": "0.00",
+      "variance_percent": "0.00",
+      "over_budget": false,
+      "unallocated": "0.00",
+      "unallocated_actual": "0.00",
+      "unallocated_committed_open": "0.00",
+      "price": null,
+      "forecast_margin": null,
+      "forecast_margin_percent": null,
+      "estimate_margin": null,
+      "estimate_margin_percent": null
+    }
+  },
+  "closes_commitment": {
+    "c1": false,
+    "c2": false
+  }
+}

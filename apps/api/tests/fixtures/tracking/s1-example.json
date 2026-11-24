@@ -1,0 +1,263 @@
+{
+  "why": "Scenario (k) of the B1 prompt: the A1/A2 S1 example budget — net price 12 517.20, estimate cost 5 380.00, estimate margin 7 137.20 (57.02 %), all three asserted against the engine in fixtures/calc/s1-quote.json — with an invoice of 3 200.00 on the Studio line, an open order of 1 000.00 on the Alexa line whose estimate cost is 0.00, and an ETC of 500.00 on the Taxi line. Forecast: EFC 7 760.00, variance −2 380.00 (−44.24 %), forecast margin 12 517.20 − 7 760.00 = 4 757.20 (38.01 % of the ESTIMATE price, which does not move when costs do). Every section's estimate margin here is the engine's own number for it.",
+  "budget": {
+    "id": "b",
+    "sections": [
+      {
+        "id": "crew",
+        "price": "3990.00",
+        "lines": [
+          {
+            "id": "dop",
+            "estimate_cost": "1800.00"
+          },
+          {
+            "id": "gaffer",
+            "estimate_cost": "1260.00"
+          }
+        ]
+      },
+      {
+        "id": "equipment",
+        "price": "4680.00",
+        "lines": [
+          {
+            "id": "alexa",
+            "estimate_cost": "0.00",
+            "commitments": [
+              {
+                "id": "c-alexa",
+                "amount": "1000.00"
+              }
+            ]
+          },
+          {
+            "id": "lens",
+            "estimate_cost": "0.00"
+          }
+        ]
+      },
+      {
+        "id": "studio",
+        "price": "2800.00",
+        "lines": [
+          {
+            "id": "studio-a",
+            "estimate_cost": "2200.00",
+            "actuals": [
+              {
+                "id": "a-studio",
+                "amount": "3200.00"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "travel",
+        "price": "120.00",
+        "lines": [
+          {
+            "id": "taxi",
+            "estimate_cost": "120.00",
+            "etc": "500.00"
+          }
+        ]
+      }
+    ],
+    "price": "12517.20"
+  },
+  "expect": {
+    "lines": {
+      "dop": {
+        "estimate_cost": "1800.00",
+        "committed_gross": "0.00",
+        "committed_open": "0.00",
+        "actual": "0.00",
+        "exposure": "0.00",
+        "remaining": "1800.00",
+        "remaining_rule": "default",
+        "efc": "1800.00",
+        "variance": "0.00",
+        "variance_percent": "0.00",
+        "over_budget": false,
+        "etc": null
+      },
+      "gaffer": {
+        "estimate_cost": "1260.00",
+        "committed_gross": "0.00",
+        "committed_open": "0.00",
+        "actual": "0.00",
+        "exposure": "0.00",
+        "remaining": "1260.00",
+        "remaining_rule": "default",
+        "efc": "1260.00",
+        "variance": "0.00",
+        "variance_percent": "0.00",
+        "over_budget": false,
+        "etc": null
+      },
+      "alexa": {
+        "estimate_cost": "0.00",
+        "committed_gross": "1000.00",
+        "committed_open": "1000.00",
+        "actual": "0.00",
+        "exposure": "1000.00",
+        "remaining": "1000.00",
+        "remaining_rule": "default",
+        "efc": "1000.00",
+        "variance": "-1000.00",
+        "variance_percent": null,
+        "over_budget": true,
+        "etc": null
+      },
+      "lens": {
+        "estimate_cost": "0.00",
+        "committed_gross": "0.00",
+        "committed_open": "0.00",
+        "actual": "0.00",
+        "exposure": "0.00",
+        "remaining": "0.00",
+        "remaining_rule": "default",
+        "efc": "0.00",
+        "variance": "0.00",
+        "variance_percent": null,
+        "over_budget": false,
+        "etc": null
+      },
+      "studio-a": {
+        "estimate_cost": "2200.00",
+        "committed_gross": "0.00",
+        "committed_open": "0.00",
+        "actual": "3200.00",
+        "exposure": "3200.00",
+        "remaining": "0.00",
+        "remaining_rule": "default",
+        "efc": "3200.00",
+        "variance": "-1000.00",
+        "variance_percent": "-45.45",
+        "over_budget": true,
+        "etc": null
+      },
+      "taxi": {
+        "estimate_cost": "120.00",
+        "committed_gross": "0.00",
+        "committed_open": "0.00",
+        "actual": "0.00",
+        "exposure": "0.00",
+        "remaining": "500.00",
+        "remaining_rule": "etc",
+        "efc": "500.00",
+        "variance": "-380.00",
+        "variance_percent": "-316.67",
+        "over_budget": true,
+        "etc": "500.00"
+      }
+    },
+    "sections": {
+      "crew": {
+        "estimate_cost": "3060.00",
+        "committed_gross": "0.00",
+        "committed_open": "0.00",
+        "actual": "0.00",
+        "exposure": "0.00",
+        "remaining": "3060.00",
+        "efc": "3060.00",
+        "variance": "0.00",
+        "variance_percent": "0.00",
+        "over_budget": false,
+        "unallocated": "0.00",
+        "unallocated_actual": "0.00",
+        "unallocated_committed_open": "0.00",
+        "price": "3990.00",
+        "forecast_margin": "930.00",
+        "forecast_margin_percent": "23.31",
+        "estimate_margin": "930.00",
+        "estimate_margin_percent": "23.31"
+      },
+      "equipment": {
+        "estimate_cost": "0.00",
+        "committed_gross": "1000.00",
+        "committed_open": "1000.00",
+        "actual": "0.00",
+        "exposure": "1000.00",
+        "remaining": "1000.00",
+        "efc": "1000.00",
+        "variance": "-1000.00",
+        "variance_percent": null,
+        "over_budget": true,
+        "unallocated": "0.00",
+        "unallocated_actual": "0.00",
+        "unallocated_committed_open": "0.00",
+        "price": "4680.00",
+        "forecast_margin": "3680.00",
+        "forecast_margin_percent": "78.63",
+        "estimate_margin": "4680.00",
+        "estimate_margin_percent": "100.00"
+      },
+      "studio": {
+        "estimate_cost": "2200.00",
+        "committed_gross": "0.00",
+        "committed_open": "0.00",
+        "actual": "3200.00",
+        "exposure": "3200.00",
+        "remaining": "0.00",
+        "efc": "3200.00",
+        "variance": "-1000.00",
+        "variance_percent": "-45.45",
+        "over_budget": true,
+        "unallocated": "0.00",
+        "unallocated_actual": "0.00",
+        "unallocated_committed_open": "0.00",
+        "price": "2800.00",
+        "forecast_margin": "-400.00",
+        "forecast_margin_percent": "-14.29",
+        "estimate_margin": "600.00",
+        "estimate_margin_percent": "21.43"
+      },
+      "travel": {
+        "estimate_cost": "120.00",
+        "committed_gross": "0.00",
+        "committed_open": "0.00",
+        "actual": "0.00",
+        "exposure": "0.00",
+        "remaining": "500.00",
+        "efc": "500.00",
+        "variance": "-380.00",
+        "variance_percent": "-316.67",
+        "over_budget": true,
+        "unallocated": "0.00",
+        "unallocated_actual": "0.00",
+        "unallocated_committed_open": "0.00",
+        "price": "120.00",
+        "forecast_margin": "-380.00",
+        "forecast_margin_percent": "-316.67",
+        "estimate_margin": "0.00",
+        "estimate_margin_percent": "0.00"
+      }
+    },
+    "budget": {
+      "estimate_cost": "5380.00",
+      "committed_gross": "1000.00",
+      "committed_open": "1000.00",
+      "actual": "3200.00",
+      "exposure": "4200.00",
+      "remaining": "4560.00",
+      "efc": "7760.00",
+      "variance": "-2380.00",
+      "variance_percent": "-44.24",
+      "over_budget": true,
+      "unallocated": "0.00",
+      "unallocated_actual": "0.00",
+      "unallocated_committed_open": "0.00",
+      "price": "12517.20",
+      "forecast_margin": "4757.20",
+      "forecast_margin_percent": "38.01",
+      "estimate_margin": "7137.20",
+      "estimate_margin_percent": "57.02"
+    }
+  },
+  "closes_commitment": {
+    "c-alexa": false
+  }
+}
