@@ -96,8 +96,18 @@ describe('the route list this test checks against', () => {
   })
 
   it('does not resolve routes that left with the media features', () => {
-    expect(resolvesToARoute('/projects')).toBe(false)
     expect(resolvesToARoute('/share/abc')).toBe(false)
+    expect(resolvesToARoute('/share')).toBe(false)
+  })
+
+  it('resolves FilmBill’s own /projects, which A2 added', () => {
+    // FreeFrame's `/projects` left with the media features; A2 brought back
+    // a FilmBill page at the same path (the production list). It is a real,
+    // permission-gated route now, so a redirect to it is a page and not the
+    // 404 this file was written about — and pinning it as "must not exist"
+    // would have kept the old fact alive after it stopped being true.
+    expect(resolvesToARoute('/projects')).toBe(true)
+    expect(resolvesToARoute('/projects/any-id/budgets/any-budget')).toBe(true)
   })
 })
 

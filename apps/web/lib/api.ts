@@ -168,6 +168,39 @@ async function uploadRequest<T>(path: string, formData: FormData): Promise<T> {
   return text ? (JSON.parse(text) as T) : (undefined as unknown as T)
 }
 
+/**
+ * A file the API sends back — the budget's CSV export.
+ *
+ * Its own function because `request` above parses JSON and answers
+ * `undefined` for anything else, which would turn a CSV into nothing at all.
+ * Same headers, same refresh-once on 401, same error shape.
+ */
+async function downloadRequest(path: string): Promise<Blob> {
+  const buildHeaders = (token: string | null): Record<string, string> => {
+    const headers: Record<string, string> = {}
+    if (token) headers['Authorization'] = `Bearer ${token}`
+    if (activeCompanyId) headers['X-Company-Id'] = activeCompanyId
+    return headers
+  }
+  const execute = (token: string | null) =>
+    fetch(`${API_URL}${path}`, { cache: 'no-store', headers: buildHeaders(token) })
+
+  let response = await execute(getAccessToken())
+  if (response.status === 401) {
+    const newToken = await refreshAccessToken()
+    if (newToken) response = await execute(newToken)
+  }
+  if (!response.ok) {
+    let detail = response.statusText
+    try {
+      const errorBody = await response.json()
+      if (typeof errorBody?.detail === 'string') detail = errorBody.detail
+    } catch {}
+    throw new ApiError(response.status, detail)
+  }
+  return response.blob()
+}
+
 export const api = {
   get: <T>(path: string, options?: RequestOptions) =>
     request<T>('GET', path, undefined, options),
@@ -186,6 +219,8 @@ export const api = {
 
   upload: <T>(path: string, formData: FormData) =>
     uploadRequest<T>(path, formData),
+
+  download: (path: string) => downloadRequest(path),
 }
 
 export type { ApiError as ApiErrorType }

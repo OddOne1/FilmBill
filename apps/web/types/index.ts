@@ -324,6 +324,41 @@ export function isCalcGroupResult(
   return row.type === 'group'
 }
 
+// ─── Projects, days and budgets (A2) ────────────────────────────────────────
+
+export type Project = Schemas['ProjectResponse']
+export type ProjectPage = Schemas['ProjectPage']
+export type ProjectCreate = Schemas['ProjectCreate']
+export type ProjectUpdate = Schemas['ProjectUpdate']
+export type ProjectStatus = ProjectCreate['status']
+export type ProjectDay = Schemas['ProjectDayResponse']
+export type ProjectDayList = Schemas['ProjectDayList']
+export type ProjectDayWrite = Schemas['ProjectDayWrite']
+export type ProjectDayUpdate = Schemas['ProjectDayUpdate']
+export type ProjectDayRangeRequest = Schemas['ProjectDayRangeRequest']
+export type ProjectDayRangeResponse = Schemas['ProjectDayRangeResponse']
+/** `prep` · `shoot` · `travel` · `wrap` · `post` · `office` · `off`. From the
+ *  schema, so a type added on the server cannot be missed here. */
+export type ProjectDayType = NonNullable<ProjectDayWrite['type']>
+
+export type Budget = Schemas['BudgetResponse']
+export type BudgetSheet = Schemas['BudgetSheetResponse']
+export type BudgetSection = Schemas['BudgetSectionResponse']
+export type BudgetLine = Schemas['BudgetLineResponse']
+export type BudgetLineCreate = Schemas['BudgetLineCreate']
+export type BudgetLineUpdate = Schemas['BudgetLineUpdate']
+export type BudgetGlobal = Schemas['BudgetGlobalResponse']
+export type BudgetAdjustment = Schemas['BudgetAdjustmentResponse']
+export type BudgetAdjustmentCreate = Schemas['BudgetAdjustmentCreate']
+/** What `GET /budgets/{id}/calculated` returns: the engine's own result for
+ *  the sheet, the top sheet, and the factor explanations. Every number the
+ *  budget screens show comes out of this — never out of the browser. */
+export type BudgetCalculated = Schemas['BudgetCalculatedResponse']
+export type TopSheetRow = Schemas['TopSheetRow']
+export type FactorExplanation = Schemas['FactorExplanation']
+export type BudgetImportPreview = Schemas['BudgetImportPreviewResponse']
+export type BudgetImportResult = Schemas['BudgetImportResultResponse']
+
 // ════════════════════════════════════════════════════════════════════════════
 // Hand-written, deliberately
 //

@@ -7,6 +7,7 @@ import {
   Archive,
   Bell,
   ChevronsLeft,
+  Clapperboard,
   LayoutDashboard,
   Tags,
   Users,
@@ -52,6 +53,10 @@ const navItems: NavItem[] = [
   // the tax advisor — staff included, because looking up what a truck costs
   // per day is reading a price list, not reading the customer base.
   { href: '/catalog', label: 'Catalog', icon: Tags, permission: 'catalog.view' },
+  // A2. Projects, their production days and their budgets. `projects.view`
+  // includes staff — a crew member may see which days are shoot days — but
+  // the budgets inside are closed to them (`budgets.view`, D77).
+  { href: '/projects', label: 'Projects', icon: Clapperboard, permission: 'projects.view' },
   { href: '/archive', label: 'Archive', icon: Archive, permission: 'archive.view' },
 ]
 
