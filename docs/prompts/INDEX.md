@@ -24,7 +24,7 @@ from them. `docs/SCOPE.md` is where the product is decided.
 | P1b | Change country, then parties (customers, suppliers, contacts) | [`23-filmbill-P1b-parties.md`](23-filmbill-P1b-parties.md) | `f0f9a1c`…`dfe7399` | done — see notes |
 | P1b-2 | Tax IDs as their own thing, pluggable verification, scheduled re-checks | [`24-filmbill-P1b-2-tax-ids.md`](24-filmbill-P1b-2-tax-ids.md) | `ed4cfde`…`2dc1a3d` | done — see notes |
 | A1 | Lean catalog and the pure calculation engine | [`25-filmbill-A1-catalog-calc-engine.md`](25-filmbill-A1-catalog-calc-engine.md) | `032d77a`…`3c784fd` | done — see notes |
-| A2 | Projects, production days and the Budget sheet | [`26-filmbill-A2-projects-days-budget.md`](26-filmbill-A2-projects-days-budget.md) | — | in progress |
+| A2 | Projects, production days and the Budget sheet | [`26-filmbill-A2-projects-days-budget.md`](26-filmbill-A2-projects-days-budget.md) | `d676093`…`22dbc88` | done — see notes |
 | P0b | Foundations: companies, roles, number series, audit, money, codegen | [`03-filmbill-P0b-foundations.md`](03-filmbill-P0b-foundations.md) | — | superseded — split into P0b-0, P0b-1, P0b-2 |
 
 ---
@@ -1337,3 +1337,48 @@ same phase (CLAUDE.md 17e).
   nothing and both fail with `assert 2 == 0`. Reproduced, not fixed — widening
   the guard would weaken a safety check, and pointing the test at a dev-named
   database is Mathias's call (CLAUDE.md rule 17b).
+
+## A2 — projects, production days and the Budget sheet
+
+Full report: [`docs/reports/A2-report.md`](../reports/A2-report.md).
+
+**Part 1 — projects and days (`02bc1e6`).** Migration `0015_projects_days_budgets`
+(all seven tables); the `project` number series `PRJ-{YYYY}-{SEQ}`, seeded and
+backfilled, allocated inside the create transaction; days unique per
+`(project, date, type)` among active rows (partial index); a range endpoint;
+`projects.view` / `projects.edit`; a party a project uses cannot be archived.
+`services/calc_mapping.py` extracted from `/calc/preview`, and `percent_share`
+added to the engine.
+
+**Part 2 — the Budget (`c12c6b7`).** 26 operations, no DELETE. Sections two
+deep, copied catalog rates with a difference marker, globals (`manual`,
+`days:<type>`) resolved before the engine, adjustments, `GET .../calculated`
+with the top sheet, lock/unlock, duplicate, the "Example (S1)" budget
+(net 12,517.20), CSV export and a digest-checked import. `budgets.view` /
+`budgets.edit`; staff hold neither.
+
+**Part 3 — the screens (`6686dce`).** Projects list, project detail (Overview ·
+Days · Budgets), the Budget sheet and Top sheet. No screen computes money.
+
+**Part 4 — documentation (`22dbc88`).** SCOPE §16 D74–D80, §13 A2 marked and
+B's scope noted.
+
+**Counts.** API **2450 passed, 30 skipped** locally (2248 before A2), of which
+**1124** are `-m realdb` (931 before); web **649 passed / 58 files** (624
+before). Declared environment: `python:3.11` (`filmbill-api` image) against
+the dev stack's real PostgreSQL 15 and Redis; web on Linux in `node:20` via
+`pnpm ci:web`. CI floors raised to **2410** and **1095** in the closing
+commit (CLAUDE.md 17e).
+
+**Flagged.**
+- **D76 and D77, the permission matrices, are `[Guessing]`.** Staff see
+  projects and days but no budget endpoint at all.
+- **D78: adjustments move the price only** (A1's engine contract, unchanged),
+  so a contingency that is a real cost is a `fee` line.
+- **The budget import's digest is required** (`expected_digest` query
+  parameter); A1's catalog import takes its digest as a form field. Two
+  spellings of the same rule — worth unifying when B touches either.
+- **§13's note on B lists devices and scheduling**, which overlap slice C and
+  P7/P9; recorded as the prompt named them, left for Mathias to place.
+- **Only the Estimate phase exists.** Committed and Actual (D72) are B.
+
