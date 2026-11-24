@@ -25,7 +25,7 @@ from them. `docs/SCOPE.md` is where the product is decided.
 | P1b-2 | Tax IDs as their own thing, pluggable verification, scheduled re-checks | [`24-filmbill-P1b-2-tax-ids.md`](24-filmbill-P1b-2-tax-ids.md) | `ed4cfde`…`2dc1a3d` | done — see notes |
 | A1 | Lean catalog and the pure calculation engine | [`25-filmbill-A1-catalog-calc-engine.md`](25-filmbill-A1-catalog-calc-engine.md) | `032d77a`…`3c784fd` | done — see notes |
 | A2 | Projects, production days and the Budget sheet | [`26-filmbill-A2-projects-days-budget.md`](26-filmbill-A2-projects-days-budget.md) | `d676093`…`22dbc88` | done — see notes |
-| B1 | Cost planning: committed, actual and cost-to-complete | [`27-filmbill-B1-cost-tracking.md`](27-filmbill-B1-cost-tracking.md) | — | in progress |
+| B1 | Cost planning: committed, actual and cost-to-complete | [`27-filmbill-B1-cost-tracking.md`](27-filmbill-B1-cost-tracking.md) | `ff47f99`…closing commit | done — see notes |
 | P0b | Foundations: companies, roles, number series, audit, money, codegen | [`03-filmbill-P0b-foundations.md`](03-filmbill-P0b-foundations.md) | — | superseded — split into P0b-0, P0b-1, P0b-2 |
 
 ---
@@ -1382,4 +1382,34 @@ commit (CLAUDE.md 17e).
 - **§13's note on B lists devices and scheduling**, which overlap slice C and
   P7/P9; recorded as the prompt named them, left for Mathias to place.
 - **Only the Estimate phase exists.** Committed and Actual (D72) are B.
+
+---
+
+## B1 — cost planning: committed, actual and cost-to-complete
+
+Full report: [`docs/reports/B1-report.md`](../reports/B1-report.md).
+
+**What.** Commitments and actuals booked against a budget's sections and
+lines (migration 0016), a line ETC, and `GET /budgets/{id}/tracking` — the
+pure `billing/budget/tracking.py` over the same engine result `calculated`
+uses. Phase switch on the sheet, line drawer, Costs tab, cost forecast on
+the top sheet, an actuals CSV in and out. SCOPE D81–D88.
+
+**Counts.** API **2626 passed, 30 skipped** (2459 before), `-m realdb`
+**1244** (1133); web **668 / 59 files** (650). Declared environment:
+`python:3.11` image against the dev stack's PostgreSQL 15 + Redis with
+`CI=1`; web via `pnpm ci:web`. CI floors raised to **2580** and **1210**.
+
+**Flagged.**
+- **D83, the default `remaining` rule, is `[Guessing]`** — Mathias's
+  decision. The API names the rule on every line.
+- **D87:** an unallocated open order counts in `remaining` (the prompt said
+  0) so `EFC = actual + remaining` holds everywhere; recorded to be overruled.
+- **D85:** the lock stays manual until quotes exist; accepting a quote in P2
+  will lock the linked budget.
+- **Part 2b** added `GET /budgets/{id}/duplicates` so the warning can be
+  shown before saving, as the prompt asks; surface 26 → 43 budget operations.
+- The spend bar's widths are drawn from the API's numbers in the browser; it
+  prints no figure.
+- Not checked: a click-through in a real browser.
 
