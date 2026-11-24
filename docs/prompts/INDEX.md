@@ -25,6 +25,7 @@ from them. `docs/SCOPE.md` is where the product is decided.
 | P1b-2 | Tax IDs as their own thing, pluggable verification, scheduled re-checks | [`24-filmbill-P1b-2-tax-ids.md`](24-filmbill-P1b-2-tax-ids.md) | `ed4cfde`…`2dc1a3d` | done — see notes |
 | A1 | Lean catalog and the pure calculation engine | [`25-filmbill-A1-catalog-calc-engine.md`](25-filmbill-A1-catalog-calc-engine.md) | `032d77a`…`3c784fd` | done — see notes |
 | A2 | Projects, production days and the Budget sheet | [`26-filmbill-A2-projects-days-budget.md`](26-filmbill-A2-projects-days-budget.md) | `d676093`…`22dbc88` | done — see notes |
+| B1 | Cost planning: committed, actual and cost-to-complete | [`27-filmbill-B1-cost-tracking.md`](27-filmbill-B1-cost-tracking.md) | — | in progress |
 | P0b | Foundations: companies, roles, number series, audit, money, codegen | [`03-filmbill-P0b-foundations.md`](03-filmbill-P0b-foundations.md) | — | superseded — split into P0b-0, P0b-1, P0b-2 |
 
 ---
