@@ -74,8 +74,8 @@ export function BudgetsReadOnlyNotice() {
   return (
     <Notice testId="budgets-read-only">
       You can read this budget but not change it — editing lines, sections,
-      globals or adjustments, locking it or importing into it needs the
-      budget edit permission. An owner or administrator can grant it under
+      globals or adjustments, entering costs, locking it or importing into
+      it needs the budget edit permission. An owner or administrator can grant it under
       Settings → Company → Members.
     </Notice>
   )
@@ -88,7 +88,9 @@ export function BudgetLockedNotice({ lockedAt }: { lockedAt?: string | null }) {
       This budget is locked{lockedAt ? ` since ${lockedAt.slice(0, 10)}` : ''}:
       its lines, sections, globals and adjustments cannot be changed. Its
       name still can. Unlock it to edit — unlocking is recorded in the audit
-      log.
+      log. Costs are still open: orders, invoices and ETCs can be entered
+      against a locked estimate, because the locked estimate is what they
+      are measured against.
     </Notice>
   )
 }

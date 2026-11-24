@@ -359,6 +359,26 @@ export type FactorExplanation = Schemas['FactorExplanation']
 export type BudgetImportPreview = Schemas['BudgetImportPreviewResponse']
 export type BudgetImportResult = Schemas['BudgetImportResultResponse']
 
+/** B1 — cost planning. What `GET /budgets/{id}/tracking` returns: committed,
+ *  actual, EFC and variance for every line, section and the budget, computed
+ *  by the API's pure tracking module. The browser renders these and adds
+ *  nothing up — a variance computed here could disagree with the API's by a
+ *  cent, and a sheet whose rows did not match its total would be the first
+ *  thing a client noticed. */
+export type BudgetTracking = Schemas['BudgetTrackingResponse']
+export type LineTracking = Schemas['LineTrackingResponse']
+export type RollupTracking = Schemas['RollupTrackingResponse']
+export type BudgetCommitment = Schemas['BudgetCommitmentResponse']
+export type BudgetActual = Schemas['BudgetActualResponse']
+export type BudgetCommitmentCreate = Schemas['BudgetCommitmentCreate']
+export type BudgetActualCreate = Schemas['BudgetActualCreate']
+export type BudgetCommitmentCreated = Schemas['BudgetCommitmentCreated']
+export type BudgetActualCreated = Schemas['BudgetActualCreated']
+export type BudgetLedger = Schemas['BudgetLedgerResponse']
+export type CostEntryDuplicate = Schemas['CostEntryDuplicate']
+export type ActualImportPreview = Schemas['ActualImportPreviewResponse']
+export type ActualImportResult = Schemas['ActualImportResultResponse']
+
 // ════════════════════════════════════════════════════════════════════════════
 // Hand-written, deliberately
 //

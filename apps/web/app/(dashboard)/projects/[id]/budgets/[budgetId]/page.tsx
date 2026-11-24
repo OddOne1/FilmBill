@@ -7,7 +7,7 @@ import { ArrowLeft, Copy, Download, Loader2, Lock, Unlock, Upload } from 'lucide
 import { api, ApiError } from '@/lib/api'
 import { formatAmount, NO_VALUE } from '@/lib/money'
 import { useCompanyStore } from '@/stores/company-store'
-import type { Budget, BudgetCalculated, BudgetSheet } from '@/types'
+import type { Budget, BudgetCalculated, BudgetLine, BudgetSheet, BudgetTracking } from '@/types'
 import {
   BudgetLockedNotice,
   BudgetsNoAccess,
@@ -18,18 +18,22 @@ import {
 import { BudgetSheetEditor } from './budget-sheet'
 import { AdjustmentsPanel, GlobalsPanel } from './budget-panels'
 import { BudgetImport } from './budget-import'
+import { CostForecast, LineDrawer, PhaseSheet, PhaseSwitch, type Phase } from './budget-tracking'
+import { CostsTab } from './budget-costs'
 
 /**
- * One budget: the Sheet and the Top sheet.
+ * One budget: the Sheet, its Costs, and the Top sheet.
  *
- * Two requests, always fetched together after any write: `GET /budgets/{id}`
- * (the rows an edit PATCHes) and `GET /budgets/{id}/calculated` (the
- * engine's numbers). A calculation the API refuses — a line pointing at a
+ * Three requests, always fetched together after any write: `GET /budgets/{id}`
+ * (the rows an edit PATCHes), `GET /budgets/{id}/calculated` (the engine's
+ * numbers) and `GET /budgets/{id}/tracking` (committed, actual, EFC and
+ * variance — B1). The third is optional for the screen: if it fails, the
+ * estimate sheet still works and the cost columns say they are empty. A calculation the API refuses — a line pointing at a
  * global that no longer exists — is shown as the API's own sentence above
  * the sheet, and the sheet stays editable so it can be fixed.
  */
 
-type Tab = 'sheet' | 'top'
+type Tab = 'sheet' | 'costs' | 'top'
 
 export default function BudgetPage() {
   const params = useParams<{ id: string; budgetId: string }>()
@@ -39,6 +43,9 @@ export default function BudgetPage() {
   const [sheet, setSheet] = React.useState<BudgetSheet | null>(null)
   const [calc, setCalc] = React.useState<BudgetCalculated | null>(null)
   const [calcError, setCalcError] = React.useState<string | null>(null)
+  const [tracking, setTracking] = React.useState<BudgetTracking | null>(null)
+  const [phase, setPhase] = React.useState<Phase>('estimate')
+  const [drawerLine, setDrawerLine] = React.useState<BudgetLine | null>(null)
   const [error, setError] = React.useState<string | null>(null)
   const [tab, setTab] = React.useState<Tab>('sheet')
   const [importing, setImporting] = React.useState(false)
@@ -59,6 +66,14 @@ export default function BudgetPage() {
     } catch (err) {
       setCalc(null)
       setCalcError(err instanceof ApiError ? err.detail : 'The budget could not be calculated')
+    }
+    try {
+      const answer = await api.get<BudgetTracking>(`/budgets/${budgetId}/tracking`)
+      // Only a real tracking answer is kept — anything without a `budget`
+      // rollup is treated as "not available" rather than drawn as zeros.
+      setTracking(answer && (answer as BudgetTracking).budget ? answer : null)
+    } catch {
+      setTracking(null)
     }
   }, [budgetId])
 
@@ -241,6 +256,7 @@ export default function BudgetPage() {
             {(
               [
                 ['sheet', 'Sheet'],
+                ['costs', 'Costs'],
                 ['top', 'Top sheet'],
               ] as const
             ).map(([key, label]) => (
@@ -261,16 +277,48 @@ export default function BudgetPage() {
             ))}
           </nav>
 
-          {tab === 'sheet' ? (
-            <div className="grid gap-4 xl:grid-cols-[1fr_20rem]">
-              <BudgetSheetEditor sheet={sheet} calc={calc} editable={editable} onChange={reload} onError={setError} />
-              <div className="mt-4 space-y-4">
-                <GlobalsPanel sheet={sheet} calc={calc} editable={editable} onChange={reload} onError={setError} />
-                <AdjustmentsPanel sheet={sheet} calc={calc} editable={editable} onChange={reload} onError={setError} />
+          {tab === 'sheet' && (
+            <>
+              <div className="mt-4 flex items-center gap-3">
+                <PhaseSwitch phase={phase} onChange={setPhase} />
               </div>
-            </div>
-          ) : (
-            <TopSheet calc={calc} currency={currency} />
+              {phase === 'estimate' ? (
+                <div className="grid gap-4 xl:grid-cols-[1fr_20rem]">
+                  <BudgetSheetEditor sheet={sheet} calc={calc} editable={editable} onChange={reload} onError={setError} />
+                  <div className="mt-4 space-y-4">
+                    <GlobalsPanel sheet={sheet} calc={calc} editable={editable} onChange={reload} onError={setError} />
+                    <AdjustmentsPanel sheet={sheet} calc={calc} editable={editable} onChange={reload} onError={setError} />
+                  </div>
+                </div>
+              ) : (
+                <PhaseSheet sheet={sheet} tracking={tracking} phase={phase} onOpenLine={setDrawerLine} />
+              )}
+            </>
+          )}
+          {tab === 'costs' && (
+            <CostsTab
+              sheet={sheet}
+              canEdit={access.canEditBudgets}
+              canPickParty={access.canViewParties}
+              onChange={reload}
+            />
+          )}
+          {tab === 'top' && (
+            <>
+              <TopSheet calc={calc} currency={currency} />
+              <CostForecast sheet={sheet} tracking={tracking} currency={currency} />
+            </>
+          )}
+          {drawerLine && (
+            <LineDrawer
+              key={drawerLine.id}
+              sheet={sheet}
+              line={drawerLine}
+              tracking={tracking}
+              canEdit={access.canEditBudgets}
+              onClose={() => setDrawerLine(null)}
+              onChange={reload}
+            />
           )}
         </>
       )}

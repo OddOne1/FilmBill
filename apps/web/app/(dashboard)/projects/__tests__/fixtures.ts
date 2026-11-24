@@ -1,9 +1,13 @@
 import { useCompanyStore } from '@/stores/company-store'
 import type {
   BudgetCalculated,
+  BudgetLedger,
   BudgetLine,
   BudgetSheet,
+  BudgetTracking,
   CalcLineResult,
+  LineTracking,
+  RollupTracking,
   Project,
   ProjectDay,
 } from '@/types'
@@ -272,5 +276,184 @@ export function makeCalculated(): BudgetCalculated {
       vat: null,
       warnings: [],
     },
+  }
+}
+
+// ─── B1: cost planning ──────────────────────────────────────────────────────
+//
+// `GET /budgets/b1/tracking` for the sheet above, with numbers that follow the
+// API's own rules (billing/budget/tracking.py) so the fixture is a response
+// the server could really send:
+//
+//   * Gaffer: estimate 1 260.00, invoiced 1 500.00 → EFC 1 500.00, variance
+//     −240.00 (−19.05 %), over budget.
+//   * Alexa 35: estimate cost 0.00 (owned), an open order of 1 000.00 → EFC
+//     1 000.00, variance −1 000.00, no percentage.
+//   * Crew also carries an invoice of 150.00 on the SECTION with no line.
+//     So Crew's variance is −390.00 while its lines' variances add up to only
+//     −240.00 — the difference a browser that summed rows would get wrong.
+
+function lineTracking(overrides: Partial<LineTracking> & { id: string }): LineTracking {
+  return {
+    estimate_cost: '0.00',
+    committed_gross: '0.00',
+    committed_open: '0.00',
+    actual: '0.00',
+    exposure: '0.00',
+    remaining: '0.00',
+    remaining_rule: 'default',
+    efc: '0.00',
+    variance: '0.00',
+    variance_percent: null,
+    over_budget: false,
+    etc: null,
+    ...overrides,
+  }
+}
+
+function rollup(overrides: Partial<RollupTracking> & { id: string }): RollupTracking {
+  return {
+    estimate_cost: '0.00',
+    committed_gross: '0.00',
+    committed_open: '0.00',
+    actual: '0.00',
+    exposure: '0.00',
+    remaining: '0.00',
+    efc: '0.00',
+    variance: '0.00',
+    variance_percent: null,
+    over_budget: false,
+    unallocated: '0.00',
+    unallocated_actual: '0.00',
+    unallocated_committed_open: '0.00',
+    price: null,
+    forecast_margin: null,
+    forecast_margin_percent: null,
+    estimate_margin: null,
+    estimate_margin_percent: null,
+    ...overrides,
+  }
+}
+
+export function makeTracking(): BudgetTracking {
+  return {
+    lines: {
+      'l-dop': lineTracking({
+        id: 'l-dop',
+        estimate_cost: '1800.00',
+        remaining: '1800.00',
+        efc: '1800.00',
+        variance_percent: '0.00',
+      }),
+      'l-gaffer': lineTracking({
+        id: 'l-gaffer',
+        estimate_cost: '1260.00',
+        actual: '1500.00',
+        exposure: '1500.00',
+        efc: '1500.00',
+        variance: '-240.00',
+        variance_percent: '-19.05',
+        over_budget: true,
+      }),
+      'l-alexa': lineTracking({
+        id: 'l-alexa',
+        committed_gross: '1000.00',
+        committed_open: '1000.00',
+        exposure: '1000.00',
+        remaining: '1000.00',
+        efc: '1000.00',
+        variance: '-1000.00',
+        over_budget: true,
+      }),
+    },
+    sections: {
+      's-crew': rollup({
+        id: 's-crew',
+        estimate_cost: '3060.00',
+        actual: '1650.00',
+        exposure: '1650.00',
+        remaining: '1800.00',
+        efc: '3450.00',
+        variance: '-390.00',
+        variance_percent: '-12.75',
+        over_budget: true,
+        unallocated: '150.00',
+        unallocated_actual: '150.00',
+        price: '3990.00',
+        forecast_margin: '540.00',
+        forecast_margin_percent: '13.53',
+        estimate_margin: '930.00',
+        estimate_margin_percent: '23.31',
+      }),
+      's-eq': rollup({
+        id: 's-eq',
+        committed_gross: '1000.00',
+        committed_open: '1000.00',
+        exposure: '1000.00',
+        remaining: '1000.00',
+        efc: '1000.00',
+        variance: '-1000.00',
+        over_budget: true,
+        price: '3360.00',
+        forecast_margin: '2360.00',
+        forecast_margin_percent: '70.24',
+        estimate_margin: '3360.00',
+        estimate_margin_percent: '100.00',
+      }),
+    },
+    budget: rollup({
+      id: 'b1',
+      estimate_cost: '3060.00',
+      committed_gross: '1000.00',
+      committed_open: '1000.00',
+      actual: '1650.00',
+      exposure: '2650.00',
+      remaining: '2800.00',
+      efc: '4450.00',
+      variance: '-1390.00',
+      variance_percent: '-45.42',
+      over_budget: true,
+      unallocated: '150.00',
+      unallocated_actual: '150.00',
+      price: '7350.00',
+      forecast_margin: '2900.00',
+      forecast_margin_percent: '39.46',
+      estimate_margin: '4290.00',
+      estimate_margin_percent: '58.37',
+    }),
+  }
+}
+
+/** One invoice on the Gaffer line, as `GET /budgets/b1/ledger` returns it. */
+export function makeLedger(): BudgetLedger {
+  return {
+    commitments: [],
+    actuals: [
+      {
+        id: 'a-gaffer',
+        budget_id: 'b1',
+        section_id: 's-crew',
+        line_id: 'l-gaffer',
+        party_id: null,
+        payee_text: 'Licht GmbH',
+        description: 'Gaffer, 3 days',
+        reference: 'RE-7',
+        amount: '1500.00',
+        notes: null,
+        voided_at: null,
+        void_reason: null,
+        created_at: '2026-11-24T00:00:00Z',
+        updated_at: '2026-11-24T00:00:00Z',
+        section_name: 'Crew',
+        section_code: '1100',
+        line_description: 'Gaffer',
+        payee: 'Licht GmbH',
+        is_voided: false,
+        commitment_id: null,
+        incurred_on: '2026-06-03',
+        paid_on: null,
+        commitment_reference: null,
+      },
+    ],
   }
 }
