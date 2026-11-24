@@ -327,4 +327,22 @@ container runs `alembic upgrade head` on start, so migration 0015 (and the
 
 ## CI
 
-Filled in from the GitHub Actions run of the closing commit; see the next commit.
+GitHub Actions run **45410891382** on `df24a41` (the closing commit, pushed
+to `main`): **success**, all five jobs green —
+
+| Job | Result |
+|---|---|
+| API tests | success |
+| Migrations match the models | success |
+| Web lint, typecheck, test, build | success |
+| API types match the schema | success |
+| Docker build (no push) | success |
+
+Inside "API tests", the steps **"Guard against a gutted suite"** and
+**"Real-database tests ran, not skipped"** both succeeded. By their own code
+that means at least 2410 API tests passed, at least 1095 `-m realdb` tests
+passed, and **no real-database test was skipped**. The exact counts are in
+the job log, which this session could not download (GitHub answers 403 to
+an unauthenticated log request) — so they are *inferred from the guards*,
+not read. To see them: Actions → run 45410891382 → API tests → the two steps
+above print "Tests passed: …" and "Real-database tests passed: …, skipped: …".
