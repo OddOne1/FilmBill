@@ -1577,6 +1577,11 @@ def _every_budget_request(project_id, budget_id, section_id, line_id, global_id,
         ("get", f"/budgets/{budget_id}/close-check", None),
         ("post", f"/budgets/{budget_id}/close", {}),
         ("post", f"/budgets/{budget_id}/reopen", {"reason": "x"}),
+        # ── B1.1 extras ─────────────────────────────────────────────────
+        ("post", f"/budgets/{budget_id}/extras", {"description": "X", "unit_price": "1.00"}),
+        ("patch", f"/budgets/{budget_id}/extras/{line_id}", {"description": "X"}),
+        ("post", f"/budgets/{budget_id}/extras/{line_id}/accept", {}),
+        ("post", f"/budgets/{budget_id}/extras/{line_id}/decline", {"note": "x"}),
     ]
 
 
@@ -1606,7 +1611,7 @@ def test_a_staff_user_gets_no_cost_and_no_margin_from_any_budget_endpoint(
         global_id,
         adjustment_id,
     )
-    assert len(requests) == 50, "a budget endpoint is missing from this walk"
+    assert len(requests) == 54, "a budget endpoint is missing from this walk"
 
     csv_file = "section_code;description\r\n1100;X\r\n".encode("utf-8")
     for method, url, body in requests:
@@ -1627,7 +1632,7 @@ def test_a_staff_user_gets_no_cost_and_no_margin_from_any_budget_endpoint(
 
 
 def test_the_budget_endpoint_count_in_the_staff_walk_is_the_real_one(client):
-    """The walk above asserts 50 requests; this asserts 50 is the whole
+    """The walk above asserts 54 requests; this asserts 54 is the whole
     surface, so adding an endpoint without adding it to the walk fails here
     rather than passing silently (rule 17b).
 
@@ -1636,7 +1641,8 @@ def test_the_budget_endpoint_count_in_the_staff_walk_is_the_real_one(client):
     actuals CSV and the pre-save duplicate check) joined the surface, and
     all seventeen are in the walk above. **43 → 47 at B1.1**: finish and
     reopen, for a line and for a section; **47 → 50** with the close check,
-    close and reopen of a budget. The number is raised by hand every time, which is the point — a
+    close and reopen of a budget; **50 → 54** with extras (propose, edit,
+    accept, decline). The number is raised by hand every time, which is the point — a
     count that moved on its own would notice nothing."""
     from fastapi.openapi.utils import get_openapi
 
@@ -1650,7 +1656,7 @@ def test_the_budget_endpoint_count_in_the_staff_walk_is_the_real_one(client):
         if path.startswith("/budgets") or path.endswith("/budgets")
         or "/budgets/" in path
     ]
-    assert len(operations) == 50, sorted(operations)
+    assert len(operations) == 54, sorted(operations)
 
 
 def test_a_budget_of_another_company_is_a_404(pg_client, pg_db, world, project):

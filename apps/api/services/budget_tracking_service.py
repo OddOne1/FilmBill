@@ -92,7 +92,13 @@ from ..models.project import (
     BudgetSection,
 )
 from . import audit
-from .budget_service import BudgetError, active_lines, active_sections, calc_result
+from .budget_service import (
+    BudgetError,
+    active_lines,
+    active_sections,
+    calc_result,
+    counts_in_totals,
+)
 
 ZERO = Decimal("0")
 
@@ -227,6 +233,12 @@ def line_in_section(
     else in the sheet, and the fix is to change the section or the line.
     """
     if line_id is None:
+        if section.is_extras:
+            # B1.1: a cost in the Extras section belongs to one extra.
+            raise TrackingError(
+                "A cost in the Extras section is booked on the accepted extra "
+                "it belongs to. Pick the extra."
+            )
         return None
     row = (
         db.query(BudgetLine)
@@ -244,7 +256,34 @@ def line_in_section(
             f"booked on a line of the section it is charged to. Pick the "
             f"section the line is in, or pick a line from this one."
         )
+    if not counts_in_totals(row, section):
+        raise TrackingError(
+            f"“{row.description}” is an extra the customer has not accepted "
+            f"({row.extra_status}). Costs are booked on accepted extras only "
+            f"— accept it first, or book the cost elsewhere."
+        )
     return row
+
+
+def line_has_live_costs(db: Session, line: BudgetLine) -> bool:
+    """Any order (not cancelled) or invoice on this line that is not voided."""
+    order = (
+        db.query(BudgetCommitment.id)
+        .filter(
+            BudgetCommitment.line_id == line.id,
+            BudgetCommitment.voided_at.is_(None),
+            BudgetCommitment.status != STATUS_CANCELLED,
+        )
+        .first()
+    )
+    if order is not None:
+        return True
+    invoice = (
+        db.query(BudgetActual.id)
+        .filter(BudgetActual.line_id == line.id, BudgetActual.voided_at.is_(None))
+        .first()
+    )
+    return invoice is not None
 
 
 def party_in_company(
@@ -443,8 +482,22 @@ def tracking(db: Session, budget: Budget):
     not see.
     """
     result, _ = calc_result(db, budget)
-    sections = active_sections(db, budget)
-    lines = active_lines(db, [section.id for section in sections])
+    # B1.1: the forecast covers what the budget's document covers —
+    # proposed and declined extras are not in it, and an Extras section
+    # with no accepted extra is not either.
+    all_sections = active_sections(db, budget)
+    section_by_id = {section.id: section for section in all_sections}
+    lines = [
+        line
+        for line in active_lines(db, [section.id for section in all_sections])
+        if counts_in_totals(line, section_by_id.get(line.section_id))
+    ]
+    with_lines = {line.section_id for line in lines}
+    sections = [
+        section
+        for section in all_sections
+        if not section.is_extras or section.id in with_lines
+    ]
 
     commitments = commitments_of(db, budget)
     actuals = actuals_of(db, budget)
@@ -1164,7 +1217,12 @@ def _lines_under(db: Session, budget: Budget, section: BudgetSection) -> list[Bu
     sections = active_sections(db, budget)
     wanted = {section.id}
     wanted.update(row.id for row in sections if row.parent_id == section.id)
-    return active_lines(db, list(wanted))
+    by_id = {row.id: row for row in sections}
+    return [
+        line
+        for line in active_lines(db, list(wanted))
+        if counts_in_totals(line, by_id.get(line.section_id))
+    ]
 
 
 def finish_line(

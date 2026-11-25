@@ -20,7 +20,7 @@ and nothing re-prices the line afterwards — which is why the response carries
 """
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal, Optional
 
@@ -69,6 +69,9 @@ class CatalogDifference(BaseModel):
     catalog_unit_cost: Optional[Money] = None
 
 
+ExtraStatus = Literal["proposed", "accepted", "declined"]
+
+
 class BudgetLineResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -97,6 +100,10 @@ class BudgetLineResponse(BaseModel):
     notes: Optional[str] = None
     is_active: bool = True
     catalog_difference: Optional[CatalogDifference] = None
+    #: B1.1 extras: set on a line in the Extras section, null elsewhere.
+    extra_status: Optional[ExtraStatus] = None
+    extra_decided_on: Optional[date] = None
+    extra_note: Optional[str] = None
 
 
 class BudgetSectionResponse(BaseModel):
@@ -111,6 +118,8 @@ class BudgetSectionResponse(BaseModel):
     parent_id: Optional[uuid.UUID] = None
     position: int
     is_active: bool = True
+    #: B1.1: the reserved Extras section — managed on the Extras tab.
+    is_extras: bool = False
 
 
 class BudgetGlobalResponse(BaseModel):
@@ -225,6 +234,40 @@ class FactorExplanation(BaseModel):
     group_name: Optional[str] = None
 
 
+class CalcTotals(BaseModel):
+    """One engine run's totals. The budget computes no VAT (D72), so the
+    tax side is the net per tax category, as on the top sheet."""
+
+    net: Money
+    cost: Money
+    margin: Money
+    margin_percent: Optional[Money] = None
+    net_by_tax_ref: dict[str, Money] = Field(default_factory=dict)
+
+
+class BudgetTotals(BaseModel):
+    """B1.1: `baseline` is everything except extras — what the locked
+    quote said; `with_extras` adds the ACCEPTED extras and is the same run
+    as `result`. Two engine runs over two documents; nothing is added up."""
+
+    baseline: CalcTotals
+    with_extras: CalcTotals
+
+
+class ExtraFigures(BaseModel):
+    """One extra's own price, cost and margin, whatever its status."""
+
+    line_id: uuid.UUID
+    description: str
+    status: ExtraStatus
+    decided_on: Optional[date] = None
+    note: Optional[str] = None
+    price: Money
+    cost: Money
+    margin: Money
+    margin_percent: Optional[Money] = None
+
+
 class BudgetCalculatedResponse(BaseModel):
     """Every number the sheet and the top sheet show.
 
@@ -238,6 +281,8 @@ class BudgetCalculatedResponse(BaseModel):
     result: CalcPreviewResponse
     top_sheet: list[TopSheetRow]
     factors: list[FactorExplanation] = Field(default_factory=list)
+    totals: BudgetTotals
+    extras: list[ExtraFigures] = Field(default_factory=list)
 
 
 # ─── Writes ─────────────────────────────────────────────────────────────────
@@ -436,6 +481,62 @@ class BudgetLockRequest(BaseModel):
     #: Written into the audit event. Optional, because requiring a reason for
     #: every lock is how a field becomes "x".
     reason: Optional[str] = Field(default=None, max_length=1000)
+
+
+# ─── Extras (B1.1) ──────────────────────────────────────────────────────────
+
+
+class BudgetExtraCreate(BaseModel):
+    """Propose an extra: a line in the Extras section, from the catalog or
+    free text, with what the customer was told. Starts as `proposed`."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    item_id: Optional[uuid.UUID] = None
+    description: Optional[str] = Field(default=None, max_length=500)
+    kind: Optional[str] = Field(default=None, max_length=24)
+    quantity: Quantity = Decimal("1")
+    period_value: Quantity = Decimal("1")
+    period_unit: Optional[PeriodUnit] = None
+    factor: Quantity = Decimal("1")
+    unit_price: Optional[Money] = None
+    unit_cost: Optional[Money] = None
+    tax_ref: Optional[str] = Field(default=None, max_length=64)
+    note: Optional[str] = Field(default=None, max_length=2000)
+
+    @model_validator(mode="after")
+    def _needs_something_to_call_itself(self):
+        if self.item_id is None and not (self.description or "").strip():
+            raise ValueError("an extra needs either an item or a description.")
+        return self
+
+
+class BudgetExtraUpdate(BaseModel):
+    """Change a proposed or accepted extra. A change to an accepted one is
+    allowed and audited with the before and the after."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    description: Optional[str] = Field(default=None, max_length=500)
+    kind: Optional[str] = Field(default=None, max_length=24)
+    quantity: Optional[Quantity] = None
+    period_value: Optional[Quantity] = None
+    period_unit: Optional[PeriodUnit] = None
+    factor: Optional[Quantity] = None
+    unit_price: Optional[Money] = None
+    unit_cost: Optional[Money] = None
+    tax_ref: Optional[str] = Field(default=None, max_length=64)
+    note: Optional[str] = Field(default=None, max_length=2000)
+
+
+class BudgetExtraDecision(BaseModel):
+    """Accept or decline. Declining needs a note (what was agreed); the
+    day defaults to today."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    decided_on: Optional[date] = None
+    note: Optional[str] = Field(default=None, max_length=2000)
 
 
 # ─── Closing (B1.1) ─────────────────────────────────────────────────────────

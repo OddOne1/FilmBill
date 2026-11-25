@@ -140,8 +140,8 @@ export function makeSheet(overrides: { locked?: boolean; closed?: boolean } = {}
       updated_at: '2026-11-24T00:00:00Z',
     },
     sections: [
-      { id: 's-crew', budget_id: 'b1', code: '1100', name: 'Crew', parent_id: null, position: 10, is_active: true },
-      { id: 's-eq', budget_id: 'b1', code: '1200', name: 'Equipment', parent_id: null, position: 20, is_active: true },
+      { id: 's-crew', budget_id: 'b1', code: '1100', name: 'Crew', parent_id: null, position: 10, is_active: true, is_extras: false },
+      { id: 's-eq', budget_id: 'b1', code: '1200', name: 'Equipment', parent_id: null, position: 20, is_active: true, is_extras: false },
     ],
     lines: [
       // Follows `shoot_days` (3). Its stored period is a stale 1 — what the
@@ -280,6 +280,11 @@ export function makeCalculated(): BudgetCalculated {
       vat: null,
       warnings: [],
     },
+    totals: {
+      baseline: { net: '7350.00', cost: '3060.00', margin: '4290.00', margin_percent: '58.37', net_by_tax_ref: { 'AT-20': '7350.00' } },
+      with_extras: { net: '7350.00', cost: '3060.00', margin: '4290.00', margin_percent: '58.37', net_by_tax_ref: { 'AT-20': '7350.00' } },
+    },
+    extras: [],
   }
 }
 

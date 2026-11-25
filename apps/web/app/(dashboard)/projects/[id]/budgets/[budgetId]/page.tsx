@@ -22,6 +22,7 @@ import { CostForecast, LineDrawer, PhaseSheet, PhaseSwitch, type Phase } from '.
 import { CostsTab } from './budget-costs'
 import { HowToRead, Term } from './budget-glossary-ui'
 import { CloseBudgetDialog, ClosedNotice } from './budget-close'
+import { ExtrasTab, ExtrasTotals, planOnly, trackedOnly } from './budget-extras'
 
 /**
  * One budget: the Sheet, its Costs, and the Top sheet.
@@ -35,7 +36,7 @@ import { CloseBudgetDialog, ClosedNotice } from './budget-close'
  * the sheet, and the sheet stays editable so it can be fixed.
  */
 
-type Tab = 'sheet' | 'costs' | 'top'
+type Tab = 'sheet' | 'costs' | 'extras' | 'top'
 
 export default function BudgetPage() {
   const params = useParams<{ id: string; budgetId: string }>()
@@ -107,6 +108,11 @@ export default function BudgetPage() {
   // Costs, still to spend and finishing lines: open on a locked budget
   // (D85), closed on a closed one (B1.1) — the API refuses them too.
   const closed = !!budget?.is_closed
+  // B1.1 extras: the Planned sheet never shows the Extras section (it is
+  // managed on its own tab); the cost views show accepted extras only.
+  // Only read inside the branch that has a sheet (below).
+  const planSheet = sheet ? planOnly(sheet) : (sheet as unknown as BudgetSheet)
+  const trackedSheet = sheet ? trackedOnly(sheet) : (sheet as unknown as BudgetSheet)
   const costsEditable = access.canEditBudgets && !closed
   const currency = budget?.currency ?? ''
 
@@ -259,7 +265,15 @@ export default function BudgetPage() {
             access.canEditBudgets && budget.is_locked && <BudgetLockedNotice lockedAt={budget.locked_at} />
           )}
           {closing && (
-            <CloseBudgetDialog budget={budget} onClose={() => setClosing(false)} onClosed={reload} />
+            <CloseBudgetDialog
+              budget={budget}
+              onClose={() => setClosing(false)}
+              onClosed={reload}
+              onAddExtra={() => {
+                setClosing(false)
+                setTab('extras')
+              }}
+            />
           )}
 
           {importing && editable && (
@@ -289,6 +303,7 @@ export default function BudgetPage() {
               [
                 ['sheet', 'Sheet'],
                 ['costs', 'Costs'],
+                ['extras', 'Extras'],
                 ['top', 'Top sheet'],
               ] as const
             ).map(([key, label]) => (
@@ -318,7 +333,7 @@ export default function BudgetPage() {
               {phase === 'estimate' ? (
                 <div className="grid gap-4 xl:grid-cols-[1fr_20rem]">
                   <BudgetSheetEditor
-                    sheet={sheet}
+                    sheet={planSheet}
                     calc={calc}
                     editable={editable}
                     onChange={reload}
@@ -326,13 +341,13 @@ export default function BudgetPage() {
                     finishedLines={finishedLines}
                   />
                   <div className="mt-4 space-y-4">
-                    <GlobalsPanel sheet={sheet} calc={calc} editable={editable} onChange={reload} onError={setError} />
-                    <AdjustmentsPanel sheet={sheet} calc={calc} editable={editable} onChange={reload} onError={setError} />
+                    <GlobalsPanel sheet={planSheet} calc={calc} editable={editable} onChange={reload} onError={setError} />
+                    <AdjustmentsPanel sheet={planSheet} calc={calc} editable={editable} onChange={reload} onError={setError} />
                   </div>
                 </div>
               ) : (
                 <PhaseSheet
-                  sheet={sheet}
+                  sheet={trackedSheet}
                   tracking={tracking}
                   phase={phase}
                   onOpenLine={setDrawerLine}
@@ -344,23 +359,27 @@ export default function BudgetPage() {
           )}
           {tab === 'costs' && (
             <CostsTab
-              sheet={sheet}
+              sheet={trackedSheet}
               canEdit={costsEditable}
               closed={closed}
               canPickParty={access.canViewParties}
               onChange={reload}
             />
           )}
+          {tab === 'extras' && (
+            <ExtrasTab sheet={sheet} calc={calc} canEdit={access.canEditBudgets} closed={closed} onChange={reload} />
+          )}
           {tab === 'top' && (
             <>
               <TopSheet calc={calc} currency={currency} />
-              <CostForecast sheet={sheet} tracking={tracking} currency={currency} />
+              {calc && <ExtrasTotals sheet={sheet} calc={calc} />}
+              <CostForecast sheet={trackedSheet} tracking={tracking} currency={currency} />
             </>
           )}
           {drawerLine && (
             <LineDrawer
               key={drawerLine.id}
-              sheet={sheet}
+              sheet={trackedSheet}
               line={drawerLine}
               tracking={tracking}
               canEdit={costsEditable}

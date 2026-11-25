@@ -101,6 +101,9 @@ EXPORT_COLUMNS: tuple[str, ...] = (
     "price",
     "cost",
     "margin",
+    # B1.1: `proposed`, `accepted` or `declined` on an extra; empty on every
+    # ordinary line. Not read back: the import refuses extras.
+    "extra_status",
 )
 
 #: The columns the IMPORT reads.
@@ -285,6 +288,9 @@ class BudgetImportContext:
     ambiguous_section_names: frozenset = frozenset()
     #: `(section id, lower(description)) → line id`.
     lines_by_key: Mapping[tuple, str] = field(default_factory=dict)
+    #: B1.1: the Extras section's id. A row placed there is refused —
+    #: extras are proposed, accepted and declined one by one on their tab.
+    extras_sections: frozenset = frozenset()
     #: The keys of this budget's active globals, for checking a ref column.
     global_keys: frozenset = frozenset()
     #: `line id → (quantity_ref, period_ref)` as stored ("" for none), so an
@@ -635,7 +641,24 @@ def plan_lines(
     )
 
 
+EXTRAS_REFUSAL = (
+    "this row is in the Extras section, and extras are managed on the Extras "
+    "tab — each one is proposed, accepted or declined with what the client "
+    "was told, which a spreadsheet row cannot say."
+)
+
+
 def _resolve_section(
+    values: BudgetLineValues, context: BudgetImportContext
+) -> tuple[Optional[str], str]:
+    """`(section id, "")`, or `(None, the refusal)`. Never the Extras section."""
+    section_id, refusal = _find_section(values, context)
+    if section_id is not None and section_id in context.extras_sections:
+        return None, EXTRAS_REFUSAL
+    return section_id, refusal
+
+
+def _find_section(
     values: BudgetLineValues, context: BudgetImportContext
 ) -> tuple[Optional[str], str]:
     """`(section id, "")`, or `(None, the refusal)`. By code when the row has

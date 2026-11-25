@@ -125,7 +125,8 @@ export const GLOSSARY: Record<GlossaryId, GlossaryEntry> = {
   },
   extras_accepted: {
     label: 'Extras accepted',
-    explanation: 'Extra charges agreed with the client after the quote; proposed and declined extras are not counted.',
+    explanation:
+      'Extra charges the client accepted after the quote, at their own price; the budget’s surcharges, such as a production fee, apply to them like to any line. Proposed and declined extras are not counted.',
   },
   total_quote: {
     label: 'Quote (without extras)',

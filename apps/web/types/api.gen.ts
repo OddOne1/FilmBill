@@ -1235,6 +1235,88 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/budgets/{budget_id}/extras": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Propose Extra
+         * @description Propose an extra charge. Allowed on a LOCKED budget — that is what
+         *     extras are for — and refused on a closed one. It counts in no total
+         *     until it is accepted.
+         */
+        post: operations["propose_extra_budgets__budget_id__extras_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/budgets/{budget_id}/extras/{line_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Extra
+         * @description Change a proposed or accepted extra; audited with before and after.
+         */
+        patch: operations["update_extra_budgets__budget_id__extras__line_id__patch"];
+        trace?: never;
+    };
+    "/budgets/{budget_id}/extras/{line_id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept Extra
+         * @description The customer accepted: the extra now counts in the totals.
+         */
+        post: operations["accept_extra_budgets__budget_id__extras__line_id__accept_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/budgets/{budget_id}/extras/{line_id}/decline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decline Extra
+         * @description Declined, or withdrawn — with a note. Out of every total again.
+         */
+        post: operations["decline_extra_budgets__budget_id__extras__line_id__decline_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/budgets/{budget_id}/globals": {
         parameters: {
             query?: never;
@@ -4602,11 +4684,14 @@ export interface components {
             budget_id: string;
             /** Currency */
             currency: string;
+            /** Extras */
+            extras?: components["schemas"]["ExtraFigures"][];
             /** Factors */
             factors?: components["schemas"]["FactorExplanation"][];
             result: components["schemas"]["CalcPreviewResponse"];
             /** Top Sheet */
             top_sheet: components["schemas"]["TopSheetRow"][];
+            totals: components["schemas"]["BudgetTotals"];
         };
         /**
          * BudgetCloseRequest
@@ -4785,6 +4870,88 @@ export interface components {
         BudgetDuplicateRequest: {
             /** Name */
             name?: string | null;
+        };
+        /**
+         * BudgetExtraCreate
+         * @description Propose an extra: a line in the Extras section, from the catalog or
+         *     free text, with what the customer was told. Starts as `proposed`.
+         */
+        BudgetExtraCreate: {
+            /** Description */
+            description?: string | null;
+            /**
+             * Factor
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 1
+             * @example 1.5000
+             */
+            factor: string;
+            /** Item Id */
+            item_id?: string | null;
+            /** Kind */
+            kind?: string | null;
+            /** Note */
+            note?: string | null;
+            /** Period Unit */
+            period_unit?: ("day" | "flat" | "half_day" | "hour" | "km" | "month" | "night" | "piece" | "week") | null;
+            /**
+             * Period Value
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 1
+             * @example 1.5000
+             */
+            period_value: string;
+            /**
+             * Quantity
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 1
+             * @example 1.5000
+             */
+            quantity: string;
+            /** Tax Ref */
+            tax_ref?: string | null;
+            /** Unit Cost */
+            unit_cost?: string | null;
+            /** Unit Price */
+            unit_price?: string | null;
+        };
+        /**
+         * BudgetExtraDecision
+         * @description Accept or decline. Declining needs a note (what was agreed); the
+         *     day defaults to today.
+         */
+        BudgetExtraDecision: {
+            /** Decided On */
+            decided_on?: string | null;
+            /** Note */
+            note?: string | null;
+        };
+        /**
+         * BudgetExtraUpdate
+         * @description Change a proposed or accepted extra. A change to an accepted one is
+         *     allowed and audited with the before and the after.
+         */
+        BudgetExtraUpdate: {
+            /** Description */
+            description?: string | null;
+            /** Factor */
+            factor?: string | null;
+            /** Kind */
+            kind?: string | null;
+            /** Note */
+            note?: string | null;
+            /** Period Unit */
+            period_unit?: ("day" | "flat" | "half_day" | "hour" | "km" | "month" | "night" | "piece" | "week") | null;
+            /** Period Value */
+            period_value?: string | null;
+            /** Quantity */
+            quantity?: string | null;
+            /** Tax Ref */
+            tax_ref?: string | null;
+            /** Unit Cost */
+            unit_cost?: string | null;
+            /** Unit Price */
+            unit_price?: string | null;
         };
         /** BudgetGlobalCreate */
         BudgetGlobalCreate: {
@@ -5029,6 +5196,12 @@ export interface components {
             discount_mode?: string | null;
             /** Discount Value */
             discount_value?: string | null;
+            /** Extra Decided On */
+            extra_decided_on?: string | null;
+            /** Extra Note */
+            extra_note?: string | null;
+            /** Extra Status */
+            extra_status?: ("proposed" | "accepted" | "declined") | null;
             /**
              * Factor
              * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
@@ -5262,6 +5435,11 @@ export interface components {
              * @default true
              */
             is_active: boolean;
+            /**
+             * Is Extras
+             * @default false
+             */
+            is_extras: boolean;
             /** Name */
             name: string;
             /** Parent Id */
@@ -5298,6 +5476,16 @@ export interface components {
             lines: components["schemas"]["BudgetLineResponse"][];
             /** Sections */
             sections: components["schemas"]["BudgetSectionResponse"][];
+        };
+        /**
+         * BudgetTotals
+         * @description B1.1: `baseline` is everything except extras — what the locked
+         *     quote said; `with_extras` adds the ACCEPTED extras and is the same run
+         *     as `result`. Two engine runs over two documents; nothing is added up.
+         */
+        BudgetTotals: {
+            baseline: components["schemas"]["CalcTotals"];
+            with_extras: components["schemas"]["CalcTotals"];
         };
         /** BudgetTrackingResponse */
         BudgetTrackingResponse: {
@@ -5734,6 +5922,40 @@ export interface components {
             vat?: components["schemas"]["CalcVatResponse"] | null;
             /** Warnings */
             warnings: components["schemas"]["CalcWarningResponse"][];
+        };
+        /**
+         * CalcTotals
+         * @description One engine run's totals. The budget computes no VAT (D72), so the
+         *     tax side is the net per tax category, as on the top sheet.
+         */
+        CalcTotals: {
+            /**
+             * Cost
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            cost: string;
+            /**
+             * Margin
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            margin: string;
+            /** Margin Percent */
+            margin_percent?: string | null;
+            /**
+             * Net
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            net: string;
+            /** Net By Tax Ref */
+            net_by_tax_ref?: {
+                [key: string]: string;
+            };
         };
         /** CalcVatResponse */
         CalcVatResponse: {
@@ -6497,6 +6719,51 @@ export interface components {
         EtcRequest: {
             /** Etc */
             etc?: string | null;
+        };
+        /**
+         * ExtraFigures
+         * @description One extra's own price, cost and margin, whatever its status.
+         */
+        ExtraFigures: {
+            /**
+             * Cost
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            cost: string;
+            /** Decided On */
+            decided_on?: string | null;
+            /** Description */
+            description: string;
+            /**
+             * Line Id
+             * Format: uuid
+             */
+            line_id: string;
+            /**
+             * Margin
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            margin: string;
+            /** Margin Percent */
+            margin_percent?: string | null;
+            /** Note */
+            note?: string | null;
+            /**
+             * Price
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            price: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "proposed" | "accepted" | "declined";
         };
         /**
          * FactorExplanation
@@ -11221,6 +11488,157 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    propose_extra_budgets__budget_id__extras_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BudgetExtraCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetLineResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_extra_budgets__budget_id__extras__line_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+                line_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BudgetExtraUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetLineResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    accept_extra_budgets__budget_id__extras__line_id__accept_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+                line_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BudgetExtraDecision"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetLineResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    decline_extra_budgets__budget_id__extras__line_id__decline_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+                line_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BudgetExtraDecision"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetLineResponse"];
                 };
             };
             /** @description Validation Error */

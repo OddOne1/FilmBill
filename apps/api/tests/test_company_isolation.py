@@ -339,6 +339,14 @@ CASES: dict[str, object] = {
     "GET /budgets/{budget_id}/close-check": {"body": None},
     "POST /budgets/{budget_id}/close": {"body": {}},
     "POST /budgets/{budget_id}/reopen": {"body": {"reason": "Stolen"}},
+    # B1.1 extras. `{line_id}` is B's own line, so a lookup by id alone
+    # would FIND it.
+    "POST /budgets/{budget_id}/extras": {
+        "body": {"description": "Stolen", "unit_price": "1.00"}
+    },
+    "PATCH /budgets/{budget_id}/extras/{line_id}": {"body": {"description": "Stolen"}},
+    "POST /budgets/{budget_id}/extras/{line_id}/accept": {"body": {}},
+    "POST /budgets/{budget_id}/extras/{line_id}/decline": {"body": {"note": "Stolen"}},
     "POST /budgets/{budget_id}/set-primary": {"body": None},
     "POST /budgets/{budget_id}/duplicate": {"body": {}},
     "POST /budgets/{budget_id}/sections": {"body": {"name": "Stolen"}},

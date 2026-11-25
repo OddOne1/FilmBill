@@ -63,6 +63,9 @@ from ..schemas.budget import (
     BudgetCloseRequest,
     BudgetCreate,
     BudgetDuplicateRequest,
+    BudgetExtraCreate,
+    BudgetExtraDecision,
+    BudgetExtraUpdate,
     BudgetGlobalCreate,
     BudgetGlobalResponse,
     BudgetGlobalUpdate,
@@ -83,7 +86,12 @@ from ..schemas.budget import (
     CatalogDifference,
     CloseCheckResponse,
 )
-from ..services import audit, budget_close_service, budget_service
+from ..services import (
+    audit,
+    budget_close_service,
+    budget_extras_service,
+    budget_service,
+)
 from ..services.permissions import scoped
 
 router = APIRouter(tags=["budgets"])
@@ -137,6 +145,15 @@ def _section_or_404(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Section not found"
         )
+    if row.is_extras:
+        # B1.1: the sheet's endpoints never touch the Extras section — not
+        # to add a line to it, rename it, remove it, nest under it, move a
+        # line into it or hang an adjustment on it.
+        _refuse(
+            budget_service.BudgetError(
+                f"That is the Extras section. {budget_extras_service.MANAGED_ON_THE_TAB}"
+            )
+        )
     return row
 
 
@@ -152,6 +169,35 @@ def _line_or_404(
     if row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Line not found"
+        )
+    if row.extra_status is not None:
+        _refuse(
+            budget_service.BudgetError(
+                f"“{row.description}” is an extra. "
+                f"{budget_extras_service.MANAGED_ON_THE_TAB}"
+            )
+        )
+    return row
+
+
+def _extra_or_404(
+    db: Session, membership: Membership, budget: Budget, line_id: uuid.UUID
+) -> BudgetLine:
+    """A line of this budget's Extras section, or 404."""
+    row = (
+        scoped(db.query(BudgetLine), membership)
+        .join(BudgetSection, BudgetSection.id == BudgetLine.section_id)
+        .filter(
+            BudgetLine.id == line_id,
+            BudgetSection.budget_id == budget.id,
+            BudgetSection.is_extras.is_(True),
+            BudgetLine.is_active.is_(True),
+        )
+        .first()
+    )
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Extra not found"
         )
     return row
 
@@ -278,6 +324,9 @@ def _line_response(db: Session, line: BudgetLine) -> BudgetLineResponse:
         catalog_difference=(
             CatalogDifference(**difference) if difference is not None else None
         ),
+        extra_status=line.extra_status,
+        extra_decided_on=line.extra_decided_on,
+        extra_note=line.extra_note,
     )
 
 
@@ -506,6 +555,8 @@ def calculated(
         result=answer["result"],
         top_sheet=answer["top_sheet"],
         factors=answer["factors"],
+        totals=answer["totals"],
+        extras=answer["extras"],
     )
 
 
@@ -568,6 +619,126 @@ def unlock_budget(
     db.commit()
     db.refresh(budget)
     return _budget_response(db, budget)
+
+
+# ─── Extras (B1.1) ──────────────────────────────────────────────────────────
+
+
+def _refuse_extra_error(error: budget_service.BudgetError):
+    _refuse(error)
+
+
+@router.post(
+    "/budgets/{budget_id}/extras",
+    response_model=BudgetLineResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def propose_extra(
+    budget_id: uuid.UUID,
+    body: BudgetExtraCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    membership: Membership = Depends(require("budgets.edit")),
+):
+    """Propose an extra charge. Allowed on a LOCKED budget — that is what
+    extras are for — and refused on a closed one. It counts in no total
+    until it is accepted."""
+    budget = _budget_or_404(db, membership, budget_id)
+    item = None
+    if body.item_id is not None:
+        item = scoped(db.query(Item), membership).filter(Item.id == body.item_id).first()
+        if item is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Item not found"
+            )
+    try:
+        budget = budget_extras_service.writable_for_extras(db, budget)
+        row = budget_extras_service.propose(
+            db, membership, budget, body, item=item, actor=_actor(request, membership)
+        )
+    except budget_service.BudgetError as error:
+        _refuse_extra_error(error)
+    db.commit()
+    db.refresh(row)
+    return _line_response(db, row)
+
+
+@router.patch(
+    "/budgets/{budget_id}/extras/{line_id}", response_model=BudgetLineResponse
+)
+def update_extra(
+    budget_id: uuid.UUID,
+    line_id: uuid.UUID,
+    body: BudgetExtraUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    membership: Membership = Depends(require("budgets.edit")),
+):
+    """Change a proposed or accepted extra; audited with before and after."""
+    budget = _budget_or_404(db, membership, budget_id)
+    row = _extra_or_404(db, membership, budget, line_id)
+    try:
+        budget_extras_service.writable_for_extras(db, budget)
+        budget_extras_service.update(db, row, body, actor=_actor(request, membership))
+    except budget_service.BudgetError as error:
+        _refuse_extra_error(error)
+    db.commit()
+    db.refresh(row)
+    return _line_response(db, row)
+
+
+@router.post(
+    "/budgets/{budget_id}/extras/{line_id}/accept", response_model=BudgetLineResponse
+)
+def accept_extra(
+    budget_id: uuid.UUID,
+    line_id: uuid.UUID,
+    body: BudgetExtraDecision,
+    request: Request,
+    db: Session = Depends(get_db),
+    membership: Membership = Depends(require("budgets.edit")),
+):
+    """The customer accepted: the extra now counts in the totals."""
+    budget = _budget_or_404(db, membership, budget_id)
+    row = _extra_or_404(db, membership, budget, line_id)
+    try:
+        budget_extras_service.writable_for_extras(db, budget)
+        budget_extras_service.accept(
+            db, row, decided_on=body.decided_on, note=body.note,
+            actor=_actor(request, membership),
+        )
+    except budget_service.BudgetError as error:
+        _refuse_extra_error(error)
+    db.commit()
+    db.refresh(row)
+    return _line_response(db, row)
+
+
+@router.post(
+    "/budgets/{budget_id}/extras/{line_id}/decline", response_model=BudgetLineResponse
+)
+def decline_extra(
+    budget_id: uuid.UUID,
+    line_id: uuid.UUID,
+    body: BudgetExtraDecision,
+    request: Request,
+    db: Session = Depends(get_db),
+    membership: Membership = Depends(require("budgets.edit")),
+):
+    """Declined, or withdrawn — with a note. Out of every total again."""
+    budget = _budget_or_404(db, membership, budget_id)
+    row = _extra_or_404(db, membership, budget, line_id)
+    try:
+        budget_extras_service.writable_for_extras(db, budget)
+        budget_extras_service.decline(
+            db, row, decided_on=body.decided_on, note=body.note,
+            actor=_actor(request, membership),
+        )
+    except budget_service.BudgetError as error:
+        _refuse_extra_error(error)
+    db.commit()
+    db.refresh(row)
+    return _line_response(db, row)
 
 
 # ─── Closing (B1.1) ─────────────────────────────────────────────────────────

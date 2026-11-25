@@ -51,6 +51,7 @@ from .budget_service import (
     BudgetError,
     active_lines,
     active_sections,
+    counts_in_totals,
 )
 from .budget_tracking_service import (
     STATUS_CANCELLED,
@@ -122,7 +123,13 @@ def close_check(db: Session, budget: Budget) -> dict:
     """What does not add up, in plain lists, plus the state and the digest."""
     result = tracking(db, budget)
     sections = active_sections(db, budget)
-    lines = active_lines(db, [section.id for section in sections])
+    by_id = {section.id: section for section in sections}
+    # Proposed and declined extras are in no total, so in no discrepancy.
+    lines = [
+        line
+        for line in active_lines(db, [section.id for section in sections])
+        if counts_in_totals(line, by_id.get(line.section_id))
+    ]
 
     over: list[dict] = []
     under: list[dict] = []

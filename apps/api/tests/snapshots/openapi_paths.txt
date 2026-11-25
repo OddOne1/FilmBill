@@ -67,6 +67,7 @@ PATCH /budgets/{budget_id}
 PATCH /budgets/{budget_id}/actuals/{actual_id}
 PATCH /budgets/{budget_id}/adjustments/{adjustment_id}
 PATCH /budgets/{budget_id}/commitments/{commitment_id}
+PATCH /budgets/{budget_id}/extras/{line_id}
 PATCH /budgets/{budget_id}/globals/{global_id}
 PATCH /budgets/{budget_id}/lines/{line_id}
 PATCH /budgets/{budget_id}/sections/{section_id}
@@ -119,6 +120,9 @@ POST /budgets/{budget_id}/commitments/{commitment_id}/cancel
 POST /budgets/{budget_id}/commitments/{commitment_id}/close
 POST /budgets/{budget_id}/commitments/{commitment_id}/void
 POST /budgets/{budget_id}/duplicate
+POST /budgets/{budget_id}/extras
+POST /budgets/{budget_id}/extras/{line_id}/accept
+POST /budgets/{budget_id}/extras/{line_id}/decline
 POST /budgets/{budget_id}/globals
 POST /budgets/{budget_id}/globals/{global_id}/remove
 POST /budgets/{budget_id}/import

@@ -64,6 +64,7 @@ from ..billing.catalog import FactorError, explain_factor
 from ..billing.catalog.kinds import ITEM_KINDS, KIND_OTHER
 from ..models.catalog import Item, RATE_BILL, RATE_COST, RentalFactor
 from ..models.project import (
+    EXTRA_ACCEPTED,
     MAX_SECTION_DEPTH,
     Budget,
     BudgetAdjustment,
@@ -143,6 +144,9 @@ LINE_AUDITED: tuple[str, ...] = (
     "allow_negative",
     "notes",
     "is_active",
+    "extra_status",
+    "extra_decided_on",
+    "extra_note",
 )
 GLOBAL_AUDITED: tuple[str, ...] = (
     "key",
@@ -590,7 +594,25 @@ def _adjustment_payload(row: BudgetAdjustment) -> dict:
     return payload
 
 
-def engine_input(db: Session, budget: Budget) -> tuple[dict, list]:
+#: Which lines an engine document is built from (B1.1 extras).
+#: `budget` — everything except proposed and declined extras: the budget's
+#: totals, its tax grouping and the tracking baseline. `baseline` — nothing
+#: from the Extras section at all: the quote as it was locked.
+SCOPE_BUDGET = "budget"
+SCOPE_BASELINE = "baseline"
+
+
+def counts_in_totals(line: BudgetLine, section: Optional[BudgetSection]) -> bool:
+    """Does this line enter the budget's totals? Every ordinary line does;
+    an extra only once it is ACCEPTED. The one place the rule is spelled."""
+    if section is not None and section.is_extras:
+        return line.extra_status == EXTRA_ACCEPTED
+    return True
+
+
+def engine_input(
+    db: Session, budget: Budget, *, scope: str = SCOPE_BUDGET
+) -> tuple[dict, list]:
     """`(document data, factor explanations)` — the engine's own input shape.
 
     Built from the stored rows and handed to `services/calc_mapping`, which
@@ -598,10 +620,29 @@ def engine_input(db: Session, budget: Budget) -> tuple[dict, list]:
     section's own LINES first, then its sub-sections, each by `position`.
     One order, stated here, so the top sheet and the CSV and the screen all
     read the same way.
+
+    `scope` (B1.1): extras are ordinary lines in the reserved Extras
+    section, so they need no calculation path of their own — they are simply
+    left OUT of the document when they must not count. Proposed and declined
+    extras never count; `baseline` leaves the whole Extras section out. An
+    Extras section with nothing left in it is left out too, so the baseline
+    and the budget are the same document until an extra is accepted.
     """
     values = global_values(db, budget)
-    sections = active_sections(db, budget)
-    lines = active_lines(db, [section.id for section in sections])
+    all_sections = active_sections(db, budget)
+    section_by_id = {section.id: section for section in all_sections}
+    lines = [
+        line
+        for line in active_lines(db, [section.id for section in all_sections])
+        if counts_in_totals(line, section_by_id.get(line.section_id))
+        and not (scope == SCOPE_BASELINE and section_by_id[line.section_id].is_extras)
+    ]
+    with_lines = {line.section_id for line in lines}
+    sections = [
+        section
+        for section in all_sections
+        if not section.is_extras or section.id in with_lines
+    ]
     adjustments = active_adjustments(db, budget)
 
     item_ids = {line.item_id for line in lines if line.item_id is not None}
@@ -657,7 +698,7 @@ def engine_input(db: Session, budget: Budget) -> tuple[dict, list]:
     return data, explanations
 
 
-def calc_result(db: Session, budget: Budget) -> tuple:
+def calc_result(db: Session, budget: Budget, *, scope: str = SCOPE_BUDGET) -> tuple:
     """`(CalcResult, factor explanations)` — the engine's own value objects.
 
     The one place a budget is priced. `calculated` below turns this into the
@@ -671,11 +712,73 @@ def calc_result(db: Session, budget: Budget) -> tuple:
     a duplicate id — comes out as a `BudgetError` with the engine's own
     sentence.
     """
-    data, explanations = engine_input(db, budget)
+    data, explanations = engine_input(db, budget, scope=scope)
     try:
         return calculate_document(data), explanations
     except CalcError as error:
         raise BudgetError(str(error)) from None
+
+
+def extras_section(db: Session, budget: Budget) -> Optional[BudgetSection]:
+    """The budget's one Extras section, or None before the first extra."""
+    return (
+        db.query(BudgetSection)
+        .filter(
+            BudgetSection.budget_id == budget.id,
+            BudgetSection.is_extras.is_(True),
+            BudgetSection.is_active.is_(True),
+        )
+        .first()
+    )
+
+
+def extra_lines(db: Session, budget: Budget) -> list[BudgetLine]:
+    section = extras_section(db, budget)
+    return active_lines(db, [section.id]) if section is not None else []
+
+
+def extras_own_result(db: Session, budget: Budget):
+    """Each extra's OWN price, cost and margin, whatever its status.
+
+    One engine call over a document holding only the extras, with no
+    adjustments — what each extra is on its own, which is what the customer
+    is told. A proposed or declined extra has no number in the budget's
+    document (it is left out), so this is where its figures come from.
+    `None` when there are no extras.
+    """
+    lines = extra_lines(db, budget)
+    if not lines:
+        return None
+    values = global_values(db, budget)
+    item_ids = {line.item_id for line in lines if line.item_id is not None}
+    items = (
+        {item.id: item for item in db.query(Item).filter(Item.id.in_(list(item_ids))).all()}
+        if item_ids
+        else {}
+    )
+    explanations: list = []
+    data = {
+        "id": f"{budget.id}-extras",
+        "title": "Extras",
+        "children": [
+            _line_payload(db, line, values, items, explanations) for line in lines
+        ],
+        "adjustments": [],
+    }
+    try:
+        return calculate_document(data)
+    except CalcError as error:
+        raise BudgetError(str(error)) from None
+
+
+def _totals_of(result) -> dict:
+    return {
+        "net": result.net,
+        "cost": result.cost,
+        "margin": result.margin,
+        "margin_percent": result.margin_percent,
+        "net_by_tax_ref": dict(result.net_by_tax_ref),
+    }
 
 
 def calculated(db: Session, budget: Budget) -> dict:
@@ -686,6 +789,7 @@ def calculated(db: Session, budget: Budget) -> dict:
     and label the output.
     """
     result, explanations = calc_result(db, budget)
+    baseline, _ = calc_result(db, budget, scope=SCOPE_BASELINE)
     response = response_from_result(result)
 
     sections = {str(section.id): section for section in active_sections(db, budget)}
@@ -709,10 +813,35 @@ def calculated(db: Session, budget: Budget) -> dict:
             }
         )
 
+    own = extras_own_result(db, budget)
+    extras = []
+    for line in extra_lines(db, budget):
+        priced = own.lines.get(str(line.id)) if own is not None else None
+        extras.append(
+            {
+                "line_id": line.id,
+                "description": line.description,
+                "status": line.extra_status,
+                "decided_on": line.extra_decided_on,
+                "note": line.extra_note,
+                "price": priced.net if priced is not None else ZERO,
+                "cost": priced.cost_net if priced is not None else ZERO,
+                "margin": priced.margin if priced is not None else ZERO,
+                "margin_percent": priced.margin_percent if priced is not None else None,
+            }
+        )
+
     return {
         "result": response,
         "top_sheet": top_sheet,
         "factors": explanations,
+        # B1.1: the quote as locked, and the budget with accepted extras.
+        # Two engine runs over two documents; nothing is added up here.
+        "totals": {
+            "baseline": _totals_of(baseline),
+            "with_extras": _totals_of(result),
+        },
+        "extras": extras,
     }
 
 
@@ -833,6 +962,10 @@ def duplicate(
     The copy is **unlocked** whatever the original was: a lock says "this
     estimate is approved", and that is a statement about the original and
     not about a scenario somebody is about to change.
+
+    **The baseline only** (B1.1): no Extras section and no extras (they
+    were agreed with a client about THIS production), no still-to-spend,
+    and not closed.
     """
     copy = Budget(
         company_id=membership.company_id,
@@ -865,7 +998,7 @@ def duplicate(
         )
 
     section_map: dict[uuid.UUID, uuid.UUID] = {}
-    sections = active_sections(db, budget)
+    sections = [row for row in active_sections(db, budget) if not row.is_extras]
     # Parents first, so a child's `parent_id` can be mapped.
     for section in sorted(sections, key=lambda row: (row.parent_id is not None, row.position)):
         new_section = BudgetSection(
@@ -980,6 +1113,20 @@ EXAMPLE_CREW_DISCOUNT = ("Crew discount", "discount", "percent", "5")
 EXAMPLE_FEE = ("Production fee", "surcharge", "percent", "8")
 
 
+def standard_tax_ref(db: Session, company_id) -> str:
+    """The company's `standard` tax class's code, or "" when it has none."""
+    standard = (
+        db.query(TaxCode)
+        .join(TaxClass, TaxClass.code_id == TaxCode.id)
+        .filter(
+            TaxClass.company_id == company_id,
+            TaxClass.key == "standard",
+        )
+        .first()
+    )
+    return standard.code if standard is not None else ""
+
+
 def create_example_budget(db: Session, membership, project: Project) -> Budget:
     """The S1 budget, so the totals can be checked by eye.
 
@@ -991,16 +1138,7 @@ def create_example_budget(db: Session, membership, project: Project) -> Budget:
     watch the numbers follow", and a global that has to be created first
     makes that step about creating a global.
     """
-    standard = (
-        db.query(TaxCode)
-        .join(TaxClass, TaxClass.code_id == TaxCode.id)
-        .filter(
-            TaxClass.company_id == membership.company_id,
-            TaxClass.key == "standard",
-        )
-        .first()
-    )
-    tax_ref = standard.code if standard is not None else ""
+    tax_ref = standard_tax_ref(db, membership.company_id)
 
     budget = Budget(
         company_id=membership.company_id,
@@ -1141,10 +1279,19 @@ def export_rows(db: Session, budget: Budget) -> list[dict]:
 
     sections = {section.id: section for section in active_sections(db, budget)}
     values = global_values(db, budget)
+    # An extra's figures are its OWN (B1.1): a proposed or declined one is
+    # not in the budget's document at all, and an accepted one's line
+    # figures are the same either way.
+    own = extras_own_result(db, budget)
     rows: list[dict] = []
     for line in active_lines(db, list(sections)):
         section = sections.get(line.section_id)
-        computed = by_id.get(str(line.id))
+        is_extra = section is not None and section.is_extras
+        computed = (
+            (own.lines.get(str(line.id)) if own is not None else None)
+            if is_extra
+            else by_id.get(str(line.id))
+        )
         # A line that follows a global is written with the number it is
         # CHARGED at (the global's value) and the key in its own column, so
         # the file says what the sheet says and reads back as a ref.
@@ -1169,6 +1316,7 @@ def export_rows(db: Session, budget: Budget) -> list[dict]:
                 "price": de_amount(computed.net) if computed is not None else "",
                 "cost": de_amount(computed.cost_net) if computed is not None else "",
                 "margin": de_amount(computed.margin) if computed is not None else "",
+                "extra_status": line.extra_status or "",
             }
         )
     return rows
@@ -1217,6 +1365,7 @@ def import_context(db: Session, budget: Budget) -> BudgetImportContext:
         },
         ambiguous_section_names=frozenset(ambiguous_names),
         lines_by_key=lines_by_key,
+        extras_sections=frozenset(str(row.id) for row in sections if row.is_extras),
         global_keys=frozenset(row.key for row in active_globals(db, budget)),
         ambiguous_keys=frozenset(ambiguous),
         kinds=frozenset(ITEM_KINDS),

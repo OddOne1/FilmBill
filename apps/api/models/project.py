@@ -91,6 +91,13 @@ PROJECT_DAY_TYPES: tuple[str, ...] = (
 #: one place it can be broken.
 PROJECT_SERIES_TYPE = "project"
 
+#: An extra's lifecycle (B1.1). Only `accepted` counts in any total;
+#: a withdrawn extra is `declined` with a note — nothing is deleted.
+EXTRA_PROPOSED = "proposed"
+EXTRA_ACCEPTED = "accepted"
+EXTRA_DECLINED = "declined"
+EXTRA_STATUSES: tuple[str, ...] = (EXTRA_PROPOSED, EXTRA_ACCEPTED, EXTRA_DECLINED)
+
 #: Two levels of section, matching the engine's group limit (SCOPE §5.4).
 #: Stated here as well as enforced in the service because the service's
 #: refusal sentence quotes it.
@@ -366,6 +373,12 @@ class BudgetSection(CompanyScoped, Base):
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="true"
     )
+    #: B1.1: the budget's one reserved Extras section — created on first
+    #: use, never renamed, never removed. Its lines are extras (each with an
+    #: `extra_status`) and are managed on the Extras tab, not on the sheet.
+    is_extras: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -383,6 +396,13 @@ class BudgetSection(CompanyScoped, Base):
 
     __table_args__ = (
         Index("ix_budget_sections_budget_parent", "budget_id", "parent_id"),
+        # At most one Extras section per budget (migration 0018).
+        Index(
+            "uq_budget_sections_one_extras",
+            "budget_id",
+            unique=True,
+            postgresql_where=text("is_extras"),
+        ),
     )
 
 
@@ -466,6 +486,13 @@ class BudgetLine(CompanyScoped, Base):
     #: history of ETCs is a thing to want one day and the audit log already
     #: has it (`budget_line.etc_set` carries the before and the after).
     etc: Mapped[Optional[Any]] = mapped_column(AmountColumn(), nullable=True)
+    #: B1.1 extras. `proposed` | `accepted` | `declined` on a line in the
+    #: Extras section, NULL everywhere else (`EXTRA_STATUSES`; the rule is
+    #: the service's). Only `accepted` extras enter the budget's totals.
+    extra_status: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    extra_decided_on: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    #: What the customer was told.
+    extra_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="true"
     )
