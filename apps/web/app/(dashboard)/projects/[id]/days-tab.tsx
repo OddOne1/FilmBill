@@ -1,35 +1,47 @@
 'use client'
 
 import * as React from 'react'
-import { Loader2, Trash2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Loader2, Plus } from 'lucide-react'
 import { api, ApiError } from '@/lib/api'
-import { Input } from '@/components/ui/input'
-import type {
-  Project,
-  ProjectDay,
-  ProjectDayList,
-  ProjectDayRangeResponse,
-  ProjectDayUpdate,
-} from '@/types'
-import { DAY_TYPE_LABELS, DAY_TYPES } from '../projects-chrome'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { cn } from '@/lib/utils'
+import {
+  maxDate,
+  minDate,
+  monthLabel,
+  monthWeeks,
+  shiftMonth,
+  todayIso,
+  type IsoDate,
+} from '@/lib/calendar-dates'
+import type { BlockChange, BlockCreate, CalendarStrip, Project, ProjectCalendar } from '@/types'
+import { DAY_TYPES } from '../projects-chrome'
+import { CreateStripForm, DayStripsList, ProjectOverview, monthsBetween } from './calendar/calendar-parts'
+import { MonthGrid } from './calendar/month-grid'
+import { StripPanel, type StripActions } from './calendar/strip-panel'
+import { countsSentence, typeColour, typeLabel } from './calendar/shared'
 
 /**
- * A project's production days: add a range, edit a day in place, see the
- * month at a glance.
+ * The Days tab: the project calendar (B2a).
  *
- * The counts at the top are the API's (`counts`), because the Budget's
- * `days:<type>` globals are counted by the server from the same rows and the
- * two must never disagree.
+ * A month grid with the project's strips drawn across their days, an
+ * overview of the whole project above it to jump between months, and a side
+ * panel for the strip that is open — with the day that was clicked open for
+ * editing. Every day is edited here: its type, location, start and end time
+ * and notes. (The old per-day table was dropped at Mathias's request,
+ * 2026-11-25: the calendar is the one place days are edited.)
+ *
+ * **Every count on this screen is the API's** (`counts`, `strip.counts`).
+ * The budget's `days:<type>` globals are counted by the server from the
+ * same rows with the distinct-date rule, and a screen that counted for
+ * itself would disagree with them the first time two strips overlapped.
  */
 
-const TYPE_COLOURS: Record<string, string> = {
-  prep: 'bg-sky-500/70',
-  shoot: 'bg-accent',
-  travel: 'bg-amber-500/70',
-  wrap: 'bg-violet-500/70',
-  post: 'bg-emerald-500/70',
-  office: 'bg-slate-400/70',
-  off: 'bg-bg-tertiary',
+interface PendingResize {
+  strip: CalendarStrip
+  start: IsoDate
+  end: IsoDate
+  detail: string
 }
 
 export function DaysTab({
@@ -41,382 +53,320 @@ export function DaysTab({
   canEdit: boolean
   onChanged: () => void
 }) {
-  const [list, setList] = React.useState<ProjectDayList | null>(null)
+  const [calendar, setCalendar] = React.useState<ProjectCalendar | null>(null)
+  const [month, setMonth] = React.useState<string | null>(null)
+  const [selectedId, setSelectedId] = React.useState<string | null>(null)
+  /** The day a click on a strip landed on: the panel opens with it. */
+  const [focusDate, setFocusDate] = React.useState<IsoDate | null>(null)
+  const [pick, setPick] = React.useState<{ from: IsoDate; to: IsoDate } | null>(null)
+  const [creating, setCreating] = React.useState(false)
+  const [busy, setBusy] = React.useState(false)
+  const [dayOpen, setDayOpen] = React.useState<IsoDate | null>(null)
+  const [pending, setPending] = React.useState<PendingResize | null>(null)
   const [error, setError] = React.useState<string | null>(null)
   const [message, setMessage] = React.useState<string | null>(null)
+  const today = React.useMemo(() => todayIso(), [])
 
   const load = React.useCallback(async () => {
     try {
-      setList(await api.get<ProjectDayList>(`/projects/${project.id}/days`))
+      const fetched = await api.get<ProjectCalendar>(`/projects/${project.id}/calendar`)
+      setCalendar(fetched)
       setError(null)
+      setMonth((current) => current ?? initialMonth(fetched, today))
     } catch (err) {
-      setError(err instanceof ApiError ? err.detail : 'Could not load the days')
+      setError(err instanceof ApiError ? err.detail : 'Could not load the calendar')
     }
-  }, [project.id])
+  }, [project.id, today])
 
   React.useEffect(() => {
     void load()
   }, [load])
 
-  const changed = async () => {
-    await load()
-    onChanged()
+  /** Put the API's answer on screen: the strip as it now is, the project's
+   *  counts as the API counted them. Nothing is recomputed here. */
+  const apply = React.useCallback((change: BlockChange) => {
+    setCalendar((current) => {
+      if (!current) return current
+      let strips = current.strips
+      if (change.strip) {
+        const next = change.strip
+        strips = next.is_active
+          ? strips.some((strip) => strip.id === next.id)
+            ? strips.map((strip) => (strip.id === next.id ? next : strip))
+            : [...strips, next]
+          : strips.filter((strip) => strip.id !== next.id)
+      }
+      return { ...current, strips, counts: change.counts ?? current.counts }
+    })
+    setMessage(change.detail)
+  }, [])
+
+  const run = React.useCallback<StripActions['run']>(
+    async (call, failure) => {
+      setError(null)
+      setBusy(true)
+      try {
+        const change = await call()
+        apply(change)
+        onChanged()
+        return change
+      } catch (err) {
+        setError(err instanceof ApiError ? err.detail : failure)
+        return null
+      } finally {
+        setBusy(false)
+      }
+    },
+    [apply, onChanged],
+  )
+
+  const resize = React.useCallback(
+    async (strip: CalendarStrip, start: IsoDate, end: IsoDate, confirm = false) => {
+      setError(null)
+      try {
+        const change = await api.post<BlockChange>(`/projects/${project.id}/blocks/${strip.id}/resize`, {
+          start_date: start,
+          end_date: end,
+          confirm,
+        })
+        if (change.needs_confirm) {
+          setPending({ strip, start, end, detail: change.detail })
+          return
+        }
+        apply(change)
+        onChanged()
+      } catch (err) {
+        setError(err instanceof ApiError ? err.detail : 'The strip could not be resized')
+      }
+    },
+    [apply, onChanged, project.id],
+  )
+
+  const move = (strip: CalendarStrip, start: IsoDate) =>
+    void run(
+      () => api.post<BlockChange>(`/projects/${project.id}/blocks/${strip.id}/move`, { start_date: start }),
+      'The strip could not be moved',
+    )
+
+  const create = async (body: BlockCreate) => {
+    const change = await run(
+      () => api.post<BlockChange>(`/projects/${project.id}/blocks`, body),
+      'The strip could not be created',
+    )
+    if (change?.strip) {
+      setCreating(false)
+      setPick(null)
+      setSelectedId(change.strip.id)
+    }
   }
 
-  const days = (list?.days ?? []).filter((day) => day.is_active)
+  const strips = React.useMemo(() => calendar?.strips ?? [], [calendar])
+  const selected = strips.find((strip) => strip.id === selectedId) ?? null
+  const shownMonth = month ?? today.slice(0, 7)
+
+  const actions: StripActions = {
+    run,
+    resize: (strip, start, end) => resize(strip, start, end),
+    reload: load,
+    onRemoved: () => setSelectedId(null),
+    onError: setError,
+  }
+
+  const typesByDate = React.useMemo(() => {
+    const map = new Map<IsoDate, string[]>()
+    for (const strip of strips) for (const day of strip.days) map.set(day.date, [...(map.get(day.date) ?? []), day.type])
+    return map
+  }, [strips])
+
+  const overviewMonths = React.useMemo(() => {
+    let first = project.start_date
+    let last = project.end_date ?? project.start_date
+    for (const strip of strips) {
+      first = minDate(first, strip.start_date)
+      last = maxDate(last, strip.end_date)
+    }
+    return monthsBetween(first.slice(0, 7), last.slice(0, 7))
+  }, [project.start_date, project.end_date, strips])
 
   return (
     <div className="mt-5">
-      <p data-testid="day-counts" className="text-sm text-text-secondary">
-        {list === null
-          ? ''
-          : DAY_TYPES.filter((type) => list.counts[type])
-              .map((type) => `${list.counts[type]} ${DAY_TYPE_LABELS[type].toLowerCase()}`)
-              .join(' · ') || 'No days planned yet.'}
-      </p>
-
-      {canEdit && (
-        <RangeForm
-          project={project}
-          onDone={(detail) => {
-            setMessage(detail)
-            void changed()
-          }}
-          onError={setError}
-        />
-      )}
-
-      {message && (
-        <p data-testid="days-range-result" className="mt-3 text-sm text-text-secondary">
-          {message}
+      <div className="flex flex-wrap items-baseline justify-between gap-3">
+        <p data-testid="day-counts" className="text-sm font-medium text-text-primary">
+          {calendar === null ? '' : countsSentence(calendar.counts, DAY_TYPES) || 'No days planned yet.'}
         </p>
-      )}
-      {error && (
-        <p role="alert" className="mt-3 text-sm text-danger">
-          {error}
+        <p className="flex flex-wrap gap-3 text-[11px] text-text-tertiary">
+          {DAY_TYPES.map((type) => (
+            <span key={type} className="inline-flex items-center gap-1">
+              <span className={cn('h-2 w-3 rounded-sm', typeColour(type))} />
+              {typeLabel(type)}
+            </span>
+          ))}
         </p>
-      )}
+      </div>
 
-      {list === null ? (
+      {calendar === null ? (
         <div className="mt-6 flex items-center gap-2 text-sm text-text-secondary">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading days…
+          {error ? null : (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading the calendar…
+            </>
+          )}
         </div>
       ) : (
         <>
-          <MonthStrip project={project} days={days} />
-          {days.length > 0 && (
-            <table className="mt-6 w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-xs text-text-tertiary">
-                  <th className="py-2 pr-3 font-medium">Date</th>
-                  <th className="py-2 pr-3 font-medium">Type</th>
-                  <th className="py-2 pr-3 font-medium">Location</th>
-                  <th className="py-2 pr-3 font-medium">Call</th>
-                  <th className="py-2 pr-3 font-medium">Wrap</th>
-                  <th className="py-2 pr-3 font-medium">Notes</th>
-                  <th className="py-2" />
-                </tr>
-              </thead>
-              <tbody>
-                {days.map((day) => (
-                  <DayRow
-                    key={day.id}
-                    day={day}
-                    canEdit={canEdit}
-                    onSaved={() => void changed()}
-                    onError={setError}
-                  />
-                ))}
-              </tbody>
-            </table>
-          )}
-        </>
-      )}
-    </div>
-  )
-}
+          <div className="mt-3">
+            <ProjectOverview months={overviewMonths} current={shownMonth} typesByDate={typesByDate} onPick={setMonth} />
+          </div>
 
-function RangeForm({
-  project,
-  onDone,
-  onError,
-}: {
-  project: Project
-  onDone: (detail: string) => void
-  onError: (message: string | null) => void
-}) {
-  const [from, setFrom] = React.useState('')
-  const [to, setTo] = React.useState('')
-  const [type, setType] = React.useState('shoot')
-  const [skipWeekends, setSkipWeekends] = React.useState(false)
-  const [busy, setBusy] = React.useState(false)
-
-  const missing = !from ? 'Pick the first day.' : !to ? 'Pick the last day — the same date for one day.' : null
-
-  const submit = async (event: React.FormEvent) => {
-    event.preventDefault()
-    if (missing) return
-    setBusy(true)
-    onError(null)
-    try {
-      const result = await api.post<ProjectDayRangeResponse>(
-        `/projects/${project.id}/days/range`,
-        { from, to, type, skip_weekends: skipWeekends },
-      )
-      onDone(result.detail)
-    } catch (err) {
-      onError(err instanceof ApiError ? err.detail : 'The days could not be added')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <form
-      data-testid="days-range-form"
-      onSubmit={submit}
-      className="mt-4 flex flex-wrap items-end gap-3 rounded-md border border-border bg-bg-secondary p-3"
-    >
-      <label className="text-xs text-text-secondary">
-        From
-        <Input aria-label="From" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
-      </label>
-      <label className="text-xs text-text-secondary">
-        To
-        <Input aria-label="To" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
-      </label>
-      <label className="text-xs text-text-secondary">
-        Type
-        <select
-          aria-label="Day type"
-          value={type}
-          onChange={(e) => setType(e.target.value)}
-          className="mt-1 block rounded-md border border-border bg-bg-primary px-2 py-1.5 text-sm text-text-primary"
-        >
-          {DAY_TYPES.map((value) => (
-            <option key={value} value={value}>
-              {DAY_TYPE_LABELS[value]}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="flex items-center gap-1.5 pb-2 text-sm text-text-secondary">
-        <input
-          type="checkbox"
-          checked={skipWeekends}
-          onChange={(e) => setSkipWeekends(e.target.checked)}
-        />
-        Skip weekends
-      </label>
-      <button
-        type="submit"
-        disabled={busy || missing !== null}
-        className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
-      >
-        Add days
-      </button>
-      {missing && <span className="pb-2 text-xs text-text-tertiary">{missing}</span>}
-    </form>
-  )
-}
-
-/** One editable day. Each field saves on its own when it loses focus, so
- *  a slip of one day is one PATCH and one audit event. */
-function DayRow({
-  day,
-  canEdit,
-  onSaved,
-  onError,
-}: {
-  day: ProjectDay
-  canEdit: boolean
-  onSaved: () => void
-  onError: (message: string | null) => void
-}) {
-  const save = async (body: ProjectDayUpdate) => {
-    onError(null)
-    try {
-      await api.patch(`/projects/${day.project_id}/days/${day.id}`, body)
-      onSaved()
-    } catch (err) {
-      onError(err instanceof ApiError ? err.detail : 'The day could not be saved')
-    }
-  }
-
-  const remove = async () => {
-    onError(null)
-    try {
-      await api.post(`/projects/${day.project_id}/days/${day.id}/remove`)
-      onSaved()
-    } catch (err) {
-      onError(err instanceof ApiError ? err.detail : 'The day could not be removed')
-    }
-  }
-
-  if (!canEdit) {
-    return (
-      <tr data-testid="day-row" className="border-b border-border/60">
-        <td className="py-1.5 pr-3">{day.date}</td>
-        <td className="py-1.5 pr-3">{DAY_TYPE_LABELS[day.type] ?? day.type}</td>
-        <td className="py-1.5 pr-3">{day.location ?? ''}</td>
-        <td className="py-1.5 pr-3">{day.call_time?.slice(0, 5) ?? ''}</td>
-        <td className="py-1.5 pr-3">{day.wrap_time?.slice(0, 5) ?? ''}</td>
-        <td className="py-1.5 pr-3">{day.notes ?? ''}</td>
-        <td />
-      </tr>
-    )
-  }
-
-  /** Saves a text field on blur, only when it changed. */
-  const textCell = (
-    field: 'location' | 'notes' | 'call_time' | 'wrap_time' | 'date',
-    label: string,
-    type = 'text',
-  ) => {
-    const stored = (day[field] ?? '') as string
-    const shown = field.endsWith('_time') ? stored.slice(0, 5) : stored
-    return (
-      <Input
-        aria-label={`${label} ${day.date}`}
-        type={type}
-        defaultValue={shown}
-        key={`${field}-${day.updated_at}`}
-        onBlur={(event) => {
-          const next = event.target.value
-          if (next === shown) return
-          void save({ [field]: next === '' ? null : next } as ProjectDayUpdate)
-        }}
-        className="h-8"
-      />
-    )
-  }
-
-  return (
-    <tr data-testid="day-row" className="border-b border-border/60">
-      <td className="py-1 pr-2">{textCell('date', 'Date', 'date')}</td>
-      <td className="py-1 pr-2">
-        <select
-          aria-label={`Type ${day.date}`}
-          value={day.type}
-          onChange={(e) => void save({ type: e.target.value as ProjectDayUpdate['type'] })}
-          className="h-8 rounded-md border border-border bg-bg-primary px-2 text-sm text-text-primary"
-        >
-          {DAY_TYPES.map((value) => (
-            <option key={value} value={value}>
-              {DAY_TYPE_LABELS[value]}
-            </option>
-          ))}
-        </select>
-      </td>
-      <td className="py-1 pr-2">{textCell('location', 'Location')}</td>
-      <td className="py-1 pr-2">{textCell('call_time', 'Call', 'time')}</td>
-      <td className="py-1 pr-2">{textCell('wrap_time', 'Wrap', 'time')}</td>
-      <td className="py-1 pr-2">{textCell('notes', 'Notes')}</td>
-      <td className="py-1 text-right">
-        <button
-          type="button"
-          aria-label={`Remove ${day.date}`}
-          onClick={() => void remove()}
-          className="rounded p-1 text-text-tertiary hover:text-danger"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
-      </td>
-    </tr>
-  )
-}
-
-/** `YYYY-MM` of every month from the project's start (or its first day) to
- *  its end (or its last day), at most twelve. Calendar arithmetic on dates,
- *  in UTC — nothing to do with money. */
-function monthsToShow(project: Project, days: ProjectDay[]): string[] {
-  const dates = days.map((day) => day.date).sort()
-  const first = [project.start_date, dates[0]].filter(Boolean).sort()[0] as string
-  const last = [project.end_date ?? project.start_date, dates[dates.length - 1]]
-    .filter(Boolean)
-    .sort()
-    .reverse()[0] as string
-  const months: string[] = []
-  let year = Number(first.slice(0, 4))
-  let month = Number(first.slice(5, 7))
-  const end = last.slice(0, 7)
-  while (months.length < 12) {
-    const key = `${year}-${String(month).padStart(2, '0')}`
-    months.push(key)
-    if (key >= end) break
-    month += 1
-    if (month > 12) {
-      month = 1
-      year += 1
-    }
-  }
-  return months
-}
-
-function MonthStrip({ project, days }: { project: Project; days: ProjectDay[] }) {
-  const byDate = new Map<string, ProjectDay[]>()
-  for (const day of days) {
-    byDate.set(day.date, [...(byDate.get(day.date) ?? []), day])
-  }
-
-  return (
-    <div data-testid="month-strip" className="mt-6 space-y-3">
-      {monthsToShow(project, days).map((key) => {
-        const year = Number(key.slice(0, 4))
-        const month = Number(key.slice(5, 7))
-        const length = new Date(Date.UTC(year, month, 0)).getUTCDate()
-        const label = new Date(Date.UTC(year, month - 1, 1)).toLocaleDateString(undefined, {
-          month: 'long',
-          year: 'numeric',
-          timeZone: 'UTC',
-        })
-        return (
-          <div key={key}>
-            <p className="text-xs font-medium text-text-secondary">{label}</p>
-            <div className="mt-1 flex flex-wrap gap-0.5">
-              {Array.from({ length }, (_, index) => {
-                const date = `${key}-${String(index + 1).padStart(2, '0')}`
-                const planned = byDate.get(date) ?? []
-                const weekday = new Date(`${date}T00:00:00Z`).getUTCDay()
-                const weekend = weekday === 0 || weekday === 6
-                return (
-                  <div
-                    key={date}
-                    data-testid={planned.length ? 'month-day-planned' : undefined}
-                    data-date={date}
-                    title={
-                      planned.length
-                        ? `${date}: ${planned.map((day) => DAY_TYPE_LABELS[day.type] ?? day.type).join(', ')}`
-                        : date
-                    }
-                    className={`flex h-7 w-7 flex-col items-center justify-center rounded text-[10px] ${
-                      weekend ? 'text-text-tertiary' : 'text-text-secondary'
-                    } ${planned.length ? '' : 'bg-bg-secondary'}`}
-                  >
-                    <span>{index + 1}</span>
-                    <span className="flex gap-px">
-                      {planned.map((day) => (
-                        <span
-                          key={day.id}
-                          className={`h-1 w-2 rounded-sm ${TYPE_COLOURS[day.type] ?? 'bg-text-tertiary'}`}
-                        />
-                      ))}
-                    </span>
-                  </div>
-                )
-              })}
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <button type="button" aria-label="Previous month" onClick={() => setMonth(shiftMonth(shownMonth, -1))} className="rounded-md border border-border p-1.5 hover:bg-bg-secondary">
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <button type="button" onClick={() => setMonth(today.slice(0, 7))} className="rounded-md border border-border px-2.5 py-1 text-sm hover:bg-bg-secondary">
+              Today
+            </button>
+            <button type="button" aria-label="Next month" onClick={() => setMonth(shiftMonth(shownMonth, 1))} className="rounded-md border border-border p-1.5 hover:bg-bg-secondary">
+              <ChevronRight className="h-4 w-4" />
+            </button>
+            <h2 data-testid="calendar-month" className="ml-1 text-base font-semibold text-text-primary">
+              {monthLabel(shownMonth)}
+            </h2>
+            <div className="ml-auto flex items-center gap-2">
+              {canEdit ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCreating(true)
+                    setPick(null)
+                  }}
+                  className="inline-flex items-center gap-1 rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white"
+                >
+                  <Plus className="h-4 w-4" /> Add strip
+                </button>
+              ) : (
+                <span data-testid="calendar-read-only" className="text-xs text-text-tertiary">
+                  You can look at the calendar but not change it — that needs the project edit permission.
+                </span>
+              )}
             </div>
           </div>
-        )
-      })}
-      <p className="flex flex-wrap gap-3 text-[11px] text-text-tertiary">
-        {DAY_TYPES.map((type) => (
-          <span key={type} className="inline-flex items-center gap-1">
-            <span className={`h-1.5 w-3 rounded-sm ${TYPE_COLOURS[type]}`} />
-            {DAY_TYPE_LABELS[type]}
-          </span>
-        ))}
-      </p>
+
+          {canEdit && (creating || pick) && (
+            <div className="mt-3">
+              <CreateStripForm
+                initial={pick}
+                busy={busy}
+                onCreate={(body) => void create(body)}
+                onCancel={() => {
+                  setCreating(false)
+                  setPick(null)
+                }}
+              />
+            </div>
+          )}
+          {canEdit && !creating && !pick && (
+            <p className="mt-2 text-[11px] text-text-tertiary">
+              Drag across days to add a strip, or click a day and shift-click another. Click a day in a strip to edit it. Drag a strip to move it, its edges to change its dates.
+            </p>
+          )}
+
+          {message && (
+            <p data-testid="calendar-message" className="mt-2 text-sm text-text-secondary">
+              {message}
+            </p>
+          )}
+          {error && (
+            <p role="alert" className="mt-2 text-sm text-status-error">
+              {error}
+            </p>
+          )}
+
+          <div className="mt-3 flex flex-col gap-4 lg:flex-row lg:items-start">
+            <div className="relative min-w-0 flex-1">
+              <MonthGrid
+                month={shownMonth}
+                weeks={monthWeeks(shownMonth)}
+                strips={strips}
+                today={today}
+                projectStart={project.start_date}
+                projectEnd={project.end_date ?? null}
+                canEdit={canEdit}
+                selectedStripId={selectedId}
+                pick={pick}
+                onPickRange={(from, to) => {
+                  setPick({ from, to })
+                  setSelectedId(null)
+                }}
+                onPickDay={(date, extend) => {
+                  setSelectedId(null)
+                  setPick((current) =>
+                    extend && current
+                      ? { from: minDate(current.from, date), to: maxDate(current.to, date) }
+                      : { from: date, to: date },
+                  )
+                }}
+                onOpenStrip={(strip, date) => {
+                  setSelectedId(strip.id)
+                  setFocusDate(date)
+                  setDayOpen(null)
+                }}
+                onMove={move}
+                onResize={(strip, start, end) => void resize(strip, start, end)}
+                onShowDay={setDayOpen}
+              />
+              {dayOpen && (
+                <div className="absolute left-1/2 top-12 z-20 w-72 -translate-x-1/2">
+                  <DayStripsList
+                    date={dayOpen}
+                    strips={strips.filter((strip) => strip.start_date <= dayOpen && strip.end_date >= dayOpen)}
+                    onOpen={(strip) => {
+                      setSelectedId(strip.id)
+                      setFocusDate(dayOpen)
+                      setDayOpen(null)
+                    }}
+                    onClose={() => setDayOpen(null)}
+                  />
+                </div>
+              )}
+            </div>
+            {selected && (
+              <StripPanel
+                projectId={project.id}
+                strip={selected}
+                focusDate={focusDate}
+                canEdit={canEdit}
+                actions={actions}
+                onClose={() => setSelectedId(null)}
+              />
+            )}
+          </div>
+
+        </>
+      )}
+
+      <ConfirmDialog
+        open={pending !== null}
+        onOpenChange={(open) => {
+          if (!open) setPending(null)
+        }}
+        title="Take out days that have details?"
+        description={pending?.detail}
+        confirmLabel="Take them out"
+        variant="danger"
+        onConfirm={async () => {
+          if (pending) await resize(pending.strip, pending.start, pending.end, true)
+        }}
+      />
     </div>
   )
 }
+
+/** Today's month while the project is running; otherwise the month of its
+ *  first planned day, or of its start. */
+function initialMonth(calendar: ProjectCalendar, today: IsoDate): string {
+  const first = calendar.strips.reduce<IsoDate | null>((acc, strip) => (acc === null ? strip.start_date : minDate(acc, strip.start_date)), null)
+  const last = calendar.strips.reduce<IsoDate | null>((acc, strip) => (acc === null ? strip.end_date : maxDate(acc, strip.end_date)), null)
+  if (first && last && today >= first && today <= last) return today.slice(0, 7)
+  return (first ?? calendar.project_start).slice(0, 7)
+}
+

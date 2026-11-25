@@ -59,7 +59,9 @@ export default function ProjectDetailPage() {
   if (access.refused) return <ProjectsNoAccess title="Project" />
 
   return (
-    <div className="max-w-6xl p-8">
+    // The calendar takes the full width (B2a): a month of strips in a narrow
+    // centred column is the screen Mathias could not work with.
+    <div className={tab === 'days' ? 'p-8' : 'max-w-6xl p-8'}>
       <Link
         href="/projects"
         className="inline-flex items-center gap-1 text-xs text-text-secondary hover:text-text-primary"

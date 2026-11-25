@@ -10,7 +10,9 @@ import type {
   BudgetAdjustmentCreate,
   BudgetCalculated,
   BudgetSheet,
+  CalendarStrip,
   ItemKind,
+  ProjectCalendar,
 } from '@/types'
 import { toApiDecimal, trimZeros } from './budget-sheet'
 
@@ -57,6 +59,25 @@ export function GlobalsPanel({ sheet, editable, onChange, onError }: PanelProps)
   const [label, setLabel] = React.useState('')
   const [value, setValue] = React.useState('')
   const budgetId = sheet.budget.id
+  const projectId = sheet.budget.project_id
+  const hasCounted = sheet.globals.some((row) => row.is_computed)
+  // The project's strips, for the "all strips / this strip" picker (B2a).
+  // Only fetched when a counted global exists and can be changed; if the
+  // calendar cannot be read the picker still offers "All strips".
+  const [strips, setStrips] = React.useState<CalendarStrip[]>([])
+  React.useEffect(() => {
+    if (!hasCounted || !editable) return
+    let live = true
+    api
+      .get<ProjectCalendar>(`/projects/${projectId}/calendar`)
+      .then((calendar) => {
+        if (live) setStrips(calendar.strips.filter((strip) => strip.kind === 'strip'))
+      })
+      .catch(() => undefined)
+    return () => {
+      live = false
+    }
+  }, [hasCounted, editable, projectId])
   const missing = !key.trim() ? 'A key, e.g. crew_size.' : !label.trim() ? 'A label.' : !value.trim() ? 'A value.' : null
 
   return (
@@ -73,7 +94,7 @@ export function GlobalsPanel({ sheet, editable, onChange, onError }: PanelProps)
             {row.is_computed || !editable ? (
               <span
                 className="w-16 text-right tabular-nums"
-                title={row.is_computed ? `Counted from the project's ${row.source.slice(5)} days — change it on the Days tab.` : undefined}
+                title={row.is_computed ? `Counted from the project's ${row.source.split(':')[1]} days — change them on the Days tab.` : undefined}
               >
                 {trimZeros(row.value)}
               </span>
@@ -94,7 +115,38 @@ export function GlobalsPanel({ sheet, editable, onChange, onError }: PanelProps)
                 className="w-16 rounded border border-border bg-bg-primary px-1 text-right tabular-nums"
               />
             )}
-            {row.is_computed && <span className="text-[10px] text-text-tertiary">from Days</span>}
+            {row.is_computed && !editable && (
+              <span className="text-[10px] text-text-tertiary">{row.block_label ? `from ${row.block_label}` : 'from Days'}</span>
+            )}
+            {row.is_computed && editable && (
+              <select
+                aria-label={`Strips counted by ${row.key}`}
+                value={row.block_id ?? ''}
+                onChange={(event) => {
+                  const dayType = row.source.split(':')[1]
+                  const source = event.target.value ? `days:${dayType}:${event.target.value}` : `days:${dayType}`
+                  void run(
+                    () => api.patch(`/budgets/${budgetId}/globals/${row.id}`, { source }),
+                    'The global could not be changed',
+                    onChange,
+                    onError,
+                  )
+                }}
+                className="max-w-[7rem] rounded border border-border bg-bg-primary px-1 text-[10px] text-text-secondary"
+              >
+                <option value="">All strips</option>
+                {strips
+                  .filter((strip) => strip.days.some((day) => day.type === row.source.split(':')[1]))
+                  .map((strip) => (
+                    <option key={strip.id} value={strip.id}>
+                      {strip.label || `${strip.type} ${strip.start_date.slice(5)}`}
+                    </option>
+                  ))}
+                {row.block_id && !strips.some((strip) => strip.id === row.block_id) && (
+                  <option value={row.block_id}>{row.block_label ?? 'This strip'}</option>
+                )}
+              </select>
+            )}
             {editable &&
               (row.referenced_by > 0 ? (
                 // Not a dead button: the reason, where the button would be (17c).
@@ -120,6 +172,13 @@ export function GlobalsPanel({ sheet, editable, onChange, onError }: PanelProps)
               ))}
           </li>
         ))}
+        {sheet.globals
+          .filter((row) => row.warning)
+          .map((row) => (
+            <li key={`${row.id}-warning`} data-testid="global-warning" role="alert" className="text-[11px] text-status-warning">
+              {row.key}: {row.warning}
+            </li>
+          ))}
         {sheet.globals.length === 0 && <li className="text-xs text-text-tertiary">None yet.</li>}
       </ul>
       {editable && (
