@@ -10,6 +10,7 @@ on must log in exactly as it did before. That is regression-tested first,
 because it is the failure that would be noticed by everyone rather than by
 the few people enrolled.
 """
+import time
 import uuid
 from unittest.mock import MagicMock, patch
 
@@ -234,6 +235,45 @@ class TestTotp:
         code = pyotp.TOTP(secret).now()
 
         assert totp_service.verify_totp_code(secret, f" {code[:3]} {code[3:]} ") is True
+
+    # The window, on the real clock and the real library — no patched time.
+    # Regression for 2a6f120's red CI: with pyotp's default `valid_window=0`
+    # a code read at second 29.9 of its step was refused 0.2s later
+    # (`test_it_returns_ten_fresh_codes`, 401).
+
+    @staticmethod
+    def _code_steps_from_now(totp, steps):
+        """The code `steps` 30-second steps away from the current one.
+
+        Waits out the last two seconds of a step first, so the step cannot
+        roll over between generating the code and verifying it — otherwise
+        this test would have the very flake it exists to prevent."""
+        left = 30 - time.time() % 30
+        if left < 2:
+            time.sleep(left + 0.1)
+        return totp.at(time.time() + 30 * steps)
+
+    def test_the_code_from_the_step_just_ended_still_verifies(self):
+        """What someone holds when the authenticator rolls over while they type."""
+        secret = totp_service.generate_totp_secret()
+        code = self._code_steps_from_now(pyotp.TOTP(secret), -1)
+
+        assert totp_service.verify_totp_code(secret, code) is True
+
+    def test_the_code_from_the_next_step_verifies(self):
+        """A phone clock a few seconds ahead of the server."""
+        secret = totp_service.generate_totp_secret()
+        code = self._code_steps_from_now(pyotp.TOTP(secret), 1)
+
+        assert totp_service.verify_totp_code(secret, code) is True
+
+    @pytest.mark.parametrize("steps", [-2, 2])
+    def test_a_code_two_steps_out_does_not(self, steps):
+        """±1 step, not more: a wider window is a longer life for a replayed code."""
+        secret = totp_service.generate_totp_secret()
+        code = self._code_steps_from_now(pyotp.TOTP(secret), steps)
+
+        assert totp_service.verify_totp_code(secret, code) is False
 
     @pytest.mark.parametrize("bad", ["", "000000", "abcdef", None])
     def test_rubbish_fails_without_raising(self, bad):

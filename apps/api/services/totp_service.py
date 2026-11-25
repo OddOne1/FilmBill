@@ -132,14 +132,18 @@ def qr_code_data_uri(provisioning_uri: str) -> str:
 def verify_totp_code(secret: Optional[str], code: str) -> bool:
     """Whether `code` is currently valid for `secret`.
 
-    pyotp's default drift window (±1 step, i.e. ±30s) is kept as-is.
-    Widening it buys convenience for a clock nobody has measured and costs
-    a proportionally larger window for a replayed code.
+    A drift window of ±1 step (±30s), passed EXPLICITLY: pyotp's own default
+    is `valid_window=0`, which rejects a correct code the moment its 30-second
+    step rolls over — a person who types it at second 29 is refused, and so
+    was CI on 2a6f120 (`test_it_returns_ten_fresh_codes`, 401). This comment
+    once claimed pyotp's default was ±1; it never was. Wider than ±1 buys
+    convenience for a clock nobody has measured and costs a proportionally
+    larger window for a replayed code.
     """
     if not secret or not code:
         return False
     try:
-        return pyotp.TOTP(secret).verify(code.strip().replace(" ", ""))
+        return pyotp.TOTP(secret).verify(code.strip().replace(" ", ""), valid_window=1)
     except Exception:
         # A malformed secret should fail the check, not the request.
         return False
