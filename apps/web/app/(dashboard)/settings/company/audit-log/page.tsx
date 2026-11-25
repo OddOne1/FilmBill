@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import { fillFrom } from '@/lib/date-fields'
 import { Loader2 } from 'lucide-react'
 import { api, ApiError } from '@/lib/api'
 import { Input } from '@/components/ui/input'
@@ -208,6 +209,8 @@ export default function AuditLogPage() {
           <Input
             type="date"
             value={filters.to}
+            min={filters.from || undefined}
+            onFocus={fillFrom(filters.to, filters.from, (next) => setFilter('to', next))}
             onChange={(e) => setFilter('to', e.target.value)}
           />
         </Field>

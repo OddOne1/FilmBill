@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import { fillFrom } from '@/lib/date-fields'
 import { X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
@@ -99,11 +100,22 @@ export function CreateStripForm({
       </label>
       <label className="text-xs text-text-secondary">
         From
-        <Input aria-label="New strip from" type="date" value={from} onChange={(event) => setFrom(event.target.value)} className="h-9" />
+        <Input
+          aria-label="New strip from"
+          type="date"
+          value={from}
+          onChange={(event) => {
+            const next = event.target.value
+            setFrom(next)
+            // The last day follows: a strip of one day until it is moved on.
+            if (next && (!to || to < next)) setTo(next)
+          }}
+          className="h-9"
+        />
       </label>
       <label className="text-xs text-text-secondary">
         To
-        <Input aria-label="New strip to" type="date" value={to} onChange={(event) => setTo(event.target.value)} className="h-9" />
+        <Input aria-label="New strip to" type="date" value={to} min={from || undefined} onFocus={fillFrom(to, from, setTo)} onChange={(event) => setTo(event.target.value)} className="h-9" />
       </label>
       <label className="flex items-center gap-1.5 pb-2 text-sm text-text-secondary">
         <input type="checkbox" checked={weekendsOff} onChange={(event) => setWeekendsOff(event.target.checked)} />

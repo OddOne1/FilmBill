@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import { fillFrom } from '@/lib/date-fields'
 import { ChevronDown, ChevronRight, Copy, Plane, Trash2, X } from 'lucide-react'
 import { api, ApiError } from '@/lib/api'
 import { Input } from '@/components/ui/input'
@@ -358,7 +359,7 @@ export function StripPanel({
           >
             <label className="text-xs text-text-secondary">
               Move to start on
-              <Input aria-label="Move to start on" type="date" value={moveTo} onChange={(event) => setMoveTo(event.target.value)} className="h-8" />
+              <Input aria-label="Move to start on" type="date" value={moveTo} onFocus={fillFrom(moveTo, strip.start_date, setMoveTo)} onChange={(event) => setMoveTo(event.target.value)} className="h-8" />
             </label>
             <ActionButton type="submit" disabled={!moveTo}>
               Move
@@ -377,7 +378,7 @@ export function StripPanel({
           >
             <label className="text-xs text-text-secondary">
               Duplicate to start on
-              <Input aria-label="Duplicate to start on" type="date" value={duplicateTo} onChange={(event) => setDuplicateTo(event.target.value)} className="h-8" />
+              <Input aria-label="Duplicate to start on" type="date" value={duplicateTo} onFocus={fillFrom(duplicateTo, strip.end_date, setDuplicateTo)} onChange={(event) => setDuplicateTo(event.target.value)} className="h-8" />
             </label>
             <ActionButton type="submit" disabled={!duplicateTo}>
               <Copy className="h-3 w-3" /> Duplicate

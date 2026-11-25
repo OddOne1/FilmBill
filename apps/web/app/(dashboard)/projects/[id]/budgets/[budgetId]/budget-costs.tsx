@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import { fillFrom } from '@/lib/date-fields'
 import { Download, Upload } from 'lucide-react'
 import { api, ApiError } from '@/lib/api'
 import { formatAmount } from '@/lib/money'
@@ -285,6 +286,7 @@ export function EntryForm({
               aria-label="Paid on"
               type="date"
               value={paidOn}
+              onFocus={fillFrom(paidOn, date, setPaidOn)}
               onChange={(event) => setPaidOn(event.target.value)}
               className="rounded border border-border bg-transparent px-2 py-1 text-xs"
             />
@@ -588,6 +590,8 @@ export function CostsTab({
           aria-label="To date"
           type="date"
           value={filters.date_to}
+          min={filters.date_from || undefined}
+          onFocus={fillFrom(filters.date_to, filters.date_from, (next) => setFilters({ ...filters, date_to: next }))}
           onChange={(event) => setFilters({ ...filters, date_to: event.target.value })}
           className="rounded border border-border bg-transparent px-2 py-1"
         />

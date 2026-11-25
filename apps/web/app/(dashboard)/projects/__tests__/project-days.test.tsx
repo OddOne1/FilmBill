@@ -249,6 +249,23 @@ describe('creating a strip', () => {
     expect((within(form).getByLabelText('New strip to') as HTMLInputElement).value).toBe('2026-03-19')
   })
 
+  it('the last day follows the first, so its picker opens on the right day', async () => {
+    await openDays()
+    fireEvent.click(screen.getByText('Add strip'))
+    const form = await screen.findByTestId('create-strip-form')
+    const from = within(form).getByLabelText('New strip from') as HTMLInputElement
+    const to = within(form).getByLabelText('New strip to') as HTMLInputElement
+    fireEvent.change(from, { target: { value: '2027-02-22' } })
+    expect(to.value).toBe('2027-02-22')
+    expect(to.min).toBe('2027-02-22')
+    fireEvent.change(to, { target: { value: '2027-02-28' } })
+    // A later first day pulls the last day along only when it would be before it.
+    fireEvent.change(from, { target: { value: '2027-02-24' } })
+    expect(to.value).toBe('2027-02-28')
+    fireEvent.change(from, { target: { value: '2027-03-02' } })
+    expect(to.value).toBe('2027-03-02')
+  })
+
   it('from the keyboard with the Add strip button and date fields', async () => {
     await openDays()
     fireEvent.click(screen.getByText('Add strip'))

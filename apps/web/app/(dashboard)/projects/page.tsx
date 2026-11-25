@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import { fillFrom } from '@/lib/date-fields'
 import Link from 'next/link'
 import { Loader2, Plus, Search } from 'lucide-react'
 import { api, ApiError } from '@/lib/api'
@@ -328,6 +329,8 @@ function NewProjectForm({
           aria-label="End date"
           type="date"
           value={endDate}
+          min={startDate || undefined}
+          onFocus={fillFrom(endDate, startDate, setEndDate)}
           onChange={(e) => setEndDate(e.target.value)}
         />
       </label>

@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import { fillFrom } from '@/lib/date-fields'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { ArrowLeft, Loader2 } from 'lucide-react'
@@ -281,6 +282,10 @@ function OverviewTab({
           aria-label="End date"
           type="date"
           value={String(value('end_date'))}
+          min={String(value('start_date')) || undefined}
+          onFocus={fillFrom(String(value('end_date')), String(value('start_date')), (next) =>
+            setDraft({ ...draft, end_date: next }),
+          )}
           onChange={(e) => setDraft({ ...draft, end_date: e.target.value || null })}
         />
       </label>
