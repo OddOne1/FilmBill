@@ -4,7 +4,7 @@ import * as React from 'react'
 import { X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
-import { dayLabel, monthLabel, shiftMonth, type IsoDate } from '@/lib/calendar-dates'
+import { dayLabel, monthLabel, type IsoDate } from '@/lib/calendar-dates'
 import type { BlockCreate, CalendarStrip } from '@/types'
 import { DAY_TYPES } from '../../projects-chrome'
 import { stripName, typeColour, typeLabel } from './shared'
@@ -124,68 +124,76 @@ export function CreateStripForm({
   )
 }
 
-// ─── The whole project at a glance ──────────────────────────────────────────
+// ─── The whole project at a glance: only the booked days ────────────────────
 
-/** One small bar per month from the project's first to its last day; each
- *  date tinted by the types planned on it. Click a month to jump there.
- *  Drawing only — it counts nothing. */
-export function ProjectOverview({
-  months,
-  current,
+/**
+ * Every date that has a planned day, and only those, as small blocks in date
+ * order — grouped by month with a gap between months, the short date under
+ * each block. A date with days of several types (two strips on one date)
+ * shows each type's colour. Click a block and the calendar moves to its
+ * month (Mathias, 2026-11-25: glance at the whole production without
+ * paging through months).
+ *
+ * Drawing only — it counts nothing; the counts are the API's.
+ */
+export function BookedDays({
   typesByDate,
+  currentMonth,
   onPick,
 }: {
-  months: string[]
-  current: string
   typesByDate: Map<IsoDate, string[]>
-  onPick: (month: string) => void
+  currentMonth: string
+  onPick: (date: IsoDate) => void
 }) {
+  const dates = Array.from(typesByDate.keys()).sort()
+  if (dates.length === 0) return null
+  const months: { month: string; dates: IsoDate[] }[] = []
+  for (const date of dates) {
+    const month = date.slice(0, 7)
+    const last = months[months.length - 1]
+    if (last && last.month === month) last.dates.push(date)
+    else months.push({ month, dates: [date] })
+  }
   return (
-    <div data-testid="project-overview" className="flex gap-1.5 overflow-x-auto pb-1">
-      {months.map((month) => {
-        const year = Number(month.slice(0, 4))
-        const index = Number(month.slice(5, 7))
-        const length = new Date(Date.UTC(year, index, 0)).getUTCDate()
-        return (
-          <button
-            key={month}
-            type="button"
-            data-testid="overview-month"
-            data-month={month}
-            aria-current={month === current ? 'date' : undefined}
-            aria-label={`Show ${monthLabel(month)}`}
-            onClick={() => onPick(month)}
-            className={cn(
-              'min-w-[7.5rem] shrink-0 rounded-md border px-2 py-1.5 text-left',
-              month === current ? 'border-accent bg-bg-secondary' : 'border-border hover:bg-bg-secondary',
-            )}
-          >
-            <span className="block text-[11px] font-medium text-text-secondary">{monthLabel(month, 'short')}</span>
-            <span className="mt-1 flex gap-px">
-              {Array.from({ length }, (_, offset) => {
-                const date = `${month}-${String(offset + 1).padStart(2, '0')}`
-                const types = typesByDate.get(date) ?? []
+    <nav data-testid="booked-days" aria-label="Booked days" className="rounded-md border border-border p-3">
+      <p className="mb-2 text-xs font-medium text-text-secondary">Booked days</p>
+      <div className="flex flex-wrap items-end gap-x-5 gap-y-3">
+        {months.map(({ month, dates: inMonth }) => (
+          <div key={month} data-testid="booked-month" data-month={month}>
+            <p className={cn('mb-1 text-[11px]', month === currentMonth ? 'font-semibold text-text-primary' : 'text-text-tertiary')}>
+              {monthLabel(month, 'short')}
+            </p>
+            <div className="flex gap-0.5">
+              {inMonth.map((date) => {
+                const types = Array.from(new Set(typesByDate.get(date) ?? []))
                 return (
-                  <span
+                  <button
                     key={date}
-                    data-date={types.length ? date : undefined}
-                    className={cn('h-3 flex-1 rounded-[1px]', types.length ? typeColour(types[0]) : 'bg-bg-tertiary')}
-                  />
+                    type="button"
+                    data-testid="booked-day"
+                    data-date={date}
+                    aria-label={`${dayLabel(date, true)}: ${types.map(typeLabel).join(', ')}. Show in the calendar`}
+                    title={`${dayLabel(date, true)} · ${types.map(typeLabel).join(', ')}`}
+                    onClick={() => onPick(date)}
+                    className="group flex w-8 flex-col items-center gap-0.5 rounded px-0.5 pb-0.5 pt-1 hover:bg-bg-secondary"
+                  >
+                    <span className="flex h-3.5 w-full flex-col overflow-hidden rounded-sm">
+                      {types.map((type) => (
+                        <span key={type} className={cn('w-full flex-1', typeColour(type))} />
+                      ))}
+                    </span>
+                    <span className="text-[10px] tabular-nums leading-none text-text-secondary group-hover:text-text-primary">
+                      {`${date.slice(8, 10)}.${date.slice(5, 7)}.`}
+                    </span>
+                  </button>
                 )
               })}
-            </span>
-          </button>
-        )
-      })}
-    </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </nav>
   )
-}
-
-/** The months from `first` to `last`, at most 24. */
-export function monthsBetween(first: string, last: string): string[] {
-  const months: string[] = []
-  for (let month = first; month <= last && months.length < 24; month = shiftMonth(month, 1)) months.push(month)
-  return months
 }
 
 // ─── "+N": every strip on one day ───────────────────────────────────────────

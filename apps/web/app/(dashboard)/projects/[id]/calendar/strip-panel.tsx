@@ -427,7 +427,14 @@ function Field({ label, className, children }: { label: string; className?: stri
   )
 }
 
-/** Saves on blur (or Enter), only when the value changed. */
+/** Saves on blur (or Enter), only when the value changed.
+ *
+ *  A time field ALSO saves shortly after a complete time is entered: in
+ *  Chrome, Tab inside a time field moves between its hour and minute parts
+ *  rather than leaving it, so a time that saved only on blur could sit
+ *  unsaved while the person had moved on (found in the B2a preview). Date
+ *  fields do not, because a half-typed year is a valid date and each one
+ *  would resize the strip. */
 function TextInput({
   label,
   value,
@@ -443,6 +450,21 @@ function TextInput({
   type?: string
   placeholder?: string
 }) {
+  const saved = React.useRef(value)
+  const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+  React.useEffect(() => {
+    saved.current = value
+  }, [value])
+  React.useEffect(() => () => {
+    if (timer.current) clearTimeout(timer.current)
+  }, [])
+  const commit = (next: string) => {
+    if (timer.current) clearTimeout(timer.current)
+    timer.current = null
+    if (next === saved.current) return
+    saved.current = next
+    void onSave(next)
+  }
   if (!canEdit) {
     return <span className="block truncate text-sm text-text-primary">{value || placeholder || '—'}</span>
   }
@@ -453,13 +475,16 @@ function TextInput({
       defaultValue={value}
       placeholder={placeholder}
       key={value}
+      onChange={(event) => {
+        if (type !== 'time') return
+        const next = event.target.value
+        if (timer.current) clearTimeout(timer.current)
+        timer.current = setTimeout(() => commit(next), 800)
+      }}
       onKeyDown={(event) => {
         if (event.key === 'Enter') (event.target as HTMLInputElement).blur()
       }}
-      onBlur={(event) => {
-        if (event.target.value === value) return
-        void onSave(event.target.value)
-      }}
+      onBlur={(event) => commit(event.target.value)}
       className="h-9"
     />
   )

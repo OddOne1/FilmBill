@@ -186,6 +186,26 @@ describe('the calendar', () => {
     expect(within(await screen.findByTestId('strip-panel')).getAllByText('Recce').length).toBeGreaterThan(0)
   })
 
+  it('lists only the booked days below the calendar, by month, and jumps there on click', async () => {
+    current = calendar([
+      MAIN,
+      strip('b-may', '2026-05-11', '2026-05-12', { type: 'post', label: 'Grade' }),
+      strip('b-bts', '2026-03-04', '2026-03-04', { label: 'BTS' }, { '2026-03-04': 'travel' }),
+    ])
+    await openDays()
+    const booked = screen.getByTestId('booked-days')
+    // Six dates, not the 92 of March–May: only days that are planned.
+    const blocks = within(booked).getAllByTestId('booked-day')
+    expect(blocks.map((block) => block.textContent)).toEqual(['02.03.', '03.03.', '04.03.', '05.03.', '11.05.', '12.05.'])
+    expect(within(booked).getAllByTestId('booked-month').map((m) => m.getAttribute('data-month'))).toEqual(['2026-03', '2026-05'])
+    // 4 March is shoot in one strip and travel in the other: both colours.
+    expect(blocks[2].getAttribute('aria-label')).toContain('Shoot, Travel')
+
+    fireEvent.click(blocks[4])
+    expect(screen.getByTestId('calendar-month').textContent).toBe('May 2026')
+    expect(bar('b-may')).not.toBeNull()
+  })
+
   it('marks today and the project’s start and end', async () => {
     await openDays()
     expect(within(cell('2026-03-02')).getByTestId('project-start-mark')).toBeInTheDocument()
@@ -455,6 +475,19 @@ describe('editing one day', () => {
     fireEvent.change(end, { target: { value: '21:00' } })
     fireEvent.blur(end)
     await waitFor(() => expect(api.patch).toHaveBeenCalledWith('/projects/p1/days/b-main-2026-03-02', { wrap_time: '21:00' }))
+  })
+
+  it('saves a time without the field being left (Tab stays inside a time field in Chrome)', async () => {
+    vi.mocked(api.patch).mockResolvedValue({} as never)
+    await openDays()
+    fireEvent.click(stripDay('b-main', '2026-03-03'))
+    const details = await screen.findByTestId('day-details')
+    fireEvent.change(within(details).getByLabelText('End time 2026-03-03'), { target: { value: '19:30' } })
+    await waitFor(
+      () => expect(api.patch).toHaveBeenCalledWith('/projects/p1/days/b-main-2026-03-03', { wrap_time: '19:30' }),
+      { timeout: 3000 },
+    )
+    expect(api.patch).toHaveBeenCalledTimes(1)
   })
 
   it('a day added on its own (outside any strip) is edited and removed from its panel', async () => {

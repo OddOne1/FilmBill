@@ -16,7 +16,7 @@ import {
 } from '@/lib/calendar-dates'
 import type { BlockChange, BlockCreate, CalendarStrip, Project, ProjectCalendar } from '@/types'
 import { DAY_TYPES } from '../projects-chrome'
-import { CreateStripForm, DayStripsList, ProjectOverview, monthsBetween } from './calendar/calendar-parts'
+import { BookedDays, CreateStripForm, DayStripsList } from './calendar/calendar-parts'
 import { MonthGrid } from './calendar/month-grid'
 import { StripPanel, type StripActions } from './calendar/strip-panel'
 import { countsSentence, typeColour, typeLabel } from './calendar/shared'
@@ -24,8 +24,9 @@ import { countsSentence, typeColour, typeLabel } from './calendar/shared'
 /**
  * The Days tab: the project calendar (B2a).
  *
- * A month grid with the project's strips drawn across their days, an
- * overview of the whole project above it to jump between months, and a side
+ * A month grid with the project's strips drawn across their days, the
+ * booked days of the whole project in a compact strip below it (click one to
+ * jump to its month), and a side
  * panel for the strip that is open — with the day that was clicked open for
  * editing. Every day is edited here: its type, location, start and end time
  * and notes. (The old per-day table was dropped at Mathias's request,
@@ -66,6 +67,7 @@ export function DaysTab({
   const [error, setError] = React.useState<string | null>(null)
   const [message, setMessage] = React.useState<string | null>(null)
   const today = React.useMemo(() => todayIso(), [])
+  const gridTop = React.useRef<HTMLDivElement>(null)
 
   const load = React.useCallback(async () => {
     try {
@@ -178,16 +180,6 @@ export function DaysTab({
     return map
   }, [strips])
 
-  const overviewMonths = React.useMemo(() => {
-    let first = project.start_date
-    let last = project.end_date ?? project.start_date
-    for (const strip of strips) {
-      first = minDate(first, strip.start_date)
-      last = maxDate(last, strip.end_date)
-    }
-    return monthsBetween(first.slice(0, 7), last.slice(0, 7))
-  }, [project.start_date, project.end_date, strips])
-
   return (
     <div className="mt-5">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
@@ -214,11 +206,7 @@ export function DaysTab({
         </div>
       ) : (
         <>
-          <div className="mt-3">
-            <ProjectOverview months={overviewMonths} current={shownMonth} typesByDate={typesByDate} onPick={setMonth} />
-          </div>
-
-          <div className="mt-3 flex flex-wrap items-center gap-2">
+          <div ref={gridTop} className="mt-3 flex flex-wrap items-center gap-2">
             <button type="button" aria-label="Previous month" onClick={() => setMonth(shiftMonth(shownMonth, -1))} className="rounded-md border border-border p-1.5 hover:bg-bg-secondary">
               <ChevronLeft className="h-4 w-4" />
             </button>
@@ -341,6 +329,16 @@ export function DaysTab({
             )}
           </div>
 
+          <div className="mt-4">
+            <BookedDays
+              typesByDate={typesByDate}
+              currentMonth={shownMonth}
+              onPick={(date) => {
+                setMonth(date.slice(0, 7))
+                gridTop.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+              }}
+            />
+          </div>
         </>
       )}
 
