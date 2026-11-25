@@ -337,6 +337,15 @@ export type ProjectDayWrite = Schemas['ProjectDayWrite']
 export type ProjectDayUpdate = Schemas['ProjectDayUpdate']
 export type ProjectDayRangeRequest = Schemas['ProjectDayRangeRequest']
 export type ProjectDayRangeResponse = Schemas['ProjectDayRangeResponse']
+// B2a: the calendar — strips over days.
+export type ProjectCalendar = Schemas['ProjectCalendarResponse']
+export type CalendarStrip = Schemas['CalendarStripResponse']
+export type CalendarDay = Schemas['CalendarDayResponse']
+export type BlockCreate = Schemas['BlockCreate']
+export type BlockUpdate = Schemas['BlockUpdate']
+export type BlockResize = Schemas['BlockResize']
+export type BlockDaysRequest = Schemas['BlockDaysRequest']
+export type BlockChange = Schemas['BlockChangeResponse']
 /** `prep` · `shoot` · `travel` · `wrap` · `post` · `office` · `off`. From the
  *  schema, so a type added on the server cannot be missed here. */
 export type ProjectDayType = NonNullable<ProjectDayWrite['type']>

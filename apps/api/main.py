@@ -19,6 +19,7 @@ from .routers import (
     notifications,
     number_series,
     parties,
+    project_calendar,
     projects,
     setup,
     site_settings,
@@ -92,6 +93,7 @@ app.include_router(companies.router)
 app.include_router(number_series.router)
 app.include_router(parties.router)
 app.include_router(projects.router)
+app.include_router(project_calendar.router)
 app.include_router(budgets.router)
 app.include_router(budget_tracking.router)
 app.include_router(catalog.router)

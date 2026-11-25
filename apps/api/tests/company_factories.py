@@ -674,6 +674,51 @@ def make_project_day(
     return row
 
 
+def make_project_block(
+    db,
+    company: Company,
+    project,
+    *,
+    start_date=None,
+    end_date=None,
+    type: str = "shoot",
+    label: Optional[str] = None,
+):
+    """A strip (B2a) with one active day of its own type per date."""
+    from datetime import date as _date, timedelta as _timedelta
+
+    from apps.api.models.project import ProjectBlock, ProjectDay
+
+    start = start_date or _date(2026, 7, 6)
+    end = end_date or start
+    block = ProjectBlock(
+        company_id=company.id,
+        project_id=project.id,
+        type=type,
+        label=label,
+        start_date=start,
+        end_date=end,
+        is_active=True,
+    )
+    db.add(block)
+    db.flush()
+    day = start
+    while day <= end:
+        db.add(
+            ProjectDay(
+                company_id=company.id,
+                project_id=project.id,
+                block_id=block.id,
+                date=day,
+                type=type,
+                is_active=True,
+            )
+        )
+        day += _timedelta(days=1)
+    db.flush()
+    return block
+
+
 def make_budget(
     db,
     company: Company,

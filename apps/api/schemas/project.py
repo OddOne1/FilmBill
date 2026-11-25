@@ -199,3 +199,165 @@ class ProjectStatusRequest(BaseModel):
     #: Written into the audit event. Optional, because requiring a reason for
     #: every status change is how a field becomes "x".
     reason: Optional[str] = Field(default=None, max_length=1000)
+
+
+# ─── The calendar: strips over days (B2a) ───────────────────────────────────
+
+#: How a new strip fills Saturdays and Sundays: as `off` days, or as days of
+#: the strip's own type.
+WeekendRule = Literal["off", "same"]
+
+
+class CalendarDayResponse(BaseModel):
+    """One day as the calendar draws it.
+
+    `location`, `call_time` and `wrap_time` are the day's OWN values; the
+    `effective_*` ones fall back to the strip's defaults, which is what a day
+    with nothing of its own shows. `is_override` says the day's type is not
+    its strip's main type — a travel day inside a shoot strip.
+    """
+
+    id: uuid.UUID
+    block_id: Optional[uuid.UUID] = None
+    date: dt.date
+    type: str
+    location: Optional[str] = None
+    call_time: Optional[dt.time] = None
+    wrap_time: Optional[dt.time] = None
+    notes: Optional[str] = None
+    effective_location: Optional[str] = None
+    effective_call_time: Optional[dt.time] = None
+    effective_wrap_time: Optional[dt.time] = None
+    is_override: bool = False
+    #: Notes, a location or a time of its own — what a resize asks about
+    #: before it takes the day out.
+    has_own_data: bool = False
+    updated_at: dt.datetime
+
+
+class CalendarStripResponse(BaseModel):
+    """A strip, or a day outside any strip drawn as a one-day strip.
+
+    `kind = "day"` is a day made through the old `/days` endpoints: its `id`
+    is the DAY's id, it has no label or defaults, and it is edited through
+    the day endpoints rather than the strip ones.
+    """
+
+    id: uuid.UUID
+    kind: Literal["strip", "day"]
+    type: str
+    label: Optional[str] = None
+    start_date: dt.date
+    end_date: dt.date
+    location: Optional[str] = None
+    default_call_time: Optional[dt.time] = None
+    default_wrap_time: Optional[dt.time] = None
+    notes: Optional[str] = None
+    position: Optional[int] = None
+    is_active: bool = True
+    days: list[CalendarDayResponse]
+    #: `type → days` inside this strip, counted by the API like every count.
+    counts: dict[str, int] = Field(default_factory=dict)
+
+
+class ProjectCalendarResponse(BaseModel):
+    project_id: uuid.UUID
+    project_start: dt.date
+    project_end: Optional[dt.date] = None
+    #: The range asked for, or the project's whole span when none was.
+    range_start: Optional[dt.date] = None
+    range_end: Optional[dt.date] = None
+    strips: list[CalendarStripResponse]
+    #: `type → distinct dates` for the WHOLE project, whatever the range —
+    #: the same number the budget's `days:<type>` globals count. The screen
+    #: never counts.
+    counts: dict[str, int]
+
+
+class BlockCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: ProjectDayType = "shoot"
+    label: Optional[str] = Field(default=None, max_length=255)
+    start_date: dt.date
+    end_date: dt.date
+    location: Optional[str] = Field(default=None, max_length=255)
+    default_call_time: Optional[dt.time] = None
+    default_wrap_time: Optional[dt.time] = None
+    notes: Optional[str] = None
+    weekends: WeekendRule = "same"
+
+
+class BlockUpdate(BaseModel):
+    """A strip's own fields. Its dates move through `move` and `resize`,
+    which say what they do to its days; changing the main type carries every
+    day of the old main type along and leaves overrides alone."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    label: Optional[str] = Field(default=None, max_length=255)
+    type: Optional[ProjectDayType] = None
+    location: Optional[str] = Field(default=None, max_length=255)
+    default_call_time: Optional[dt.time] = None
+    default_wrap_time: Optional[dt.time] = None
+    notes: Optional[str] = None
+    position: Optional[int] = None
+
+
+class BlockMove(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    start_date: dt.date
+
+
+class BlockResize(BaseModel):
+    """New start and/or end. Growing adds days of the main type; shrinking
+    takes days out, and asks first (`confirm`) when one of them has notes, a
+    location or a time of its own."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    start_date: Optional[dt.date] = None
+    end_date: Optional[dt.date] = None
+    confirm: bool = False
+
+
+class BlockDayEntry(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    date: dt.date
+    #: NULL returns the day to the strip's main type.
+    type: Optional[ProjectDayType] = None
+
+
+class BlockDaysRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    days: list[BlockDayEntry] = Field(min_length=1, max_length=731)
+
+
+class BlockDuplicate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    start_date: dt.date
+
+
+class BlockChangeResponse(BaseModel):
+    """What a strip action did.
+
+    `applied = False` with `needs_confirm = True` is a resize that would take
+    out days carrying data: nothing changed, `days_with_data` lists them,
+    and sending the same request with `confirm: true` goes ahead.
+    """
+
+    applied: bool = True
+    needs_confirm: bool = False
+    detail: str
+    strip: Optional[CalendarStripResponse] = None
+    days_with_data: list[CalendarDayResponse] = Field(default_factory=list)
+    added: int = 0
+    removed: int = 0
+    changed: int = 0
+    #: The project's counts after the action, so the screen can update its
+    #: header from this response rather than counting.
+    counts: dict[str, int] = Field(default_factory=dict)

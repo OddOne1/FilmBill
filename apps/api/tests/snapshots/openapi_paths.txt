@@ -52,6 +52,7 @@ GET /parties/{party_id}/vat-checks
 GET /projects
 GET /projects/{project_id}
 GET /projects/{project_id}/budgets
+GET /projects/{project_id}/calendar
 GET /projects/{project_id}/days
 GET /setup/status
 GET /site-settings
@@ -87,6 +88,7 @@ PATCH /email-settings
 PATCH /parties/{party_id}
 PATCH /parties/{party_id}/tax-ids/{tax_id_id}
 PATCH /projects/{project_id}
+PATCH /projects/{project_id}/blocks/{block_id}
 PATCH /projects/{project_id}/days/{day_id}
 PATCH /site-settings
 PATCH /users/{user_id}
@@ -180,6 +182,11 @@ POST /parties/{party_id}/tax-ids/{tax_id_id}/reactivate
 POST /parties/{party_id}/tax-ids/{tax_id_id}/retire
 POST /parties/{party_id}/tax-preview
 POST /projects
+POST /projects/{project_id}/blocks
+POST /projects/{project_id}/blocks/{block_id}/duplicate
+POST /projects/{project_id}/blocks/{block_id}/move
+POST /projects/{project_id}/blocks/{block_id}/remove
+POST /projects/{project_id}/blocks/{block_id}/resize
 POST /projects/{project_id}/budgets
 POST /projects/{project_id}/budgets/example
 POST /projects/{project_id}/days
@@ -196,3 +203,4 @@ PUT /budgets/{budget_id}/production-fee
 PUT /catalog/items/{item_id}/rates
 PUT /catalog/rental-factor-groups/{group_id}/factors
 PUT /company/production-fee
+PUT /projects/{project_id}/blocks/{block_id}/days

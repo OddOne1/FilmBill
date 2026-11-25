@@ -50,6 +50,7 @@ from .company_factories import (
     make_party,
     make_party_tax_id,
     make_project,
+    make_project_block,
     make_project_day,
     make_rental_factor_group,
     make_superadmin,
@@ -324,6 +325,27 @@ CASES: dict[str, object] = {
         "body": {"location": "Stolen"}
     },
     "POST /projects/{project_id}/days/{day_id}/remove": {"body": None},
+    # B2a. The calendar and its strips. `{block_id}` is a strip of B's, in
+    # B's project; a handler that looked a strip up by id alone would move,
+    # resize or remove B's shooting schedule.
+    "GET /projects/{project_id}/calendar": {"body": None},
+    "POST /projects/{project_id}/blocks": {
+        "body": {"type": "shoot", "start_date": "2026-07-01", "end_date": "2026-07-02"}
+    },
+    "PATCH /projects/{project_id}/blocks/{block_id}": {"body": {"label": "Stolen"}},
+    "POST /projects/{project_id}/blocks/{block_id}/move": {
+        "body": {"start_date": "2026-08-03"}
+    },
+    "POST /projects/{project_id}/blocks/{block_id}/resize": {
+        "body": {"end_date": "2026-07-09"}
+    },
+    "PUT /projects/{project_id}/blocks/{block_id}/days": {
+        "body": {"days": [{"date": "2026-07-06", "type": "travel"}]}
+    },
+    "POST /projects/{project_id}/blocks/{block_id}/duplicate": {
+        "body": {"start_date": "2026-09-07"}
+    },
+    "POST /projects/{project_id}/blocks/{block_id}/remove": {"body": None},
     # A2's Budget. Twenty-four operations, every `{budget_id}`,
     # `{section_id}`, `{line_id}`, `{global_id}` and `{adjustment_id}`
     # substituted with a row belonging to company B — a handler that dropped
@@ -507,6 +529,7 @@ OTHER_COMPANY_ROWS = {
     "{series_id}": "series_in_b",
     "{project_id}": "project_in_b",
     "{day_id}": "day_in_b",
+    "{block_id}": "block_in_b",
     "{budget_id}": "budget_in_b",
     "{section_id}": "section_in_b",
     "{line_id}": "line_in_b",
@@ -633,6 +656,7 @@ def two_companies(pg_db):
     # shooting schedule.
     project_in_b = make_project(pg_db, company_b, client=party_in_b)
     day_in_b = make_project_day(pg_db, company_b, project_in_b)
+    block_in_b = make_project_block(pg_db, company_b, project_in_b)
     # And a budget of B's with one of everything in it, so each
     # `/budgets/...{id}` lookup has a real neighbour to find rather than an
     # id that names nothing.
@@ -680,6 +704,7 @@ def two_companies(pg_db):
         "group_in_b": group_in_b,
         "project_in_b": project_in_b,
         "day_in_b": day_in_b,
+        "block_in_b": block_in_b,
         "budget_in_b": budget_in_b,
         "section_in_b": section_in_b,
         "line_in_b": line_in_b,

@@ -3627,6 +3627,139 @@ export interface paths {
         patch: operations["update_project_projects__project_id__patch"];
         trace?: never;
     };
+    "/projects/{project_id}/blocks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Block */
+        post: operations["create_block_projects__project_id__blocks_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}/blocks/{block_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Block */
+        patch: operations["update_block_projects__project_id__blocks__block_id__patch"];
+        trace?: never;
+    };
+    "/projects/{project_id}/blocks/{block_id}/days": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Block Days
+         * @description Mark days as travel, off, any type — or `null` for the main type.
+         */
+        put: operations["set_block_days_projects__project_id__blocks__block_id__days_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}/blocks/{block_id}/duplicate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Duplicate Block */
+        post: operations["duplicate_block_projects__project_id__blocks__block_id__duplicate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}/blocks/{block_id}/move": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Move Block */
+        post: operations["move_block_projects__project_id__blocks__block_id__move_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}/blocks/{block_id}/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Remove Block
+         * @description The strip and its days out of the plan; the response counts them.
+         */
+        post: operations["remove_block_projects__project_id__blocks__block_id__remove_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}/blocks/{block_id}/resize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resize Block
+         * @description Growing adds days of the main type; shrinking takes days out.
+         *
+         *     When a day that would be taken out carries notes, a location or a time,
+         *     the answer is `applied: false, needs_confirm: true` with those days
+         *     listed, and NOTHING changes until the same request comes back with
+         *     `confirm: true`.
+         */
+        post: operations["resize_block_projects__project_id__blocks__block_id__resize_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{project_id}/budgets": {
         parameters: {
             query?: never;
@@ -3667,6 +3800,23 @@ export interface paths {
          *     was not is the kind of thing that ends up quoted to a client.
          */
         post: operations["create_example_budget_projects__project_id__budgets_example_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}/calendar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Calendar */
+        get: operations["read_calendar_projects__project_id__calendar_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4428,6 +4578,155 @@ export interface components {
             is_default?: boolean | null;
             /** Label */
             label?: string | null;
+        };
+        /**
+         * BlockChangeResponse
+         * @description What a strip action did.
+         *
+         *     `applied = False` with `needs_confirm = True` is a resize that would take
+         *     out days carrying data: nothing changed, `days_with_data` lists them,
+         *     and sending the same request with `confirm: true` goes ahead.
+         */
+        BlockChangeResponse: {
+            /**
+             * Added
+             * @default 0
+             */
+            added: number;
+            /**
+             * Applied
+             * @default true
+             */
+            applied: boolean;
+            /**
+             * Changed
+             * @default 0
+             */
+            changed: number;
+            /** Counts */
+            counts?: {
+                [key: string]: number;
+            };
+            /** Days With Data */
+            days_with_data?: components["schemas"]["CalendarDayResponse"][];
+            /** Detail */
+            detail: string;
+            /**
+             * Needs Confirm
+             * @default false
+             */
+            needs_confirm: boolean;
+            /**
+             * Removed
+             * @default 0
+             */
+            removed: number;
+            strip?: components["schemas"]["CalendarStripResponse"] | null;
+        };
+        /** BlockCreate */
+        BlockCreate: {
+            /** Default Call Time */
+            default_call_time?: string | null;
+            /** Default Wrap Time */
+            default_wrap_time?: string | null;
+            /**
+             * End Date
+             * Format: date
+             */
+            end_date: string;
+            /** Label */
+            label?: string | null;
+            /** Location */
+            location?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /**
+             * Type
+             * @default shoot
+             * @enum {string}
+             */
+            type: "prep" | "shoot" | "travel" | "wrap" | "post" | "office" | "off";
+            /**
+             * Weekends
+             * @default same
+             * @enum {string}
+             */
+            weekends: "off" | "same";
+        };
+        /** BlockDayEntry */
+        BlockDayEntry: {
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Type */
+            type?: ("prep" | "shoot" | "travel" | "wrap" | "post" | "office" | "off") | null;
+        };
+        /** BlockDaysRequest */
+        BlockDaysRequest: {
+            /** Days */
+            days: components["schemas"]["BlockDayEntry"][];
+        };
+        /** BlockDuplicate */
+        BlockDuplicate: {
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+        };
+        /** BlockMove */
+        BlockMove: {
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+        };
+        /**
+         * BlockResize
+         * @description New start and/or end. Growing adds days of the main type; shrinking
+         *     takes days out, and asks first (`confirm`) when one of them has notes, a
+         *     location or a time of its own.
+         */
+        BlockResize: {
+            /**
+             * Confirm
+             * @default false
+             */
+            confirm: boolean;
+            /** End Date */
+            end_date?: string | null;
+            /** Start Date */
+            start_date?: string | null;
+        };
+        /**
+         * BlockUpdate
+         * @description A strip's own fields. Its dates move through `move` and `resize`,
+         *     which say what they do to its days; changing the main type carries every
+         *     day of the old main type along and leaves overrides alone.
+         */
+        BlockUpdate: {
+            /** Default Call Time */
+            default_call_time?: string | null;
+            /** Default Wrap Time */
+            default_wrap_time?: string | null;
+            /** Label */
+            label?: string | null;
+            /** Location */
+            location?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Position */
+            position?: number | null;
+            /** Type */
+            type?: ("prep" | "shoot" | "travel" | "wrap" | "post" | "office" | "off") | null;
         };
         /** Body_apply_actuals_import_budgets__budget_id__actuals_import_post */
         Body_apply_actuals_import_budgets__budget_id__actuals_import_post: {
@@ -6090,6 +6389,115 @@ export interface components {
             message: string;
             /** Where */
             where?: string | null;
+        };
+        /**
+         * CalendarDayResponse
+         * @description One day as the calendar draws it.
+         *
+         *     `location`, `call_time` and `wrap_time` are the day's OWN values; the
+         *     `effective_*` ones fall back to the strip's defaults, which is what a day
+         *     with nothing of its own shows. `is_override` says the day's type is not
+         *     its strip's main type — a travel day inside a shoot strip.
+         */
+        CalendarDayResponse: {
+            /** Block Id */
+            block_id?: string | null;
+            /** Call Time */
+            call_time?: string | null;
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Effective Call Time */
+            effective_call_time?: string | null;
+            /** Effective Location */
+            effective_location?: string | null;
+            /** Effective Wrap Time */
+            effective_wrap_time?: string | null;
+            /**
+             * Has Own Data
+             * @default false
+             */
+            has_own_data: boolean;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Is Override
+             * @default false
+             */
+            is_override: boolean;
+            /** Location */
+            location?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Type */
+            type: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Wrap Time */
+            wrap_time?: string | null;
+        };
+        /**
+         * CalendarStripResponse
+         * @description A strip, or a day outside any strip drawn as a one-day strip.
+         *
+         *     `kind = "day"` is a day made through the old `/days` endpoints: its `id`
+         *     is the DAY's id, it has no label or defaults, and it is edited through
+         *     the day endpoints rather than the strip ones.
+         */
+        CalendarStripResponse: {
+            /** Counts */
+            counts?: {
+                [key: string]: number;
+            };
+            /** Days */
+            days: components["schemas"]["CalendarDayResponse"][];
+            /** Default Call Time */
+            default_call_time?: string | null;
+            /** Default Wrap Time */
+            default_wrap_time?: string | null;
+            /**
+             * End Date
+             * Format: date
+             */
+            end_date: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "strip" | "day";
+            /** Label */
+            label?: string | null;
+            /** Location */
+            location?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Position */
+            position?: number | null;
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /** Type */
+            type: string;
         };
         /**
          * CatalogDifference
@@ -8389,6 +8797,31 @@ export interface components {
             kinds?: string[];
             /** Percent */
             percent?: string | null;
+        };
+        /** ProjectCalendarResponse */
+        ProjectCalendarResponse: {
+            /** Counts */
+            counts: {
+                [key: string]: number;
+            };
+            /** Project End */
+            project_end?: string | null;
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /**
+             * Project Start
+             * Format: date
+             */
+            project_start: string;
+            /** Range End */
+            range_end?: string | null;
+            /** Range Start */
+            range_start?: string | null;
+            /** Strips */
+            strips: components["schemas"]["CalendarStripResponse"][];
         };
         /** ProjectCreate */
         ProjectCreate: {
@@ -15796,6 +16229,267 @@ export interface operations {
             };
         };
     };
+    create_block_projects__project_id__blocks_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BlockCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlockChangeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_block_projects__project_id__blocks__block_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+                block_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BlockUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlockChangeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_block_days_projects__project_id__blocks__block_id__days_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+                block_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BlockDaysRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlockChangeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    duplicate_block_projects__project_id__blocks__block_id__duplicate_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+                block_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BlockDuplicate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlockChangeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    move_block_projects__project_id__blocks__block_id__move_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+                block_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BlockMove"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlockChangeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_block_projects__project_id__blocks__block_id__remove_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+                block_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlockChangeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resize_block_projects__project_id__blocks__block_id__resize_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+                block_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BlockResize"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlockChangeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_budgets_projects__project_id__budgets_get: {
         parameters: {
             query?: never;
@@ -15886,6 +16580,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BudgetResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_calendar_projects__project_id__calendar_get: {
+        parameters: {
+            query?: {
+                from?: string | null;
+                to?: string | null;
+            };
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectCalendarResponse"];
                 };
             };
             /** @description Validation Error */
