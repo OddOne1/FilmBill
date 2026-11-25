@@ -13,6 +13,7 @@ from typing import Literal, Optional
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from ..core.iban import InvalidIBAN, validate_iban
+from ..core.countries import normalise_country
 from ..core.money import Quantity
 from ..models.company import CompanyRole
 
@@ -68,10 +69,15 @@ class CompanyBase(BaseModel):
     fiscal_year_start_month: int = Field(default=1, ge=1, le=12)
     timezone: str = Field(default="UTC", max_length=64)
 
-    @field_validator("address_country", "default_currency")
+    @field_validator("default_currency")
     @classmethod
     def _upper(cls, value: Optional[str]) -> Optional[str]:
         return value.upper() if value else value
+
+    @field_validator("address_country")
+    @classmethod
+    def _country(cls, value: Optional[str]) -> Optional[str]:
+        return normalise_country(value)
 
 
 class CompanyCreate(CompanyBase):
@@ -124,10 +130,15 @@ class CompanyUpdate(BaseModel):
     archive_date_basis: Optional[ArchiveDateBasis] = None
     month_approval_enabled: Optional[bool] = None
 
-    @field_validator("address_country", "default_currency")
+    @field_validator("default_currency")
     @classmethod
     def _upper(cls, value: Optional[str]) -> Optional[str]:
         return value.upper() if value else value
+
+    @field_validator("address_country")
+    @classmethod
+    def _country(cls, value: Optional[str]) -> Optional[str]:
+        return normalise_country(value)
 
 
 class CompanyResponse(BaseModel):

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 import { api, ApiError } from '@/lib/api'
 import { Input } from '@/components/ui/input'
+import { CountrySelect } from '@/components/ui/country-select'
 import { Field } from '@/components/settings/company-section'
 import { useAuthStore } from '@/stores/auth-store'
 import { useCompanyStore } from '@/stores/company-store'
@@ -114,13 +115,8 @@ export default function NewCompanyPage() {
         </Field>
 
         <div className="grid gap-4 sm:grid-cols-3">
-          <Field label="Country" hint="ISO code">
-            <Input
-              value={country}
-              onChange={(e) => setCountry(e.target.value)}
-              maxLength={2}
-              spellCheck={false}
-            />
+          <Field label="Country" hint="Decides which tax rates the company starts with.">
+            <CountrySelect aria-label="Country" allowEmpty value={country} onChange={(code) => setCountry(code ?? '')} />
           </Field>
           <Field label="Currency" hint="ISO code">
             <Input

@@ -20,6 +20,7 @@ vi.mock('next/navigation', () => ({
   usePathname: () => '/parties/p1',
 }))
 
+import { pickCountry } from '@/test/pick-country'
 import { api, ApiError } from '@/lib/api'
 import PartyDetailPage from '../[id]/page'
 import { useCompanyStore } from '@/stores/company-store'
@@ -774,9 +775,7 @@ describe('adding an identifier', () => {
     fireEvent.change(screen.getByLabelText('Identifier'), {
       target: { value: 'CHE-109.322.551' },
     })
-    fireEvent.change(screen.getByLabelText('Identifier country'), {
-      target: { value: 'ch' },
-    })
+    pickCountry(screen.getByLabelText('Identifier country'), 'ch', 'Switzerland (CHE)')
     fireEvent.click(screen.getByTestId('tax-id-new-submit'))
 
     await waitFor(() =>

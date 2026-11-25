@@ -23,6 +23,7 @@ from typing import Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ..billing.tax import BUYER_TYPES, SUPPLY_KINDS
+from ..core.countries import normalise_country
 from ..core.money import Quantity
 from .auth import JsonObject
 
@@ -241,7 +242,10 @@ class CountryChangeRequest(BaseModel):
     @field_validator("country")
     @classmethod
     def _upper(cls, value: str) -> str:
-        return value.strip().upper()
+        code = normalise_country(value)
+        if code is None:
+            raise ValueError("Pick the new country.")
+        return code
 
 
 class CountryChangePlanResponse(BaseModel):
@@ -327,7 +331,7 @@ class TaxProposeRequest(BaseModel):
     @field_validator("buyer_country")
     @classmethod
     def _upper(cls, value: Optional[str]) -> Optional[str]:
-        return value.strip().upper() if value and value.strip() else None
+        return normalise_country(value)
 
 
 class TaxWarningResponse(BaseModel):

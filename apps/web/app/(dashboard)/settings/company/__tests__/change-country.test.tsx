@@ -17,6 +17,7 @@ vi.mock('@/lib/api', () => ({
 }))
 
 import { api, ApiError } from '@/lib/api'
+import { pickCountry } from '@/test/pick-country'
 import CompanyGeneralPage from '../page'
 import { useCompanyStore } from '@/stores/company-store'
 import type { CountryChangePlan } from '@/types'
@@ -118,7 +119,7 @@ async function openDialog() {
   // Gates on a fetched value — the country from `/company` — rather than on
   // the button, which paints immediately.
   await waitFor(() =>
-    expect(screen.getByLabelText('Country')).toHaveValue('AT'),
+    expect(screen.getByLabelText('Country')).toHaveValue('Austria (AUT)'),
   )
   fireEvent.click(screen.getByTestId('company-change-country'))
   return screen.findByTestId('change-country-dialog')
@@ -135,7 +136,7 @@ describe('the Country field', () => {
     render(<CompanyGeneralPage />)
 
     const field = await screen.findByLabelText('Country')
-    expect(field).toHaveValue('AT')
+    expect(field).toHaveValue('Austria (AUT)')
     expect(field).toBeDisabled()
     expect(screen.getByTestId('company-change-country')).toHaveTextContent(
       'Change…',
@@ -146,7 +147,7 @@ describe('the Country field', () => {
     mockApi()
     render(<CompanyGeneralPage />)
     await waitFor(() =>
-      expect(screen.getByLabelText('Country')).toHaveValue('AT'),
+      expect(screen.getByLabelText('Country')).toHaveValue('Austria (AUT)'),
     )
 
     fireEvent.submit(screen.getByRole('button', { name: /Save changes/ }).closest('form')!)
@@ -177,9 +178,7 @@ describe('the change-country dialog', () => {
     render(<CompanyGeneralPage />)
     await openDialog()
 
-    fireEvent.change(screen.getByLabelText('New country'), {
-      target: { value: 'de' },
-    })
+    pickCountry(screen.getByLabelText('New country'), 'de', 'Germany (DEU)')
 
     const shown = await screen.findByTestId('change-country-plan')
     // A sentence and a code the screen could not have composed.
@@ -196,9 +195,7 @@ describe('the change-country dialog', () => {
     mockApi()
     render(<CompanyGeneralPage />)
     await openDialog()
-    fireEvent.change(screen.getByLabelText('New country'), {
-      target: { value: 'DE' },
-    })
+    pickCountry(screen.getByLabelText('New country'), 'DE', 'Germany (DEU)')
     await screen.findByTestId('change-country-plan')
 
     fireEvent.click(
@@ -225,9 +222,7 @@ describe('the change-country dialog', () => {
     )
     render(<CompanyGeneralPage />)
     await openDialog()
-    fireEvent.change(screen.getByLabelText('New country'), {
-      target: { value: 'FR' },
-    })
+    pickCountry(screen.getByLabelText('New country'), 'FR', 'France (FRA)')
 
     const warning = await screen.findByTestId('change-country-warning')
     expect(warning).toHaveTextContent('proposals will be blocked')
@@ -255,9 +250,7 @@ describe('the change-country dialog', () => {
     expect(confirm).toBeDisabled()
     expect(confirm).toHaveTextContent('Enter a country')
 
-    fireEvent.change(screen.getByLabelText('New country'), {
-      target: { value: 'DE' },
-    })
+    pickCountry(screen.getByLabelText('New country'), 'DE', 'Germany (DEU)')
     await screen.findByTestId('change-country-plan')
     expect(screen.getByTestId('change-country-confirm')).toBeEnabled()
   })
@@ -266,9 +259,7 @@ describe('the change-country dialog', () => {
     mockApi()
     render(<CompanyGeneralPage />)
     await openDialog()
-    fireEvent.change(screen.getByLabelText('New country'), {
-      target: { value: 'DE' },
-    })
+    pickCountry(screen.getByLabelText('New country'), 'DE', 'Germany (DEU)')
     await screen.findByTestId('change-country-plan')
 
     fireEvent.click(screen.getByTestId('change-country-confirm'))
@@ -290,19 +281,17 @@ describe('the change-country dialog', () => {
       if (path.endsWith('/preview')) return makePlan() as never
       throw new ApiError(
         422,
-        "'ZZ' is not a country. Use a two-letter ISO code, for example AT or DE.",
+        "The country could not be changed. Reload and try again.",
       )
     })
     render(<CompanyGeneralPage />)
     await openDialog()
-    fireEvent.change(screen.getByLabelText('New country'), {
-      target: { value: 'ZZ' },
-    })
+    pickCountry(screen.getByLabelText('New country'), 'CHE', 'Switzerland (CHE)')
     await screen.findByTestId('change-country-plan')
     fireEvent.click(screen.getByTestId('change-country-confirm'))
 
     expect(await screen.findByTestId('change-country-error')).toHaveTextContent(
-      'two-letter ISO code',
+      'The country could not be changed. Reload and try again.',
     )
   })
 
@@ -310,14 +299,12 @@ describe('the change-country dialog', () => {
     mockApi()
     render(<CompanyGeneralPage />)
     await openDialog()
-    fireEvent.change(screen.getByLabelText('New country'), {
-      target: { value: 'DE' },
-    })
+    pickCountry(screen.getByLabelText('New country'), 'DE', 'Germany (DEU)')
     await screen.findByTestId('change-country-plan')
     fireEvent.click(screen.getByTestId('change-country-confirm'))
 
     await waitFor(() =>
-      expect(screen.getByLabelText('Country')).toHaveValue('DE'),
+      expect(screen.getByLabelText('Country')).toHaveValue('Germany (DEU)'),
     )
     expect(
       screen.queryByTestId('change-country-dialog'),

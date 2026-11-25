@@ -20,6 +20,7 @@ vi.mock('next/navigation', () => ({
   usePathname: () => '/parties/p-person',
 }))
 
+import { pickCountry } from '@/test/pick-country'
 import { api, ApiError } from '@/lib/api'
 import PartyDetailPage from '../[id]/page'
 import { useCompanyStore } from '@/stores/company-store'
@@ -462,5 +463,40 @@ describe('a member who may read but not edit', () => {
     expect(screen.queryByTestId('party-tax-save')).not.toBeInTheDocument()
     expect(screen.getByLabelText('Country for tax')).toBeDisabled()
     expect(screen.getByLabelText('Tax status note')).toBeDisabled()
+  })
+})
+
+describe('countries are picked from the list and shown as “Austria (AUT)” (B1.2)', () => {
+  it('the resolved panel writes the country for tax as a name with its code', async () => {
+    mockApi()
+    render(<PartyDetailPage />)
+    const panel = await ready()
+    expect(panel).toHaveTextContent('Austria (AUT)')
+    expect(panel).toHaveTextContent('Würzburggasse 30')
+  })
+
+  it('a new address takes its country from the list and sends the two-letter code', async () => {
+    mockApi()
+    render(<PartyDetailPage />)
+    await ready()
+    fireEvent.click(screen.getByRole('tab', { name: 'Addresses' }))
+    const country = screen.getByLabelText('Country')
+    expect(country).toHaveAttribute('role', 'combobox')
+    pickCountry(country, 'AUT', 'Austria (AUT)')
+    expect(country).toHaveValue('Austria (AUT)')
+    fireEvent.click(screen.getByRole('button', { name: 'Add address' }))
+    await waitFor(() =>
+      expect(vi.mocked(api.post).mock.calls.find(([path]) => String(path).endsWith('/addresses'))?.[1]).toMatchObject({
+        country: 'AT',
+      }),
+    )
+  })
+
+  it('the country for tax is the same picker', async () => {
+    mockApi()
+    render(<PartyDetailPage />)
+    await ready()
+    fireEvent.click(screen.getByRole('tab', { name: 'Tax' }))
+    expect(screen.getByLabelText('Country for tax')).toHaveAttribute('role', 'combobox')
   })
 })

@@ -21,6 +21,7 @@ vi.mock('@/lib/api', () => ({
   },
 }))
 
+import { pickCountry } from '@/test/pick-country'
 import { api, ApiError } from '@/lib/api'
 import TaxPage from '../tax/page'
 import { useCompanyStore } from '@/stores/company-store'
@@ -751,7 +752,7 @@ describe('the Test a case tab asks the server for everything', () => {
     await openTestTab()
 
     const seller = screen.getByLabelText(/Seller country/)
-    expect(seller).toHaveValue('AT')
+    expect(seller).toHaveValue('Austria (AUT)')
     expect(seller).toBeDisabled()
   })
 
@@ -760,9 +761,7 @@ describe('the Test a case tab asks the server for everything', () => {
     render(<TaxPage />)
     await openTestTab()
 
-    fireEvent.change(screen.getByLabelText(/Buyer country/), {
-      target: { value: 'de' },
-    })
+    pickCountry(screen.getByLabelText(/Buyer country/), 'de', 'Germany (DEU)')
     fireEvent.click(screen.getByLabelText(/VAT ID verified/))
 
     await waitFor(() => {
@@ -1085,7 +1084,7 @@ describe('taking the buyer from a party', () => {
     // screen sees no party row at all — only the resolver's answer — so
     // these values are ones it could not have worked out.
     await waitFor(() =>
-      expect(screen.getByLabelText('Buyer country')).toHaveValue('DE'),
+      expect(screen.getByLabelText('Buyer country')).toHaveValue('Germany (DEU)'),
     )
     await waitFor(() =>
       expect(vi.mocked(api.post).mock.calls.at(-1)?.[1]).toMatchObject({
@@ -1107,7 +1106,7 @@ describe('taking the buyer from a party', () => {
 
     const note = await screen.findByTestId('tax-buyer-from-party')
     expect(note).toHaveTextContent('Berlin GmbH')
-    expect(note).toHaveTextContent('country DE (from organisation)')
+    expect(note).toHaveTextContent('country Germany (DEU) (from organisation)')
     expect(note).toHaveTextContent('VAT ID DE123456789 (from organisation)')
     expect(note).toHaveTextContent('verified')
     expect(note).toHaveTextContent('treated as business')

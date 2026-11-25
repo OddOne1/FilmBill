@@ -6,6 +6,8 @@ import { useParams } from 'next/navigation'
 import { AlertTriangle, Loader2, ShieldQuestion } from 'lucide-react'
 import { api, ApiError } from '@/lib/api'
 import { Input } from '@/components/ui/input'
+import { CountrySelect } from '@/components/ui/country-select'
+import { countryLabel } from '@/lib/countries'
 import { usePermissions } from '@/hooks/use-permissions'
 import type {
   Party,
@@ -502,7 +504,7 @@ function AddressesTab({
                   (billing.value as Record<string, string>).street,
                   (billing.value as Record<string, string>).zip,
                   (billing.value as Record<string, string>).city,
-                  (billing.value as Record<string, string>).country,
+                  countryLabel((billing.value as Record<string, string>).country),
                 ]
                   .filter(Boolean)
                   .join(', ')
@@ -515,7 +517,7 @@ function AddressesTab({
         <div>
           {party.addresses.map((address) => (
             <Row key={address.id} label={address.kind}>
-              {[address.street, address.zip, address.city, address.country]
+              {[address.street, address.zip, address.city, countryLabel(address.country)]
                 .filter(Boolean)
                 .join(', ')}
               {address.is_default && (
@@ -558,14 +560,12 @@ function AddressesTab({
               value={draft.city}
               onChange={(event) => setDraft({ ...draft, city: event.target.value })}
             />
-            <Input
+            <CountrySelect
               aria-label="Country"
-              placeholder="AT"
-              maxLength={2}
+              allowEmpty
               value={draft.country}
-              onChange={(event) =>
-                setDraft({ ...draft, country: event.target.value.toUpperCase() })
-              }
+              onChange={(code) => setDraft({ ...draft, country: code ?? '' })}
+              className="min-w-[12rem]"
             />
           </div>
           <label className="flex items-center gap-2 text-xs text-text-secondary">
@@ -922,12 +922,12 @@ function TaxTab({
       <div className="space-y-3 border-t border-border pt-5">
         <label className="block text-xs font-medium text-text-secondary">
           Country for tax
-          <Input
+          <CountrySelect
             aria-label="Country for tax"
+            allowEmpty
             value={taxCountry}
-            maxLength={2}
             disabled={!canEdit}
-            onChange={(event) => setTaxCountry(event.target.value.toUpperCase())}
+            onChange={(code) => setTaxCountry(code ?? '')}
             className="mt-1"
           />
         </label>
@@ -1134,7 +1134,7 @@ function TaxIdRow({
         <span className="font-mono text-sm text-text-primary">{taxId.value}</span>
         <span className="text-xs text-text-tertiary">
           {TAX_ID_LABELS[taxId.kind] ?? taxId.kind}
-          {taxId.country && ` · ${taxId.country}`}
+          {taxId.country && ` · ${countryLabel(taxId.country)}`}
         </span>
         {taxId.is_primary && (
           <Chip tone="neutral" testid={`tax-id-primary-${taxId.id}`}>
@@ -1587,12 +1587,13 @@ function NewTaxIdPanel({
           placeholder="ATU12345678"
           onChange={(event) => setValue(event.target.value)}
         />
-        <Input
+        <CountrySelect
           aria-label="Identifier country"
+          allowEmpty
+          placeholder="From the number"
           value={country}
-          maxLength={2}
-          placeholder="AT"
-          onChange={(event) => setCountry(event.target.value.toUpperCase())}
+          onChange={(code) => setCountry(code ?? '')}
+          className="min-w-[12rem]"
         />
       </div>
       {error && (
@@ -1734,7 +1735,7 @@ function ResolvedPanel({
               names={resolved.names as Record<string, unknown>}
             >
               {address
-                ? [address.street, address.zip, address.city, address.country]
+                ? [address.street, address.zip, address.city, countryLabel(address.country)]
                     .filter(Boolean)
                     .join(', ')
                 : '—'}
@@ -1742,7 +1743,7 @@ function ResolvedPanel({
           </dd>
         </div>
         <Resolved label="VAT ID" field={resolved.vat_id} resolved={resolved} />
-        <Resolved label="Country for tax" field={resolved.tax_country} resolved={resolved} />
+        <Resolved label="Country for tax" field={resolved.tax_country} resolved={resolved} format={countryLabel} />
         <Resolved label="Email" field={resolved.email} resolved={resolved} />
         <div>
           <dt className="text-xs text-text-tertiary">Treated as</dt>
@@ -1761,10 +1762,13 @@ function Resolved({
   label,
   field,
   resolved,
+  format = String,
 }: {
   label: string
   field: ResolvedField
   resolved: ResolvedRecipient
+  /** How the value is written — `countryLabel` for a country. */
+  format?: (value: string) => string
 }) {
   return (
     <div>
@@ -1777,7 +1781,7 @@ function Resolved({
         >
           {field.value === null || field.value === undefined
             ? '—'
-            : String(field.value)}
+            : format(String(field.value))}
         </Inherited>
       </dd>
     </div>

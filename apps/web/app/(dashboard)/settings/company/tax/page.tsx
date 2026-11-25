@@ -4,6 +4,8 @@ import * as React from 'react'
 import { AlertTriangle, Check, Loader2, Plus, ShieldQuestion } from 'lucide-react'
 import { api, ApiError } from '@/lib/api'
 import { Input } from '@/components/ui/input'
+import { CountrySelect } from '@/components/ui/country-select'
+import { countryLabel } from '@/lib/countries'
 import { CompanySection, Field } from '@/components/settings/company-section'
 import { usePermissions } from '@/hooks/use-permissions'
 import { useCompanyStore } from '@/stores/company-store'
@@ -1199,7 +1201,8 @@ function TestTab() {
           hint="Your company’s country, from the Company screen. It cannot be changed here — a proposal for a company you are not would be a rate somebody could invoice."
         >
           <Input
-            value={proposal?.seller_country ?? ''}
+            aria-label="Seller country"
+            value={countryLabel(proposal?.seller_country)}
             placeholder="Not set"
             readOnly
             disabled
@@ -1232,18 +1235,15 @@ function TestTab() {
           hint={
             resolved
               ? undefined
-              : 'Two-letter ISO code, e.g. DE.'
+              : 'Type the name or its code, e.g. Germany or DEU.'
           }
         >
-          <Input
+          <CountrySelect
             aria-label="Buyer country"
+            allowEmpty
             value={draft.buyer_country}
-            maxLength={2}
-            readOnly={resolved !== null}
             disabled={resolved !== null}
-            onChange={(event) =>
-              set('buyer_country', event.target.value.toUpperCase())
-            }
+            onChange={(code) => set('buyer_country', code ?? '')}
           />
         </Field>
         {resolved && (
@@ -1252,7 +1252,7 @@ function TestTab() {
             className="rounded-md border border-border bg-bg-secondary px-3 py-2 text-xs text-text-secondary"
           >
             From <strong>{String(resolved.names.organisation ?? resolved.names[resolved.own_level])}</strong>:
-            country {String(resolved.tax_country.value ?? '—')} (from{' '}
+            country {countryLabel(resolved.tax_country.value as string | null) || '—'} (from{' '}
             {resolved.tax_country.source ?? 'nowhere'}), VAT ID{' '}
             {String(resolved.vat_id.value ?? '—')} (from{' '}
             {resolved.vat_id.source ?? 'nowhere'}),{' '}

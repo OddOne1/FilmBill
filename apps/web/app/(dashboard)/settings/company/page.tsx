@@ -3,6 +3,8 @@
 import * as React from 'react'
 import { api, ApiError } from '@/lib/api'
 import { Input } from '@/components/ui/input'
+import { CountrySelect } from '@/components/ui/country-select'
+import { countryLabel } from '@/lib/countries'
 import {
   CompanySection,
   Field,
@@ -173,7 +175,7 @@ export default function CompanyGeneralPage() {
             <div className="flex items-center gap-2">
               <Input
                 aria-label="Country"
-                value={country ?? ''}
+                value={countryLabel(country)}
                 placeholder="Not set"
                 readOnly
                 disabled
@@ -325,7 +327,7 @@ function ChangeCountryDialog({
     >
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-text-primary">
-          {current ? `Change country from ${current}` : 'Set the country'}
+          {current ? `Change country from ${countryLabel(current)}` : 'Set the country'}
         </h3>
         <button
           type="button"
@@ -337,13 +339,8 @@ function ChangeCountryDialog({
       </div>
 
       <div className="mt-4 space-y-4">
-        <Field label="New country" hint="Two-letter ISO code, e.g. DE.">
-          <Input
-            aria-label="New country"
-            value={next}
-            maxLength={2}
-            onChange={(event) => setNext(event.target.value.toUpperCase())}
-          />
+        <Field label="New country" hint="Type the name or its code, e.g. Germany or DEU.">
+          <CountrySelect aria-label="New country" value={next} onChange={(code) => setNext(code ?? '')} />
         </Field>
 
         <fieldset className="space-y-2">

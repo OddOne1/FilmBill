@@ -20,6 +20,7 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from ..core.countries import normalise_country
 from ..models.party import BUSINESS_STATUSES, PARTY_TYPES
 from .auth import JsonObject
 
@@ -69,7 +70,7 @@ class PartyAddressWrite(BaseModel):
     @field_validator("country")
     @classmethod
     def _upper(cls, value: Optional[str]) -> Optional[str]:
-        return value.strip().upper() if value and value.strip() else None
+        return normalise_country(value)
 
 
 class PartyContactPointResponse(BaseModel):
@@ -350,10 +351,15 @@ class PartyWrite(BaseModel):
     tax_override: Optional[JsonObject] = None
     einvoice_routing: Optional[JsonObject] = None
 
-    @field_validator("tax_country", "default_currency")
+    @field_validator("default_currency")
     @classmethod
     def _upper(cls, value: Optional[str]) -> Optional[str]:
         return value.strip().upper() if value and value.strip() else None
+
+    @field_validator("tax_country")
+    @classmethod
+    def _country(cls, value: Optional[str]) -> Optional[str]:
+        return normalise_country(value)
 
 
 class PartyCreate(PartyWrite):
