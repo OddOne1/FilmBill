@@ -27,6 +27,7 @@ from them. `docs/SCOPE.md` is where the product is decided.
 | A2 | Projects, production days and the Budget sheet | [`26-filmbill-A2-projects-days-budget.md`](26-filmbill-A2-projects-days-budget.md) | `d676093`…`22dbc88` | done — see notes |
 | B1 | Cost planning: committed, actual and cost-to-complete | [`27-filmbill-B1-cost-tracking.md`](27-filmbill-B1-cost-tracking.md) | `ff47f99`…closing commit | done — see notes |
 | B1.1 | Plain labels, mark finished, closing a budget, extras | [`28-filmbill-B1.1-finish-close-extras.md`](28-filmbill-B1.1-finish-close-extras.md) | `598a1bc`…closing commit | done — see notes |
+| B1.2 | Adjustments by kind and section, production fee preset, country dropdown, clearer messages | [`29-filmbill-B1.2-adjustments-fee-country-messages.md`](29-filmbill-B1.2-adjustments-fee-country-messages.md) | — | in progress |
 | P0b | Foundations: companies, roles, number series, audit, money, codegen | [`03-filmbill-P0b-foundations.md`](03-filmbill-P0b-foundations.md) | — | superseded — split into P0b-0, P0b-1, P0b-2 |
 
 ---
