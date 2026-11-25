@@ -124,10 +124,34 @@ def days_source_for(day_type: str) -> str:
 
 
 def day_type_of_source(source: str) -> Optional[str]:
-    """`"days:shoot"` → `"shoot"`; anything else → None."""
+    """`"days:shoot"` → `"shoot"`; `"days:shoot:<strip id>"` → `"shoot"`;
+    anything else → None."""
+    parsed = parse_days_source(source)
+    return parsed[0] if parsed is not None else None
+
+
+def parse_days_source(source: str) -> Optional[tuple[str, Optional[str]]]:
+    """`"days:shoot"` → `("shoot", None)`; `"days:shoot:<id>"` →
+    `("shoot", "<id>")`; anything else → None.
+
+    The strip part (B2a) is the optional third segment: a global that counts
+    ONE strip's days of a type rather than every strip's. The id is returned
+    as the string it was stored as; the caller decides what an id that does
+    not parse, or names a removed strip, means — and that is never a silent
+    zero (see `budget_service.computed_value`).
+    """
     if not source or not source.startswith(GLOBAL_SOURCE_DAYS_PREFIX):
         return None
-    return source[len(GLOBAL_SOURCE_DAYS_PREFIX) :]
+    rest = source[len(GLOBAL_SOURCE_DAYS_PREFIX) :]
+    day_type, _, block = rest.partition(":")
+    return day_type, (block or None)
+
+
+def days_source_for_block(day_type: str, block_id) -> str:
+    """`("shoot", <id>)` → `"days:shoot:<id>"`; `("shoot", None)` → `"days:shoot"`."""
+    if block_id is None:
+        return days_source_for(day_type)
+    return f"{GLOBAL_SOURCE_DAYS_PREFIX}{day_type}:{block_id}"
 
 
 class Project(CompanyScoped, Base):
@@ -179,6 +203,11 @@ class Project(CompanyScoped, Base):
         back_populates="project",
         order_by="ProjectDay.date, ProjectDay.type",
     )
+    blocks = relationship(
+        "ProjectBlock",
+        back_populates="project",
+        order_by="ProjectBlock.start_date",
+    )
     budgets = relationship("Budget", back_populates="project")
 
     __table_args__ = (
@@ -190,14 +219,86 @@ class Project(CompanyScoped, Base):
     )
 
 
+class ProjectBlock(CompanyScoped, Base):
+    """A strip: one phase of a project drawn across the days it covers (B2a).
+
+    "Prep 30 Nov – 2 Dec", "Shoot 22–28 Feb with a travel day at each end",
+    "BTS shoot" overlapping the main shoot. A strip has a MAIN type and owns
+    at most one active day row per date in its range; each of those rows
+    carries its own type — the main type, or an override such as `travel` or
+    `off`.
+
+    **Days stay the single source of truth for counts.** A strip is a way of
+    grouping and editing days, not a second thing that can be counted: the
+    budget's `days:<type>` globals and every count on screen are counted from
+    `project_days`, never from a strip's range. That is why a date inside a
+    strip's range with no row (a weekend bridged by the B2a data migration)
+    is a gap that counts as nothing, rather than an implied day.
+
+    Never deleted: `is_active = False` retires a strip and its days together.
+    """
+
+    __tablename__ = "project_blocks"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    #: The strip's main type, one of `PROJECT_DAY_TYPES`.
+    type: Mapped[str] = mapped_column(String(16), nullable=False)
+    label: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    end_date: Mapped[date] = mapped_column(Date, nullable=False)
+    location: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    #: What a day of this strip shows when it has no call or wrap of its own.
+    default_call_time: Mapped[Optional[Any]] = mapped_column(Time, nullable=True)
+    default_wrap_time: Mapped[Optional[Any]] = mapped_column(Time, nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    #: A lane hint for the calendar. Nullable: the screen stacks overlapping
+    #: strips by start date when nobody has said otherwise.
+    position: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="true"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    project = relationship("Project", back_populates="blocks")
+
+    __table_args__ = (
+        CheckConstraint(
+            "start_date <= end_date", name="ck_project_blocks_dates_in_order"
+        ),
+        Index("ix_project_blocks_company_project", "company_id", "project_id"),
+    )
+
+
 class ProjectDay(CompanyScoped, Base):
     """One production day (SCOPE §11.3).
 
-    `(project_id, date, type)` is unique **among active days**, as a partial
-    index. A plain unique constraint would make a removed day block its own
-    re-creation for ever, which is the opposite of what "a day is a plan"
-    means; the partial index keeps "one shoot day per date" true of the plan
-    as it stands and lets the row that was taken out stay readable.
+    **Two partial unique indexes, both among ACTIVE days only** (a removed
+    day must not block its own re-creation — "a day is a plan"):
+
+    * `uq_project_days_active` on `(project_id, date, block_id)`: a strip
+      never has two rows on one date, while two strips MAY cover the same
+      date (B2a — a BTS shoot overlapping the main shoot). Postgres treats
+      NULLs as distinct, so this index says nothing about days outside a
+      strip, which is what the second one is for.
+    * `uq_project_days_loose` on `(project_id, date, type)` where
+      `block_id IS NULL`: a day created through the old `/days` endpoints
+      keeps A2's rule, one per date and type.
     """
 
     __tablename__ = "project_days"
@@ -209,6 +310,15 @@ class ProjectDay(CompanyScoped, Base):
         UUID(as_uuid=True),
         ForeignKey("projects.id", ondelete="RESTRICT"),
         nullable=False,
+        index=True,
+    )
+    #: The strip this day belongs to. NULL for a day created through the old
+    #: `/days` endpoints, which the calendar shows as a one-day strip of its
+    #: own type.
+    block_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("project_blocks.id", ondelete="RESTRICT"),
+        nullable=True,
         index=True,
     )
     date: Mapped[date] = mapped_column(Date, nullable=False)
@@ -241,9 +351,17 @@ class ProjectDay(CompanyScoped, Base):
             "uq_project_days_active",
             "project_id",
             "date",
-            "type",
+            "block_id",
             unique=True,
             postgresql_where=text("is_active"),
+        ),
+        Index(
+            "uq_project_days_loose",
+            "project_id",
+            "date",
+            "type",
+            unique=True,
+            postgresql_where=text("is_active AND block_id IS NULL"),
         ),
         Index("ix_project_days_company_date", "company_id", "date"),
     )
@@ -546,9 +664,9 @@ class BudgetGlobal(CompanyScoped, Base):
     label: Mapped[str] = mapped_column(String(255), nullable=False)
     value: Mapped[Any] = mapped_column(QtyColumn(), nullable=False)
     unit: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
-    #: `manual` or `days:<type>`.
+    #: `manual`, `days:<type>`, or `days:<type>:<strip id>` (B2a).
     source: Mapped[str] = mapped_column(
-        String(32), nullable=False, server_default=GLOBAL_SOURCE_MANUAL
+        String(80), nullable=False, server_default=GLOBAL_SOURCE_MANUAL
     )
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="true"

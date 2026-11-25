@@ -116,25 +116,11 @@ def _check_client(
 def _day_counts(db: Session, project_ids: list[uuid.UUID]) -> dict:
     """`{project_id: {type: count}}` over active days, in one query.
 
-    One query for the whole page rather than one per row: a 50-project list
-    with a count per project is the shape that makes a list screen slow, and
-    it is cheap to avoid.
+    Distinct dates per type — the same rule the budget's `days:<type>`
+    globals use (`project_service.day_counts_by_type`). One query for the
+    whole page rather than one per row.
     """
-    if not project_ids:
-        return {}
-    rows = (
-        db.query(ProjectDay.project_id, ProjectDay.type, func.count())
-        .filter(
-            ProjectDay.project_id.in_(project_ids),
-            ProjectDay.is_active.is_(True),
-        )
-        .group_by(ProjectDay.project_id, ProjectDay.type)
-        .all()
-    )
-    counts: dict = {}
-    for project_id, day_type, total in rows:
-        counts.setdefault(project_id, {})[day_type] = int(total)
-    return counts
+    return project_service.day_counts_by_type(db, project_ids)
 
 
 def _budget_counts(db: Session, project_ids: list[uuid.UUID]) -> dict:
@@ -413,13 +399,9 @@ def list_days(
     if not include_removed:
         query = query.filter(ProjectDay.is_active.is_(True))
     rows = query.order_by(ProjectDay.date, ProjectDay.type).all()
-    counts: dict[str, int] = {}
-    for row in rows:
-        if row.is_active:
-            counts[row.type] = counts.get(row.type, 0) + 1
     return ProjectDayList(
         days=[ProjectDayResponse.model_validate(row) for row in rows],
-        counts=counts,
+        counts=_day_counts(db, [project.id]).get(project.id, {}),
     )
 
 
@@ -432,17 +414,20 @@ def _day_conflict(
     day_type: str,
     exclude_id: Optional[uuid.UUID] = None,
 ) -> None:
-    """One active day per (date, type), checked before the index does it.
+    """One active day per (date, type) OUTSIDE any strip, checked before
+    the index does it.
 
-    The partial unique index is the authority; this is so the answer is a
-    409 with a sentence instead of an `IntegrityError` with a constraint
-    name in it.
+    `uq_project_days_loose` is the authority; this is so the answer is a 409
+    with a sentence instead of an `IntegrityError` with a constraint name in
+    it. A strip's day on the same date is not a conflict (B2a): two strips
+    may cover one date, and the count is of distinct dates.
     """
     query = scoped(db.query(ProjectDay), membership).filter(
         ProjectDay.project_id == project.id,
         ProjectDay.date == day,
         ProjectDay.type == day_type,
         ProjectDay.is_active.is_(True),
+        ProjectDay.block_id.is_(None),
     )
     if exclude_id is not None:
         query = query.filter(ProjectDay.id != exclude_id)
@@ -450,9 +435,8 @@ def _day_conflict(
         _refuse(
             project_service.ProjectError(
                 f"{project.name} already has a {day_type} day on "
-                f"{day.isoformat()}. Edit that one instead — a second would "
-                f"be counted twice by anything that counts days, the "
-                f"budget's shoot-day global included."
+                f"{day.isoformat()}. Edit that one instead of adding a "
+                f"second."
             )
         )
 
@@ -579,7 +563,19 @@ def update_day(
 
     moved_date = changes.get("date", row.date)
     moved_type = changes.get("type", row.type)
-    if moved_date != row.date or moved_type != row.type:
+    if row.block_id is not None:
+        # A strip's day moves with its strip (`.../blocks/{id}/move`); moved
+        # on its own it could leave the strip's range or land on a date the
+        # strip already has. Its type is an override and can change here.
+        if moved_date != row.date:
+            _refuse(
+                project_service.ProjectError(
+                    f"This day belongs to a strip, so its date cannot be "
+                    f"changed on its own. Move or resize the strip in the "
+                    f"calendar instead."
+                )
+            )
+    elif moved_date != row.date or moved_type != row.type:
         _day_conflict(
             db,
             membership,

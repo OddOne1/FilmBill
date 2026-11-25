@@ -33,6 +33,7 @@ from .project import (
     BudgetLine,
     BudgetSection,
     Project,
+    ProjectBlock,
     ProjectDay,
 )
 from .party import (
@@ -69,6 +70,7 @@ __all__ = [
     "PartyTaxId",
     "PartyVatCheck",
     "Project",
+    "ProjectBlock",
     "ProjectDay",
     "Budget",
     "BudgetSection",

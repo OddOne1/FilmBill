@@ -40,6 +40,7 @@ normal `fee` line".
 """
 
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Mapping, Optional, Sequence
@@ -72,7 +73,8 @@ from ..models.project import (
     BudgetLine,
     BudgetSection,
     Project,
-    day_type_of_source,
+    ProjectBlock,
+    parse_days_source,
 )
 from ..models.tax import TaxClass, TaxCode
 from . import audit
@@ -365,16 +367,89 @@ def active_adjustments(db: Session, budget: Budget) -> list[BudgetAdjustment]:
 # ─── Globals ────────────────────────────────────────────────────────────────
 
 
-def computed_value(db: Session, budget: Budget, source: str) -> Optional[Decimal]:
-    """A `days:<type>` global's value, counted now. `None` for `manual`."""
-    day_type = day_type_of_source(source)
-    if day_type is None:
+@dataclass(frozen=True)
+class ComputedGlobal:
+    """What a `days:` source counts to, and what the panel must say about it.
+
+    `block` is the strip a `days:<type>:<strip id>` source names, when it is
+    still an active strip of this budget's project. `warning` is set when the
+    source names a strip that is not (removed, or never this project's): the
+    count then FALLS BACK to every strip's days of that type and says so —
+    never a silent zero, which is the number nobody questions until the
+    invoice is wrong.
+    """
+
+    value: Decimal
+    day_type: str
+    block: Optional[ProjectBlock] = None
+    warning: Optional[str] = None
+
+
+def strip_name(block: ProjectBlock) -> str:
+    """How a strip is named in a sentence: its label, or its type and dates."""
+    if block.label:
+        return f"“{block.label}”"
+    return (
+        f"the {block.type} strip {block.start_date.isoformat()} – "
+        f"{block.end_date.isoformat()}"
+    )
+
+
+def computed_global(
+    db: Session, budget: Budget, source: str
+) -> Optional[ComputedGlobal]:
+    """A `days:` global counted now; None for `manual`."""
+    parsed = parse_days_source(source)
+    if parsed is None:
         return None
+    day_type, block_ref = parsed
+    block: Optional[ProjectBlock] = None
+    warning: Optional[str] = None
+    if block_ref is not None:
+        try:
+            block_uuid = uuid.UUID(block_ref)
+        except ValueError:
+            block_uuid = None
+        if block_uuid is not None:
+            block = (
+                db.query(ProjectBlock)
+                .filter(
+                    ProjectBlock.id == block_uuid,
+                    ProjectBlock.project_id == budget.project_id,
+                    ProjectBlock.company_id == budget.company_id,
+                )
+                .first()
+            )
+        if block is None or not block.is_active:
+            what = strip_name(block) if block is not None else "The strip"
+            warning = (
+                f"{what[0].upper()}{what[1:]} this global counted was removed, "
+                f"so it now counts the {day_type} days of all strips. Pick a "
+                f"strip again, or keep all strips."
+            )
+            block = None
+    count = count_days_of_type(
+        db,
+        budget.project_id,
+        day_type,
+        block_id=block.id if block is not None else None,
+    )
     # Quantized to the quantity scale, so a counted global serialises like
     # every other quantity in the system — `"3.0000"`, not `"3"`. A screen
     # that formatted one field differently from its neighbour because of
     # where the number came from would be a screen nobody trusts.
-    return quantize_qty(Decimal(count_days_of_type(db, budget.project_id, day_type)))
+    return ComputedGlobal(
+        value=quantize_qty(Decimal(count)),
+        day_type=day_type,
+        block=block,
+        warning=warning,
+    )
+
+
+def computed_value(db: Session, budget: Budget, source: str) -> Optional[Decimal]:
+    """A `days:` global's value, counted now. `None` for `manual`."""
+    found = computed_global(db, budget, source)
+    return found.value if found is not None else None
 
 
 def sync_computed_globals(db: Session, budget: Budget) -> list[BudgetGlobal]:

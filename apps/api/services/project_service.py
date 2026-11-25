@@ -19,6 +19,7 @@ import uuid
 from datetime import date, timedelta
 from typing import Iterable, Optional, Sequence
 
+from sqlalchemy import distinct, func
 from sqlalchemy.orm import Session
 
 from ..models.party import Party
@@ -180,23 +181,68 @@ def active_days(db: Session, project: Project) -> list[ProjectDay]:
     )
 
 
-def count_days_of_type(db: Session, project_id: uuid.UUID, day_type: str) -> int:
-    """How many ACTIVE days of this type the project has.
+def count_days_of_type(
+    db: Session,
+    project_id: uuid.UUID,
+    day_type: str,
+    block_id: Optional[uuid.UUID] = None,
+) -> int:
+    """How many DATES have an active day of this type. What a `days:<type>`
+    global's value is.
 
-    What a `days:<type>` global's value is. A count of active rows and not of
-    every row ever created: a shoot day that was taken out of the plan is not
-    a shoot day, and a budget that still billed for it would be wrong in the
-    direction nobody checks.
+    **Distinct dates, not rows** (B2a, [Guessing] — an open decision for
+    Mathias, SCOPE D99). Two strips may cover the same date: a BTS shoot
+    overlapping the main shoot on 4 March is one shoot day for the budget,
+    not two. A date that is shoot in one strip and travel in another counts
+    once as shoot and once as travel. Before strips existed A2's unique index
+    allowed one active row per (date, type), so rows and distinct dates were
+    the same number and every stored global is unchanged by this.
+
+    Active rows only: a shoot day taken out of the plan is not a shoot day,
+    and a budget that still billed for it would be wrong in the direction
+    nobody checks.
+
+    `block_id` limits the count to one strip (`days:<type>:<strip id>`).
     """
-    return (
-        db.query(ProjectDay)
+    query = db.query(func.count(distinct(ProjectDay.date))).filter(
+        ProjectDay.project_id == project_id,
+        ProjectDay.type == day_type,
+        ProjectDay.is_active.is_(True),
+    )
+    if block_id is not None:
+        query = query.filter(ProjectDay.block_id == block_id)
+    return int(query.scalar() or 0)
+
+
+def day_counts_by_type(
+    db: Session, project_ids: Sequence[uuid.UUID]
+) -> dict[uuid.UUID, dict[str, int]]:
+    """`{project_id: {type: distinct dates}}` over active days, in one query.
+
+    The same rule as `count_days_of_type`, for every type and many projects
+    at once — the project list, the day list and the calendar print these,
+    and a screen whose number disagreed with the budget's global would be a
+    screen nobody trusts.
+    """
+    if not project_ids:
+        return {}
+    rows = (
+        db.query(
+            ProjectDay.project_id,
+            ProjectDay.type,
+            func.count(distinct(ProjectDay.date)),
+        )
         .filter(
-            ProjectDay.project_id == project_id,
-            ProjectDay.type == day_type,
+            ProjectDay.project_id.in_(list(project_ids)),
             ProjectDay.is_active.is_(True),
         )
-        .count()
+        .group_by(ProjectDay.project_id, ProjectDay.type)
+        .all()
     )
+    counts: dict[uuid.UUID, dict[str, int]] = {}
+    for project_id, day_type, total in rows:
+        counts.setdefault(project_id, {})[day_type] = int(total)
+    return counts
 
 
 def dates_in_range(
@@ -258,6 +304,9 @@ def create_day_range(
     all_dates = dates_in_range(start, end)
     skipped = [day for day in all_dates if day not in set(wanted)]
 
+    # Days outside any strip only: that is what `uq_project_days_loose`
+    # keeps unique, and a strip's shoot day on the same date is counted once
+    # with this one anyway (distinct dates).
     taken = {
         row.date
         for row in db.query(ProjectDay)
@@ -265,6 +314,7 @@ def create_day_range(
             ProjectDay.project_id == project.id,
             ProjectDay.type == day_type,
             ProjectDay.is_active.is_(True),
+            ProjectDay.block_id.is_(None),
         )
         .all()
     }

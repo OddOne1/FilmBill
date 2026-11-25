@@ -5054,6 +5054,10 @@ export interface components {
         };
         /** BudgetGlobalResponse */
         BudgetGlobalResponse: {
+            /** Block Id */
+            block_id?: string | null;
+            /** Block Label */
+            block_label?: string | null;
             /**
              * Budget Id
              * Format: uuid
@@ -5094,11 +5098,15 @@ export interface components {
              * @example 1.5000
              */
             value: string;
+            /** Warning */
+            warning?: string | null;
         };
         /** BudgetGlobalUpdate */
         BudgetGlobalUpdate: {
             /** Label */
             label?: string | null;
+            /** Source */
+            source?: string | null;
             /** Unit */
             unit?: string | null;
             /** Value */

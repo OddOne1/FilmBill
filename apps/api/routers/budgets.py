@@ -52,7 +52,9 @@ from ..models.project import (
     BudgetLine,
     BudgetSection,
     Project,
+    ProjectBlock,
     day_type_of_source,
+    parse_days_source,
     PROJECT_DAY_TYPES,
 )
 from ..schemas.budget import (
@@ -337,8 +339,16 @@ def _line_response(db: Session, line: BudgetLine) -> BudgetLineResponse:
 def _global_response(
     db: Session, budget: Budget, row: BudgetGlobal
 ) -> BudgetGlobalResponse:
-    computed = budget_service.computed_value(db, budget, row.source)
+    found = budget_service.computed_global(db, budget, row.source)
+    computed = found.value if found is not None else None
     return BudgetGlobalResponse(
+        block_id=found.block.id if found is not None and found.block else None,
+        block_label=(
+            budget_service.strip_name(found.block)
+            if found is not None and found.block
+            else None
+        ),
+        warning=found.warning if found is not None else None,
         id=row.id,
         budget_id=row.budget_id,
         key=row.key,
@@ -1384,11 +1394,19 @@ def remove_line(
 # ─── Globals ────────────────────────────────────────────────────────────────
 
 
-def _check_source(source: str) -> None:
+def _check_source(
+    db: Session, membership: Membership, budget: Budget, source: str
+) -> None:
+    """`manual`, `days:<type>`, or `days:<type>:<strip id>` (B2a).
+
+    The strip must be an active strip of THIS budget's project. Another
+    company's strip is a 404, not a 422 naming the field — the sentence rule
+    6 exists to stop us writing is "that id belongs to someone else".
+    """
     if source == "manual":
         return
-    day_type = day_type_of_source(source)
-    if day_type is None or day_type not in PROJECT_DAY_TYPES:
+    parsed = parse_days_source(source)
+    if parsed is None or parsed[0] not in PROJECT_DAY_TYPES:
         _refuse(
             budget_service.BudgetError(
                 f"This global's source {source!r} is not one FilmBill knows. "
@@ -1396,6 +1414,28 @@ def _check_source(source: str) -> None:
                 f"{', '.join(PROJECT_DAY_TYPES)}."
             ),
             status.HTTP_422_UNPROCESSABLE_ENTITY,
+        )
+    block_ref = parsed[1]
+    if block_ref is None:
+        return
+    try:
+        block_uuid = uuid.UUID(block_ref)
+    except ValueError:
+        block_uuid = None
+    block = None
+    if block_uuid is not None:
+        block = (
+            scoped(db.query(ProjectBlock), membership)
+            .filter(
+                ProjectBlock.id == block_uuid,
+                ProjectBlock.project_id == budget.project_id,
+                ProjectBlock.is_active.is_(True),
+            )
+            .first()
+        )
+    if block is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Strip not found"
         )
 
 
@@ -1412,7 +1452,7 @@ def create_global(
     membership: Membership = Depends(require("budgets.edit")),
 ):
     budget = _editable(db, _budget_or_404(db, membership, budget_id))
-    _check_source(body.source)
+    _check_source(db, membership, budget, body.source)
     key = body.key.strip().lower()
 
     existing = (
@@ -1501,6 +1541,24 @@ def update_global(
     row = _global_or_404(db, membership, budget, global_id)
     changes = body.model_dump(exclude_unset=True)
 
+    if "source" in changes:
+        # Only between counted sources of the same type — "all strips" or
+        # "this strip" (B2a). Turning a typed number into a count, or a
+        # shoot count into a prep count, is a different global and is made
+        # as one.
+        current = day_type_of_source(row.source)
+        wanted = day_type_of_source(changes["source"])
+        if current is None or wanted != current:
+            _refuse(
+                budget_service.BudgetError(
+                    f"{row.key} can only switch between counting the "
+                    f"{current or 'project'} days of all strips and of one "
+                    f"strip. Add a new global for anything else."
+                ),
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+        _check_source(db, membership, budget, changes["source"])
+
     if "value" in changes and day_type_of_source(row.source) is not None:
         _refuse(
             budget_service.BudgetError(
@@ -1513,6 +1571,10 @@ def update_global(
     before = audit.snapshot(row, budget_service.GLOBAL_AUDITED)
     for field_name, value in changes.items():
         setattr(row, field_name, value)
+    if "source" in changes:
+        # The stored value is a cache of the count; refresh it with the
+        # source, so the audit row shows the number the switch produced.
+        row.value = budget_service.computed_value(db, budget, row.source)
     db.flush()
     audit.record(
         db,

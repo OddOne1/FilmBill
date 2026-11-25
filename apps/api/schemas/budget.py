@@ -142,6 +142,13 @@ class BudgetGlobalResponse(BaseModel):
     #: a global a line uses" explicable before somebody tries it.
     referenced_by: int = 0
     is_active: bool = True
+    #: B2a: the strip a `days:<type>:<strip id>` source counts, while it is
+    #: an active strip of the project. NULL for "all strips".
+    block_id: Optional[uuid.UUID] = None
+    block_label: Optional[str] = None
+    #: Set when the source names a strip that was removed: the value then
+    #: counts all strips, and the panel shows this sentence.
+    warning: Optional[str] = None
 
 
 class BudgetAdjustmentResponse(BaseModel):
@@ -470,9 +477,10 @@ class BudgetGlobalCreate(BaseModel):
     value: Quantity = Decimal("0")
     unit: Optional[str] = Field(default=None, max_length=32)
     #: `manual`, or `days:<type>` for a value counted from the project's
-    #: production days. A closed vocabulary — there is no formula field and
-    #: no place one could be added (D70).
-    source: str = "manual"
+    #: production days, or `days:<type>:<strip id>` for one strip's days
+    #: (B2a). A closed vocabulary — there is no formula field and no place
+    #: one could be added (D70).
+    source: str = Field(default="manual", max_length=80)
 
 
 class BudgetGlobalUpdate(BaseModel):
@@ -484,6 +492,9 @@ class BudgetGlobalUpdate(BaseModel):
     #: looked.
     value: Optional[Quantity] = None
     unit: Optional[str] = Field(default=None, max_length=32)
+    #: Only between `days:<type>` and `days:<type>:<strip id>` of the same
+    #: type — the panel's "all strips / this strip" picker (B2a).
+    source: Optional[str] = Field(default=None, max_length=80)
 
 
 class BudgetAdjustmentCreate(BaseModel):
