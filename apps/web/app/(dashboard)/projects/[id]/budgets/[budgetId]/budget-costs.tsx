@@ -371,11 +371,13 @@ export function EntryForm({
 export function CostsTab({
   sheet,
   canEdit,
+  closed = false,
   canPickParty,
   onChange,
 }: {
   sheet: BudgetSheet
   canEdit: boolean
+  closed?: boolean
   canPickParty: boolean
   onChange: () => Promise<void> | void
 }) {
@@ -493,12 +495,17 @@ export function CostsTab({
           <Download className="h-3.5 w-3.5" /> Export CSV
         </button>
       </div>
-      {!canEdit && (
-        <p data-testid="costs-read-only" className="mt-2 text-xs text-text-secondary">
-          You can read the costs but not add, close or void them — that needs the budget edit permission. An owner or
-          administrator can grant it under Settings → Company → Members.
-        </p>
-      )}
+      {!canEdit &&
+        (closed ? (
+          <p data-testid="costs-closed" className="mt-2 text-xs text-text-secondary">
+            This budget is closed, so no orders or invoices can be added, closed or voided. Reopen it first.
+          </p>
+        ) : (
+          <p data-testid="costs-read-only" className="mt-2 text-xs text-text-secondary">
+            You can read the costs but not add, close or void them — that needs the budget edit permission. An owner or
+            administrator can grant it under Settings → Company → Members.
+          </p>
+        ))}
 
       {adding && (
         <div className="mt-3 max-w-2xl">

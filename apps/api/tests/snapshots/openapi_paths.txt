@@ -12,6 +12,7 @@ GET /budgets/{budget_id}
 GET /budgets/{budget_id}/actuals
 GET /budgets/{budget_id}/actuals/export.csv
 GET /budgets/{budget_id}/calculated
+GET /budgets/{budget_id}/close-check
 GET /budgets/{budget_id}/commitments
 GET /budgets/{budget_id}/duplicates
 GET /budgets/{budget_id}/export.csv
@@ -112,6 +113,7 @@ POST /budgets/{budget_id}/actuals/import/preview
 POST /budgets/{budget_id}/actuals/{actual_id}/void
 POST /budgets/{budget_id}/adjustments
 POST /budgets/{budget_id}/adjustments/{adjustment_id}/remove
+POST /budgets/{budget_id}/close
 POST /budgets/{budget_id}/commitments
 POST /budgets/{budget_id}/commitments/{commitment_id}/cancel
 POST /budgets/{budget_id}/commitments/{commitment_id}/close
@@ -127,6 +129,7 @@ POST /budgets/{budget_id}/lines/{line_id}/finish
 POST /budgets/{budget_id}/lines/{line_id}/remove
 POST /budgets/{budget_id}/lines/{line_id}/reopen
 POST /budgets/{budget_id}/lock
+POST /budgets/{budget_id}/reopen
 POST /budgets/{budget_id}/sections
 POST /budgets/{budget_id}/sections/{section_id}/finish
 POST /budgets/{budget_id}/sections/{section_id}/remove

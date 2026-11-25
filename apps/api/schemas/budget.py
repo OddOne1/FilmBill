@@ -161,6 +161,11 @@ class BudgetResponse(BaseModel):
     is_active: bool = True
     locked_at: Optional[datetime] = None
     is_locked: bool = False
+    #: B1.1: the production's end. A closed budget is always locked.
+    closed_at: Optional[datetime] = None
+    closed_by: Optional[uuid.UUID] = None
+    close_note: Optional[str] = None
+    is_closed: bool = False
     section_count: int = 0
     line_count: int = 0
     created_at: datetime
@@ -431,6 +436,78 @@ class BudgetLockRequest(BaseModel):
     #: Written into the audit event. Optional, because requiring a reason for
     #: every lock is how a field becomes "x".
     reason: Optional[str] = Field(default=None, max_length=1000)
+
+
+# ─── Closing (B1.1) ─────────────────────────────────────────────────────────
+
+CloseState = Literal["clean", "within_estimate", "over_estimate"]
+
+
+class CloseCheckLine(BaseModel):
+    """A line the close check lists, with what the screen links to."""
+
+    line_id: uuid.UUID
+    section_id: uuid.UUID
+    description: str
+    estimate_cost: Money
+    actual: Money
+    committed_open: Money
+    efc: Money
+    variance: Money
+
+
+class CloseCheckEntry(BaseModel):
+    """An order or invoice the close check lists."""
+
+    kind: Literal["commitment", "actual"]
+    id: uuid.UUID
+    section_id: uuid.UUID
+    line_id: Optional[uuid.UUID] = None
+    description: Optional[str] = None
+    reference: Optional[str] = None
+    amount: Money
+
+
+class CloseCheckResponse(BaseModel):
+    """What does not add up before a budget is closed.
+
+    `state` is `clean` (nothing listed), `within_estimate` (something is
+    listed but the total forecast is at or below the total plan — money moved
+    between lines) or `over_estimate`. `digest` is what `POST .../close`
+    needs back to prove the person read THIS list.
+    """
+
+    budget_id: uuid.UUID
+    state: CloseState
+    estimate_cost: Money
+    efc: Money
+    variance: Money
+    lines_over: list[CloseCheckLine]
+    lines_under_not_finished: list[CloseCheckLine]
+    finished_with_open_commitment: list[CloseCheckLine]
+    open_commitments: list[CloseCheckEntry]
+    open_commitments_total: Money
+    unallocated: list[CloseCheckEntry]
+    unallocated_total: Money
+    digest: str
+
+
+class BudgetCloseRequest(BaseModel):
+    """Close a locked budget. Over discrepancies, all three are needed."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    acknowledge: bool = False
+    digest: Optional[str] = Field(default=None, max_length=64)
+    note: Optional[str] = Field(default=None, max_length=2000)
+
+
+class BudgetReopenRequest(BaseModel):
+    """Reopening a closed budget always says why."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(min_length=1, max_length=1000)
 
 
 # ─── CSV import ─────────────────────────────────────────────────────────────

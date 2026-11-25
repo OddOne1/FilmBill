@@ -110,6 +110,9 @@ BUDGET_AUDITED: tuple[str, ...] = (
     "is_primary",
     "is_active",
     "locked_at",
+    "closed_at",
+    "closed_by",
+    "close_note",
 )
 SECTION_AUDITED: tuple[str, ...] = (
     "code",
@@ -201,6 +204,30 @@ def refuse_if_locked(budget: Budget) -> None:
             f"globals and adjustments cannot be changed. Unlock it first — "
             f"unlocking is recorded in the audit log, which is the point of "
             f"the lock."
+        )
+
+
+class BudgetClosed(BudgetError):
+    """This budget is closed (B1.1): the production has ended. A 409."""
+
+
+def refuse_if_closed(
+    budget: Budget,
+    *,
+    what: str = "orders, invoices, still to spend and finishing lines are refused",
+) -> None:
+    """A closed budget takes no cost entry, no still-to-spend, no finish.
+
+    Separate from `refuse_if_locked` because the two freeze different
+    things: a lock freezes the PLAN and leaves costs open (D85); closing is
+    the production's end and freezes the costs too. A closed budget is
+    always locked, so every estimate edit is refused by the lock already.
+    """
+    if budget.closed_at is not None:
+        raise BudgetClosed(
+            f"{budget.name} was closed on {budget.closed_at.date().isoformat()}, "
+            f"so {what}. Reopen it first — reopening asks for a "
+            f"reason and is recorded in the audit log."
         )
 
 
@@ -1372,6 +1399,7 @@ def lock(db: Session, budget: Budget) -> None:
 
 
 def unlock(db: Session, budget: Budget) -> None:
+    refuse_if_closed(budget, what="it cannot be unlocked")
     budget.locked_at = None
     db.flush()
 

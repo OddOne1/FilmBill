@@ -3,7 +3,7 @@
 import * as React from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, Copy, Download, Loader2, Lock, Unlock, Upload } from 'lucide-react'
+import { ArrowLeft, Copy, Download, Flag, Loader2, Lock, Unlock, Upload } from 'lucide-react'
 import { api, ApiError } from '@/lib/api'
 import { formatAmount, NO_VALUE } from '@/lib/money'
 import { useCompanyStore } from '@/stores/company-store'
@@ -21,6 +21,7 @@ import { BudgetImport } from './budget-import'
 import { CostForecast, LineDrawer, PhaseSheet, PhaseSwitch, type Phase } from './budget-tracking'
 import { CostsTab } from './budget-costs'
 import { HowToRead, Term } from './budget-glossary-ui'
+import { CloseBudgetDialog, ClosedNotice } from './budget-close'
 
 /**
  * One budget: the Sheet, its Costs, and the Top sheet.
@@ -50,6 +51,7 @@ export default function BudgetPage() {
   const [error, setError] = React.useState<string | null>(null)
   const [tab, setTab] = React.useState<Tab>('sheet')
   const [importing, setImporting] = React.useState(false)
+  const [closing, setClosing] = React.useState(false)
   const [busy, setBusy] = React.useState(false)
 
   const budgetId = params.budgetId
@@ -102,6 +104,10 @@ export default function BudgetPage() {
       .map((row) => row.id),
   )
   const editable = access.canEditBudgets && !!budget && !budget.is_locked
+  // Costs, still to spend and finishing lines: open on a locked budget
+  // (D85), closed on a closed one (B1.1) — the API refuses them too.
+  const closed = !!budget?.is_closed
+  const costsEditable = access.canEditBudgets && !closed
   const currency = budget?.currency ?? ''
 
   const act = async (call: () => Promise<unknown>, failure: string) => {
@@ -176,7 +182,18 @@ export default function BudgetPage() {
             </div>
             {access.canEditBudgets && (
               <div className="flex flex-wrap items-center gap-2">
-                {budget.is_locked ? (
+                {budget.is_locked && !closed && (
+                  <button
+                    type="button"
+                    data-testid="budget-close"
+                    disabled={busy}
+                    onClick={() => setClosing(true)}
+                    className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-sm"
+                  >
+                    <Flag className="h-3.5 w-3.5" /> Close budget
+                  </button>
+                )}
+                {closed ? null : budget.is_locked ? (
                   <button
                     type="button"
                     data-testid="budget-unlock"
@@ -236,7 +253,14 @@ export default function BudgetPage() {
           </div>
 
           {access.loaded && !access.canEditBudgets && <BudgetsReadOnlyNotice />}
-          {access.canEditBudgets && budget.is_locked && <BudgetLockedNotice lockedAt={budget.locked_at} />}
+          {closed ? (
+            <ClosedNotice budget={budget} canEdit={access.canEditBudgets} onReopened={reload} />
+          ) : (
+            access.canEditBudgets && budget.is_locked && <BudgetLockedNotice lockedAt={budget.locked_at} />
+          )}
+          {closing && (
+            <CloseBudgetDialog budget={budget} onClose={() => setClosing(false)} onClosed={reload} />
+          )}
 
           {importing && editable && (
             <BudgetImport budgetId={budget.id} onApplied={reload} onClose={() => setImporting(false)} />
@@ -312,7 +336,7 @@ export default function BudgetPage() {
                   tracking={tracking}
                   phase={phase}
                   onOpenLine={setDrawerLine}
-                  canEdit={access.canEditBudgets}
+                  canEdit={costsEditable}
                   onChange={reload}
                 />
               )}
@@ -321,7 +345,8 @@ export default function BudgetPage() {
           {tab === 'costs' && (
             <CostsTab
               sheet={sheet}
-              canEdit={access.canEditBudgets}
+              canEdit={costsEditable}
+              closed={closed}
               canPickParty={access.canViewParties}
               onChange={reload}
             />
@@ -338,7 +363,8 @@ export default function BudgetPage() {
               sheet={sheet}
               line={drawerLine}
               tracking={tracking}
-              canEdit={access.canEditBudgets}
+              canEdit={costsEditable}
+              closed={closed}
               onClose={() => setDrawerLine(null)}
               onChange={reload}
             />

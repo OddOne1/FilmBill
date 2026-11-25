@@ -118,7 +118,7 @@ function line(overrides: Partial<BudgetLine>): BudgetLine {
   }
 }
 
-export function makeSheet(overrides: { locked?: boolean } = {}): BudgetSheet {
+export function makeSheet(overrides: { locked?: boolean; closed?: boolean } = {}): BudgetSheet {
   return {
     budget: {
       id: 'b1',
@@ -128,8 +128,12 @@ export function makeSheet(overrides: { locked?: boolean } = {}): BudgetSheet {
       notes: null,
       is_primary: true,
       is_active: true,
-      locked_at: overrides.locked ? '2026-11-20T10:00:00Z' : null,
-      is_locked: !!overrides.locked,
+      locked_at: overrides.locked || overrides.closed ? '2026-11-20T10:00:00Z' : null,
+      is_locked: !!overrides.locked || !!overrides.closed,
+      closed_at: overrides.closed ? '2026-11-24T18:00:00Z' : null,
+      closed_by: null,
+      close_note: overrides.closed ? 'Approved by the producer on the wrap call.' : null,
+      is_closed: !!overrides.closed,
       section_count: 2,
       line_count: 3,
       created_at: '2026-11-24T00:00:00Z',

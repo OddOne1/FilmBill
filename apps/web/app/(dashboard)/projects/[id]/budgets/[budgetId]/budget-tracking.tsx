@@ -342,6 +342,7 @@ export function LineDrawer({
   line,
   tracking,
   canEdit,
+  closed = false,
   onClose,
   onChange,
 }: {
@@ -349,6 +350,7 @@ export function LineDrawer({
   line: BudgetLine
   tracking: BudgetTracking | null
   canEdit: boolean
+  closed?: boolean
   onClose: () => void
   onChange: () => Promise<void> | void
 }) {
@@ -627,7 +629,9 @@ export function LineDrawer({
         )
       ) : (
         <p data-testid="drawer-read-only" className="mt-3 text-xs text-text-tertiary">
-          Adding or voiding costs needs the budget edit permission.
+          {closed
+            ? 'This budget is closed: costs, still to spend and finishing lines are refused. Reopen it first.'
+            : 'Adding or voiding costs needs the budget edit permission.'}
         </p>
       )}
     </aside>

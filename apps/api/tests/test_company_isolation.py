@@ -335,6 +335,10 @@ CASES: dict[str, object] = {
     "GET /budgets/{budget_id}/export.csv": {"body": None},
     "POST /budgets/{budget_id}/lock": {"body": {}},
     "POST /budgets/{budget_id}/unlock": {"body": {}},
+    # B1.1 closing.
+    "GET /budgets/{budget_id}/close-check": {"body": None},
+    "POST /budgets/{budget_id}/close": {"body": {}},
+    "POST /budgets/{budget_id}/reopen": {"body": {"reason": "Stolen"}},
     "POST /budgets/{budget_id}/set-primary": {"body": None},
     "POST /budgets/{budget_id}/duplicate": {"body": {}},
     "POST /budgets/{budget_id}/sections": {"body": {"name": "Stolen"}},

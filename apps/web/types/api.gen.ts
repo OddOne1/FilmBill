@@ -1011,6 +1011,56 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/budgets/{budget_id}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Close Budget
+         * @description Close a LOCKED budget: the production's end.
+         *
+         *     A clean check closes straight away. Otherwise `acknowledge: true`, a note
+         *     of at least one sentence and the digest of the check that was read are
+         *     all required, and a digest that no longer matches is refused with
+         *     nothing written. Audited as `budget.closed`, with the check's snapshot.
+         */
+        post: operations["close_budget_budgets__budget_id__close_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/budgets/{budget_id}/close-check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Close Check
+         * @description What does not add up, before the budget is closed.
+         *
+         *     Lines over plan, lines under plan not marked finished, finished lines
+         *     with an open order, the open orders, the costs not on a line, the state
+         *     (`clean`, `within_estimate`, `over_estimate`) and the digest the close
+         *     needs back. Every amount is the forecast's own.
+         */
+        get: operations["close_check_budgets__budget_id__close_check_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/budgets/{budget_id}/commitments": {
         parameters: {
             query?: never;
@@ -1491,6 +1541,26 @@ export interface paths {
         put?: never;
         /** Lock Budget */
         post: operations["lock_budget_budgets__budget_id__lock_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/budgets/{budget_id}/reopen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reopen Budget
+         * @description Clear the closed state. The reason is required and audited.
+         */
+        post: operations["reopen_budget_budgets__budget_id__reopen_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4538,6 +4608,21 @@ export interface components {
             /** Top Sheet */
             top_sheet: components["schemas"]["TopSheetRow"][];
         };
+        /**
+         * BudgetCloseRequest
+         * @description Close a locked budget. Over discrepancies, all three are needed.
+         */
+        BudgetCloseRequest: {
+            /**
+             * Acknowledge
+             * @default false
+             */
+            acknowledge: boolean;
+            /** Digest */
+            digest?: string | null;
+            /** Note */
+            note?: string | null;
+        };
         /** BudgetCommitmentCreate */
         BudgetCommitmentCreate: {
             /**
@@ -5072,8 +5157,22 @@ export interface components {
             /** Reason */
             reason?: string | null;
         };
+        /**
+         * BudgetReopenRequest
+         * @description Reopening a closed budget always says why.
+         */
+        BudgetReopenRequest: {
+            /** Reason */
+            reason: string;
+        };
         /** BudgetResponse */
         BudgetResponse: {
+            /** Close Note */
+            close_note?: string | null;
+            /** Closed At */
+            closed_at?: string | null;
+            /** Closed By */
+            closed_by?: string | null;
             /**
              * Created At
              * Format: date-time
@@ -5091,6 +5190,11 @@ export interface components {
              * @default true
              */
             is_active: boolean;
+            /**
+             * Is Closed
+             * @default false
+             */
+            is_closed: boolean;
             /**
              * Is Locked
              * @default false
@@ -5681,6 +5785,161 @@ export interface components {
             catalog_unit_price?: string | null;
             /** Item Name */
             item_name: string;
+        };
+        /**
+         * CloseCheckEntry
+         * @description An order or invoice the close check lists.
+         */
+        CloseCheckEntry: {
+            /**
+             * Amount
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            amount: string;
+            /** Description */
+            description?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "commitment" | "actual";
+            /** Line Id */
+            line_id?: string | null;
+            /** Reference */
+            reference?: string | null;
+            /**
+             * Section Id
+             * Format: uuid
+             */
+            section_id: string;
+        };
+        /**
+         * CloseCheckLine
+         * @description A line the close check lists, with what the screen links to.
+         */
+        CloseCheckLine: {
+            /**
+             * Actual
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            actual: string;
+            /**
+             * Committed Open
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            committed_open: string;
+            /** Description */
+            description: string;
+            /**
+             * Efc
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            efc: string;
+            /**
+             * Estimate Cost
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            estimate_cost: string;
+            /**
+             * Line Id
+             * Format: uuid
+             */
+            line_id: string;
+            /**
+             * Section Id
+             * Format: uuid
+             */
+            section_id: string;
+            /**
+             * Variance
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            variance: string;
+        };
+        /**
+         * CloseCheckResponse
+         * @description What does not add up before a budget is closed.
+         *
+         *     `state` is `clean` (nothing listed), `within_estimate` (something is
+         *     listed but the total forecast is at or below the total plan — money moved
+         *     between lines) or `over_estimate`. `digest` is what `POST .../close`
+         *     needs back to prove the person read THIS list.
+         */
+        CloseCheckResponse: {
+            /**
+             * Budget Id
+             * Format: uuid
+             */
+            budget_id: string;
+            /** Digest */
+            digest: string;
+            /**
+             * Efc
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            efc: string;
+            /**
+             * Estimate Cost
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            estimate_cost: string;
+            /** Finished With Open Commitment */
+            finished_with_open_commitment: components["schemas"]["CloseCheckLine"][];
+            /** Lines Over */
+            lines_over: components["schemas"]["CloseCheckLine"][];
+            /** Lines Under Not Finished */
+            lines_under_not_finished: components["schemas"]["CloseCheckLine"][];
+            /** Open Commitments */
+            open_commitments: components["schemas"]["CloseCheckEntry"][];
+            /**
+             * Open Commitments Total
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            open_commitments_total: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "clean" | "within_estimate" | "over_estimate";
+            /** Unallocated */
+            unallocated: components["schemas"]["CloseCheckEntry"][];
+            /**
+             * Unallocated Total
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            unallocated_total: string;
+            /**
+             * Variance
+             * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.
+             * @default 0
+             * @example 1250.00
+             */
+            variance: string;
         };
         /**
          * CloseRequest
@@ -10562,6 +10821,76 @@ export interface operations {
             };
         };
     };
+    close_budget_budgets__budget_id__close_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BudgetCloseRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    close_check_budgets__budget_id__close_check_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CloseCheckResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_commitments_budgets__budget_id__commitments_get: {
         parameters: {
             query?: {
@@ -11399,6 +11728,43 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["BudgetLockRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reopen_budget_budgets__budget_id__reopen_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BudgetReopenRequest"];
             };
         };
         responses: {

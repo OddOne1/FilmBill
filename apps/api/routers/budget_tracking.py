@@ -192,13 +192,23 @@ def _refuse_tracking_error(error: budget_service.BudgetError):
 
 
 def _writable(db: Session, budget: Budget) -> Budget:
-    """`SELECT … FOR UPDATE` on the budget row — and **no lock check**.
+    """`SELECT … FOR UPDATE` on the budget row, then the CLOSED check — and
+    **no lock check**.
 
     Deliberately not `budgets._editable`: a locked budget accepts cost
     entries, because a locked ESTIMATE is the baseline they are measured
-    against. See the module docstring.
+    against. See the module docstring. A CLOSED budget does not (B1.1): the
+    production has ended, and every write in this router — orders,
+    invoices, still to spend, finishing lines, the import — goes through
+    here, so this is the one place that refusal lives. The row lock comes
+    first so a close and a cost entry arriving together cannot both pass.
     """
-    return budget_service.lock_for_write(db, budget)
+    row = budget_service.lock_for_write(db, budget)
+    try:
+        budget_service.refuse_if_closed(row)
+    except budget_service.BudgetError as error:
+        _refuse(error)
+    return row
 
 
 def _actor(request: Request, membership: Membership) -> audit.Actor:

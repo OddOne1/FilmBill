@@ -60,6 +60,7 @@ from ..schemas.budget import (
     BudgetAdjustmentResponse,
     BudgetAdjustmentUpdate,
     BudgetCalculatedResponse,
+    BudgetCloseRequest,
     BudgetCreate,
     BudgetDuplicateRequest,
     BudgetGlobalCreate,
@@ -72,6 +73,7 @@ from ..schemas.budget import (
     BudgetLineResponse,
     BudgetLineUpdate,
     BudgetLockRequest,
+    BudgetReopenRequest,
     BudgetResponse,
     BudgetSectionCreate,
     BudgetSectionResponse,
@@ -79,8 +81,9 @@ from ..schemas.budget import (
     BudgetSheetResponse,
     BudgetUpdate,
     CatalogDifference,
+    CloseCheckResponse,
 )
-from ..services import audit, budget_service
+from ..services import audit, budget_close_service, budget_service
 from ..services.permissions import scoped
 
 router = APIRouter(tags=["budgets"])
@@ -236,6 +239,10 @@ def _budget_response(db: Session, budget: Budget) -> BudgetResponse:
         is_active=budget.is_active,
         locked_at=budget.locked_at,
         is_locked=budget.locked_at is not None,
+        closed_at=budget.closed_at,
+        closed_by=budget.closed_by,
+        close_note=budget.close_note,
+        is_closed=budget.closed_at is not None,
         section_count=len(sections),
         line_count=len(lines),
         created_at=budget.created_at,
@@ -544,7 +551,10 @@ def unlock_budget(
     """
     budget = _budget_or_404(db, membership, budget_id)
     before = audit.snapshot(budget, budget_service.BUDGET_AUDITED)
-    budget_service.unlock(db, budget)
+    try:
+        budget_service.unlock(db, budget)
+    except budget_service.BudgetError as error:
+        _refuse(error)
     audit.record(
         db,
         _actor(request, membership),
@@ -555,6 +565,86 @@ def unlock_budget(
         reason=body.reason,
         fields=budget_service.BUDGET_AUDITED,
     )
+    db.commit()
+    db.refresh(budget)
+    return _budget_response(db, budget)
+
+
+# ─── Closing (B1.1) ─────────────────────────────────────────────────────────
+
+
+@router.get("/budgets/{budget_id}/close-check", response_model=CloseCheckResponse)
+def close_check(
+    budget_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    membership: Membership = Depends(require("budgets.view")),
+):
+    """What does not add up, before the budget is closed.
+
+    Lines over plan, lines under plan not marked finished, finished lines
+    with an open order, the open orders, the costs not on a line, the state
+    (`clean`, `within_estimate`, `over_estimate`) and the digest the close
+    needs back. Every amount is the forecast's own.
+    """
+    budget = _budget_or_404(db, membership, budget_id)
+    budget_service.sync_computed_globals(db, budget)
+    db.commit()
+    try:
+        return CloseCheckResponse(**budget_close_service.close_check(db, budget))
+    except budget_service.BudgetError as error:
+        _refuse_budget_error(error)
+
+
+@router.post("/budgets/{budget_id}/close", response_model=BudgetResponse)
+def close_budget(
+    budget_id: uuid.UUID,
+    body: BudgetCloseRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    membership: Membership = Depends(require("budgets.edit")),
+):
+    """Close a LOCKED budget: the production's end.
+
+    A clean check closes straight away. Otherwise `acknowledge: true`, a note
+    of at least one sentence and the digest of the check that was read are
+    all required, and a digest that no longer matches is refused with
+    nothing written. Audited as `budget.closed`, with the check's snapshot.
+    """
+    budget = budget_service.lock_for_write(db, _budget_or_404(db, membership, budget_id))
+    try:
+        budget_close_service.close(
+            db,
+            budget,
+            acknowledge=body.acknowledge,
+            digest=body.digest,
+            note=body.note,
+            actor=_actor(request, membership),
+        )
+    except budget_service.BudgetError as error:
+        db.rollback()
+        _refuse(error)
+    db.commit()
+    db.refresh(budget)
+    return _budget_response(db, budget)
+
+
+@router.post("/budgets/{budget_id}/reopen", response_model=BudgetResponse)
+def reopen_budget(
+    budget_id: uuid.UUID,
+    body: BudgetReopenRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    membership: Membership = Depends(require("budgets.edit")),
+):
+    """Clear the closed state. The reason is required and audited."""
+    budget = budget_service.lock_for_write(db, _budget_or_404(db, membership, budget_id))
+    try:
+        budget_close_service.reopen(
+            db, budget, reason=body.reason, actor=_actor(request, membership)
+        )
+    except budget_service.BudgetError as error:
+        db.rollback()
+        _refuse(error)
     db.commit()
     db.refresh(budget)
     return _budget_response(db, budget)

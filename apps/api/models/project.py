@@ -284,6 +284,19 @@ class Budget(CompanyScoped, Base):
     locked_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    #: B1.1: the production's end. Only a LOCKED budget can be closed, and a
+    #: closed one refuses cost entries, still-to-spend and finishing lines
+    #: until it is reopened (`budget_service.refuse_if_closed`). What was
+    #: approved when it closed is in the `budget.closed` audit event.
+    closed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    closed_by: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL", name="fk_budgets_closed_by_users"),
+        nullable=True,
+    )
+    close_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -310,6 +323,10 @@ class Budget(CompanyScoped, Base):
     @property
     def is_locked(self) -> bool:
         return self.locked_at is not None
+
+    @property
+    def is_closed(self) -> bool:
+        return self.closed_at is not None
 
     __table_args__ = (Index("ix_budgets_company_project", "company_id", "project_id"),)
 
