@@ -1563,6 +1563,42 @@ def remove_global(
 # ─── Adjustments ────────────────────────────────────────────────────────────
 
 
+def _check_adjustment_scope(base: str, kinds) -> None:
+    """The kind filter (B1.2): only real item kinds, and only with `kinds`.
+
+    Refused here rather than left to the engine, which would refuse the same
+    thing at calculation time — after it had been stored, so that the whole
+    sheet stopped calculating because of one adjustment. A kind that is not
+    one of `ITEM_KINDS` is a typo that would match nothing for ever.
+    """
+    kinds = list(kinds or [])
+    if base == "kinds" and not kinds:
+        _refuse(
+            budget_service.BudgetError(
+                "This adjustment is limited to certain kinds but names none. "
+                "Pick at least one kind, or apply it to everything."
+            ),
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+        )
+    if base != "kinds" and kinds:
+        _refuse(
+            budget_service.BudgetError(
+                "This adjustment lists kinds but applies to everything. "
+                "Send base \"kinds\" to limit it, or leave the kinds out."
+            ),
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+        )
+    unknown = [kind for kind in kinds if kind not in ITEM_KINDS]
+    if unknown:
+        _refuse(
+            budget_service.BudgetError(
+                f"This adjustment names unknown kinds ({', '.join(unknown)}). "
+                f"Use: {', '.join(ITEM_KINDS)}."
+            ),
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+        )
+
+
 @router.post(
     "/budgets/{budget_id}/adjustments",
     response_model=BudgetAdjustmentResponse,
@@ -1587,15 +1623,7 @@ def create_adjustment(
         if body.section_id is not None
         else None
     )
-    if body.base == "kinds" and not body.kinds:
-        _refuse(
-            budget_service.BudgetError(
-                "an adjustment based on kinds needs at least one kind — with "
-                "none it would apply to nothing, which is not what anybody "
-                "means by it."
-            ),
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
-        )
+    _check_adjustment_scope(body.base, body.kinds)
 
     row = BudgetAdjustment(
         company_id=membership.company_id,
@@ -1649,13 +1677,7 @@ def update_adjustment(
     before = audit.snapshot(row, budget_service.ADJUSTMENT_AUDITED)
     for field_name, value in changes.items():
         setattr(row, field_name, value)
-    if row.base == "kinds" and not (row.kinds or []):
-        _refuse(
-            budget_service.BudgetError(
-                "an adjustment based on kinds needs at least one kind."
-            ),
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
-        )
+    _check_adjustment_scope(row.base, row.kinds)
     db.flush()
     audit.record(
         db,
