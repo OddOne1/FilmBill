@@ -316,6 +316,9 @@ EXPECTED_SCENARIOS = frozenset(
         "collapsed-price-not-exact",
         "nested-groups",
         "line-discounts",
+        # B1.2: a line opting out of an adjustment's role.
+        "role-exempt-line",
+        "role-exempt-kinds-fee",
     }
 )
 

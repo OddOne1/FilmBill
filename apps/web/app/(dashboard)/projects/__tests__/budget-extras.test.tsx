@@ -135,8 +135,40 @@ describe('the Extras tab', () => {
     await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1))
     expect(vi.mocked(api.post).mock.calls[0]).toEqual([
       '/budgets/b1/extras',
-      { description: 'Teleprompter', unit_price: '1250.00', unit_cost: '800', note: 'Offered by mail' },
+      { description: 'Teleprompter', unit_price: '1250.00', unit_cost: '800', note: 'Offered by mail', apply_production_fee: true },
     ])
+  })
+
+  it('“Add production fee” is ticked by default and an untick is sent (B1.2)', async () => {
+    const tab = await openExtras()
+    fireEvent.click(within(tab).getByTestId('extra-add'))
+    const form = within(tab).getByTestId('extra-form')
+    const box = within(form).getByLabelText('Add production fee') as HTMLInputElement
+    expect(box.checked).toBe(true)
+    fireEvent.click(box)
+    fireEvent.change(within(form).getByLabelText('What it is'), { target: { value: 'Drone' } })
+    fireEvent.change(within(form).getByLabelText('Price (net)'), { target: { value: '500' } })
+    fireEvent.click(within(form).getByTestId('extra-save'))
+    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1))
+    expect((vi.mocked(api.post).mock.calls[0][1] as Record<string, unknown>).apply_production_fee).toBe(false)
+  })
+
+  it('an extra without the fee says so, and its edit form starts unticked (B1.2)', async () => {
+    const sheet = sheetWithExtras()
+    const drone = sheet.lines.find((line) => line.id === 'l-x1')!
+    drone.apply_production_fee = false
+    mockApi(sheet)
+    const tab = await openExtras()
+    expect(within(row('l-x1')).getByTestId('extra-no-fee').textContent).toBe('no production fee')
+    expect(within(row('l-x2')).queryByTestId('extra-no-fee')).toBeNull()
+    fireEvent.click(within(row('l-x1')).getByTestId('extra-edit'))
+    const form = within(tab).getByTestId('extra-form')
+    const box = within(form).getByLabelText('Add production fee') as HTMLInputElement
+    expect(box.checked).toBe(false)
+    fireEvent.click(box)
+    fireEvent.click(within(form).getByTestId('extra-save'))
+    await waitFor(() => expect(api.patch).toHaveBeenCalledTimes(1))
+    expect((vi.mocked(api.patch).mock.calls[0][1] as Record<string, unknown>).apply_production_fee).toBe(true)
   })
 
   it('accept is offered on a proposed extra only, and is one POST', async () => {

@@ -113,6 +113,9 @@ class LineResult:
     gross: Decimal
     #: What the line's own discount took off, as a positive number.
     discount_amount: Decimal
+    #: The line's `exempt_from`, carried through so `_apply_adjustments` can
+    #: leave it out of an adjustment with a matching role. Not sent by the API.
+    exempt_from: tuple[str, ...] = ()
     #: `"line"`. A constant, carried so a result tree can be told apart row
     #: by row without inspecting which fields happen to be present. The
     #: API's response models discriminate on it, and so does a client
@@ -313,6 +316,7 @@ def _line_result(line: Line) -> LineResult:
         period_value=line.period_value,
         gross=gross,
         discount_amount=gross - net,
+        exempt_from=line.exempt_from,
     )
 
 
@@ -431,6 +435,14 @@ def _apply_adjustments(
     at_start: dict[str, Decimal] = dict(by_tax_ref)
 
     for adjustment in adjustments:
+        # B1.2: the lines that opted out of this adjustment's role. Their own
+        # nets come off the base and off their category's weight; nothing
+        # else about the adjustment changes. No role, no exemption.
+        exempt = (
+            [line for line in lines if adjustment.role in line.exempt_from]
+            if adjustment.role
+            else []
+        )
         if adjustment.base == "subtotal":
             base_amount = subtotal
             weights = {ref: value for ref, value in at_start.items()}
@@ -440,9 +452,15 @@ def _apply_adjustments(
         else:  # "kinds" — validated in model.Adjustment, so no else branch
             weights = {}
             for line in lines:
-                if line.kind in adjustment.kinds:
+                if line.kind in adjustment.kinds and not (
+                    adjustment.role and adjustment.role in line.exempt_from
+                ):
                     weights[line.tax_ref] = weights.get(line.tax_ref, ZERO) + line.net
             base_amount = sum(weights.values(), ZERO)
+        if adjustment.base != "kinds":
+            for line in exempt:
+                base_amount = base_amount - line.net
+                weights[line.tax_ref] = weights.get(line.tax_ref, ZERO) - line.net
 
         if adjustment.mode == "percent":
             amount = quantize_amount(percent_of(base_amount, adjustment.value))

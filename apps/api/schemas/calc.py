@@ -85,6 +85,10 @@ class CalcLine(BaseModel):
     #: A line may be negative only when it says so — a correction, a credit.
     #: Off by default so a typed minus sign is a refusal, not a surprise.
     allow_negative: bool = False
+    #: Roles of adjustments this line is left out of (B1.2) — an extra the
+    #: customer is not charged the production fee on carries
+    #: `["production_fee"]`. Matched as strings against an adjustment's `role`.
+    exempt_from: list[str] = Field(default_factory=list)
 
 
 class CalcAdjustment(BaseModel):
@@ -99,6 +103,9 @@ class CalcAdjustment(BaseModel):
     base: AdjustmentBase = "subtotal"
     #: Only for `base: "kinds"` — the line kinds this one applies to.
     kinds: list[str] = Field(default_factory=list)
+    #: What this adjustment is, when a line may opt out of it (B1.2). A line
+    #: whose `exempt_from` lists this role is left out of its base.
+    role: str = Field(default="", max_length=32)
 
 
 class CalcGroup(BaseModel):

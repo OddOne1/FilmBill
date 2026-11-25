@@ -147,6 +147,7 @@ LINE_AUDITED: tuple[str, ...] = (
     "extra_status",
     "extra_decided_on",
     "extra_note",
+    "apply_production_fee",
 )
 GLOBAL_AUDITED: tuple[str, ...] = (
     "key",
@@ -592,6 +593,8 @@ def _adjustment_payload(row: BudgetAdjustment) -> dict:
     }
     if row.base == "kinds":
         payload["kinds"] = list(row.kinds or [])
+    if row.role:
+        payload["role"] = row.role
     return payload
 
 
@@ -668,10 +671,18 @@ def engine_input(
 
     explanations: list = []
 
+    def line_for(section: BudgetSection, line: BudgetLine) -> dict:
+        payload = _line_payload(db, line, values, items, explanations)
+        # B1.2: an extra with "add production fee" unticked opts out of the
+        # budget's fee adjustment — by role, so no other adjustment is
+        # affected and no line outside the Extras section can opt out.
+        if section.is_extras and not line.apply_production_fee:
+            payload["exempt_from"] = [EXTRA_FEE_ROLE]
+        return payload
+
     def group_for(section: BudgetSection) -> dict:
         children: list[dict] = [
-            _line_payload(db, line, values, items, explanations)
-            for line in lines_by_section.get(section.id, [])
+            line_for(section, line) for line in lines_by_section.get(section.id, [])
         ]
         children.extend(
             group_for(child) for child in children_by_parent.get(section.id, [])
@@ -1116,6 +1127,8 @@ EXAMPLE_FEE = ("Production fee", "surcharge", "percent", "8")
 #: `budget_fee_service.ROLE_PRODUCTION_FEE`, spelled here because that module
 #: imports this one.
 EXAMPLE_FEE_ROLE = "production_fee"
+#: The role an unticked extra is exempt from — the same string.
+EXTRA_FEE_ROLE = EXAMPLE_FEE_ROLE
 
 
 def standard_tax_ref(db: Session, company_id) -> str:

@@ -58,9 +58,12 @@ interface Draft {
   unit_price: string
   unit_cost: string
   note: string
+  /** B1.2: does the budget's production fee fall on this extra? Ticked by
+   *  default (Mathias, 2026-11-25); the API prices it either way. */
+  apply_production_fee: boolean
 }
 
-const EMPTY: Draft = { description: '', unit_price: '', unit_cost: '', note: '' }
+const EMPTY: Draft = { description: '', unit_price: '', unit_cost: '', note: '', apply_production_fee: true }
 
 function ExtraForm({
   initial,
@@ -77,7 +80,7 @@ function ExtraForm({
   const missing: string[] = []
   if (!draft.description.trim()) missing.push('a description')
   if (!draft.unit_price.trim()) missing.push('a price')
-  const field = (key: keyof Draft, label: string, wide = false) => (
+  const field = (key: 'description' | 'unit_price' | 'unit_cost' | 'note', label: string, wide = false) => (
     <label className={`flex flex-col text-xs text-text-secondary ${wide ? 'flex-1' : 'w-32'}`}>
       {label}
       <input
@@ -103,6 +106,15 @@ function ExtraForm({
         {field('unit_cost', 'Cost (net)')}
       </div>
       {field('note', 'What the customer was told', true)}
+      <label className="flex items-center gap-1.5 text-xs text-text-secondary">
+        <input
+          type="checkbox"
+          aria-label="Add production fee"
+          checked={draft.apply_production_fee}
+          onChange={(event) => setDraft({ ...draft, apply_production_fee: event.target.checked })}
+        />
+        Add production fee — untick to bill this extra at its own price
+      </label>
       <div className="flex items-center gap-2">
         <button
           type="submit"
@@ -165,11 +177,18 @@ export function ExtrasTab({
     unit_price: toApiAmount(draft.unit_price),
     unit_cost: draft.unit_cost.trim() ? toApiAmount(draft.unit_cost) : '0.00',
     note: draft.note.trim() || null,
+    apply_production_fee: draft.apply_production_fee,
   })
 
   const draftOf = (line: BudgetLine | undefined): Draft =>
     line
-      ? { description: line.description, unit_price: line.unit_price, unit_cost: line.unit_cost, note: line.extra_note ?? '' }
+      ? {
+          description: line.description,
+          unit_price: line.unit_price,
+          unit_cost: line.unit_cost,
+          note: line.extra_note ?? '',
+          apply_production_fee: line.apply_production_fee ?? true,
+        }
       : EMPTY
 
   return (
@@ -217,6 +236,11 @@ export function ExtrasTab({
                   <td className="py-1.5 pr-3">
                     <div className="text-text-primary">{row.description}</div>
                     {row.note && <div className="text-xs text-text-tertiary">{row.note}</div>}
+                    {lines.get(row.line_id)?.apply_production_fee === false && (
+                      <div data-testid="extra-no-fee" className="text-[11px] text-text-tertiary">
+                        no production fee
+                      </div>
+                    )}
                     {row.decided_on && (
                       <div className="text-[11px] text-text-tertiary">
                         {row.status} on {row.decided_on}

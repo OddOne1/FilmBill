@@ -330,6 +330,7 @@ def _line_response(db: Session, line: BudgetLine) -> BudgetLineResponse:
         extra_status=line.extra_status,
         extra_decided_on=line.extra_decided_on,
         extra_note=line.extra_note,
+        apply_production_fee=line.apply_production_fee,
     )
 
 

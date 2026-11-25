@@ -159,6 +159,11 @@ class Line:
     #: use it, and it is here so a caller does not have to keep a parallel
     #: map from line id to label.
     label: str = ""
+    #: Roles this line is exempt from (B1.2). An adjustment whose `role` is
+    #: listed here leaves this line out of its base — the one exception to
+    #: "an adjustment applies to every line in its container". Opaque to the
+    #: engine: it matches strings, it does not know what a production fee is.
+    exempt_from: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         where = f"line {self.id!r}"
@@ -196,6 +201,7 @@ class Line:
                 f"otherwise this is a typo."
             )
         object.__setattr__(self, "tags", tuple(self.tags))
+        object.__setattr__(self, "exempt_from", tuple(self.exempt_from))
 
 
 # ─── Adjustment ─────────────────────────────────────────────────────────────
@@ -225,6 +231,11 @@ class Adjustment:
     value: Decimal
     base: str = "subtotal"
     kinds: tuple[str, ...] = ()
+    #: What this adjustment is, when a line may opt out of it (B1.2): a line
+    #: whose `exempt_from` lists this role is left out of this adjustment's
+    #: base and allocation. Empty — the default — means no line can opt out.
+    #: Opaque: the engine compares strings and gives no role a meaning.
+    role: str = ""
 
     def __post_init__(self) -> None:
         where = f"adjustment {self.label!r}"
@@ -411,7 +422,7 @@ _LINE_FIELDS = frozenset(
     {
         "id", "type", "label", "quantity", "period_value", "period_unit",
         "factor", "unit_price", "unit_cost", "discount", "tax_ref", "kind",
-        "tags", "allow_negative",
+        "tags", "allow_negative", "exempt_from",
     }
 )
 
@@ -431,6 +442,9 @@ def line_from_data(data: Mapping[str, Any]) -> Line:
     tags = data.get("tags") or ()
     if isinstance(tags, str) or not isinstance(tags, Iterable):
         raise CalcError(f"tags on {where} must be a list of strings")
+    exempt = data.get("exempt_from") or ()
+    if isinstance(exempt, str) or not isinstance(exempt, Iterable):
+        raise CalcError(f"exempt_from on {where} must be a list of strings")
     return Line(
         id=line_id,
         label=_text(data.get("label"), what="label", where=where),
@@ -447,10 +461,13 @@ def line_from_data(data: Mapping[str, Any]) -> Line:
         kind=_text(data.get("kind"), what="kind", where=where),
         tags=tuple(_text(tag, what="tag", where=where) for tag in tags),
         allow_negative=bool(data.get("allow_negative", False)),
+        exempt_from=tuple(_text(role, what="exempt_from", where=where) for role in exempt),
     )
 
 
-_ADJUSTMENT_FIELDS = frozenset({"label", "type", "mode", "value", "base", "kinds"})
+_ADJUSTMENT_FIELDS = frozenset(
+    {"label", "type", "mode", "value", "base", "kinds", "role"}
+)
 
 
 def adjustment_from_data(data: Mapping[str, Any]) -> Adjustment:
@@ -474,6 +491,7 @@ def adjustment_from_data(data: Mapping[str, Any]) -> Adjustment:
         value=_number(data.get("value", 0), what="value", where=where),
         base=data.get("base", "subtotal"),
         kinds=tuple(_text(kind, what="kind", where=where) for kind in kinds),
+        role=_text(data.get("role"), what="role", where=where),
     )
 
 

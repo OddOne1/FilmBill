@@ -104,6 +104,9 @@ class BudgetLineResponse(BaseModel):
     extra_status: Optional[ExtraStatus] = None
     extra_decided_on: Optional[date] = None
     extra_note: Optional[str] = None
+    #: B1.2: whether the production fee falls on this extra. Always true on
+    #: an ordinary line, where it means nothing.
+    apply_production_fee: bool = True
 
 
 class BudgetSectionResponse(BaseModel):
@@ -537,6 +540,9 @@ class BudgetExtraCreate(BaseModel):
     unit_cost: Optional[Money] = None
     tax_ref: Optional[str] = Field(default=None, max_length=64)
     note: Optional[str] = Field(default=None, max_length=2000)
+    #: B1.2: does the budget's production fee fall on this extra? Ticked
+    #: by default; unticked, it is billed at its own price.
+    apply_production_fee: bool = True
 
     @model_validator(mode="after")
     def _needs_something_to_call_itself(self):
@@ -561,6 +567,7 @@ class BudgetExtraUpdate(BaseModel):
     unit_cost: Optional[Money] = None
     tax_ref: Optional[str] = Field(default=None, max_length=64)
     note: Optional[str] = Field(default=None, max_length=2000)
+    apply_production_fee: Optional[bool] = None
 
 
 class BudgetExtraDecision(BaseModel):

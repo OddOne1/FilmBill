@@ -114,6 +114,7 @@ function line(overrides: Partial<BudgetLine>): BudgetLine {
     notes: null,
     is_active: true,
     catalog_difference: null,
+    apply_production_fee: true,
     ...overrides,
   }
 }

@@ -4948,6 +4948,11 @@ export interface components {
          *     free text, with what the customer was told. Starts as `proposed`.
          */
         BudgetExtraCreate: {
+            /**
+             * Apply Production Fee
+             * @default true
+             */
+            apply_production_fee: boolean;
             /** Description */
             description?: string | null;
             /**
@@ -5003,6 +5008,8 @@ export interface components {
          *     allowed and audited with the before and the after.
          */
         BudgetExtraUpdate: {
+            /** Apply Production Fee */
+            apply_production_fee?: boolean | null;
             /** Description */
             description?: string | null;
             /** Factor */
@@ -5260,6 +5267,11 @@ export interface components {
              * @default false
              */
             allow_negative: boolean;
+            /**
+             * Apply Production Fee
+             * @default true
+             */
+            apply_production_fee: boolean;
             catalog_difference?: components["schemas"]["CatalogDifference"] | null;
             /** Description */
             description: string;
@@ -5633,6 +5645,11 @@ export interface components {
              */
             mode: "percent" | "amount";
             /**
+             * Role
+             * @default
+             */
+            role: string;
+            /**
              * Type
              * @enum {string}
              */
@@ -5806,6 +5823,8 @@ export interface components {
              */
             allow_negative: boolean;
             discount?: components["schemas"]["CalcDiscount"] | null;
+            /** Exempt From */
+            exempt_from?: string[];
             /**
              * Factor
              * @description A decimal number as a string. Sent and received as a string so no value passes through a binary float.

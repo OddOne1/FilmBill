@@ -490,6 +490,14 @@ class BudgetLine(CompanyScoped, Base):
     #: Extras section, NULL everywhere else (`EXTRA_STATUSES`; the rule is
     #: the service's). Only `accepted` extras enter the budget's totals.
     extra_status: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    #: B1.2: does the budget's production fee fall on this EXTRA? Ticked by
+    #: default; unticked, the extra is billed at its own price. Read only for
+    #: lines in the Extras section — an ordinary line always carries the fee
+    #: the budget's fee adjustment says. The engine learns it as
+    #: `exempt_from = ["production_fee"]` (migration 0020).
+    apply_production_fee: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="true", default=True
+    )
     extra_decided_on: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     #: What the customer was told.
     extra_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

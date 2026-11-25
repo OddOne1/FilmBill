@@ -164,6 +164,7 @@ def propose(
         is_active=True,
         extra_status=EXTRA_PROPOSED,
         extra_note=(body.note or "").strip() or None,
+        apply_production_fee=body.apply_production_fee,
     )
     db.add(row)
     db.flush()

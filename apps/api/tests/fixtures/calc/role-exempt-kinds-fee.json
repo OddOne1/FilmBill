@@ -1,0 +1,24 @@
+{
+  "why": "B1.2: the same opt-out on a fee limited to kinds. The fee is 10 % on labor and equipment_rental with role production_fee; the drone is equipment_rental but exempt, so the base is the crew's 1 000.00 and the camera's 400.00 = 1 400.00 → 140.00. The taxi is outside the kind filter either way.",
+  "document": {
+    "id": "exempt-kinds",
+    "children": [
+      { "id": "crew", "quantity": "1", "period_value": "1", "period_unit": "day", "unit_price": "1000", "kind": "labor", "tax_ref": "AT-20" },
+      { "id": "camera", "quantity": "1", "period_value": "1", "period_unit": "day", "unit_price": "400", "kind": "equipment_rental", "tax_ref": "AT-20" },
+      { "id": "drone", "quantity": "1", "period_value": "1", "period_unit": "flat", "unit_price": "500", "kind": "equipment_rental", "tax_ref": "AT-20", "exempt_from": ["production_fee"] },
+      { "id": "taxi", "quantity": "1", "period_value": "1", "period_unit": "flat", "unit_price": "100", "kind": "travel", "tax_ref": "AT-20" }
+    ],
+    "adjustments": [
+      { "label": "Production fee", "type": "surcharge", "mode": "percent", "value": "10", "base": "kinds", "kinds": ["labor", "equipment_rental"], "role": "production_fee" }
+    ]
+  },
+  "expect": {
+    "subtotal": "2000.00",
+    "net": "2140.00",
+    "cost": "0.00",
+    "net_by_tax_ref": { "AT-20": "2140.00" },
+    "adjustments": [
+      { "label": "Production fee", "base_amount": "1400.00", "amount": "140.00", "by_tax_ref": { "AT-20": "140.00" } }
+    ]
+  }
+}
