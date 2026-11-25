@@ -358,8 +358,17 @@ jobs:
       - name: Build API image (prod)
         run: docker build -t filmbill-api:ci-prod -f apps/api/Dockerfile.prod .
 
+      # Google's font hosts point at 127.0.0.1 for this build, so a font
+      # fetched at build time fails here on EVERY run, not only on the day
+      # Google answers badly. That day was 2a6f120: `next/font/google` died
+      # inside `next build`, and the fix is the self-hosted DM Sans in
+      # apps/web/fonts/. A new `next/font/google` import turns this red.
       - name: Build web image (prod)
-        run: docker build -t filmbill-web:ci-prod -f apps/web/Dockerfile.prod .
+        run: |
+          docker build \
+            --add-host fonts.googleapis.com=127.0.0.1 \
+            --add-host fonts.gstatic.com=127.0.0.1 \
+            -t filmbill-web:ci-prod -f apps/web/Dockerfile.prod .
 
       - name: Compose files are valid
         run: |

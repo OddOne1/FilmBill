@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { DM_Sans } from "next/font/google";
+import localFont from "next/font/local";
 import { ToastProvider } from "@/components/shared/toast";
 import { ThemeInitializer } from "@/components/shared/theme-initializer";
 import { FaviconInitializer } from "@/components/shared/favicon-initializer";
@@ -7,11 +7,16 @@ import { ThemeColorsInitializer } from "@/components/shared/theme-colors-initial
 import { fetchSiteSettingsServer, toPublicMediaUrl } from "@/lib/site-settings-server";
 import "./globals.css";
 
-const dmSans = DM_Sans({
-  subsets: ["latin"],
+// Self-hosted, not next/font/google: the Google loader downloads the font at
+// BUILD time, and one bad answer from Google failed CI's prod web image on
+// 2a6f120. The file and its licence live in fonts/dm-sans/ (see README.md).
+// One variable file covers every weight; upright only, as before.
+const dmSans = localFont({
+  src: "../fonts/dm-sans/DMSans-Variable.woff2",
+  weight: "100 1000",
+  style: "normal",
   display: "swap",
   variable: "--font-sans",
-  weight: ["400", "500", "600", "700"],
   preload: true,
 });
 
