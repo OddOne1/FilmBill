@@ -158,7 +158,7 @@ function makeProposal(overrides: Partial<TaxProposal> = {}): TaxProposal {
     applied_rule: 'EU business, VAT ID verified, services: reverse charge',
     applied_rule_position: 30,
     reasons: [
-      'The seller is in AT.',
+      'Your company is in AT.',
       'The buyer is a business in DE, another EU country.',
       'Rule 30 “EU business, VAT ID verified, services: reverse charge” applies.',
     ],
@@ -740,7 +740,7 @@ describe('the Test a case tab asks the server for everything', () => {
     expect(await screen.findByText(SERVER_ONLY_CODE)).toBeInTheDocument()
     expect(screen.getByText(`${SERVER_ONLY_RATE} %`)).toBeInTheDocument()
     expect(screen.getByText('Reverse charge (EU)')).toBeInTheDocument()
-    expect(screen.getByText('The seller is in AT.')).toBeInTheDocument()
+    expect(screen.getByText('Your company is in AT.')).toBeInTheDocument()
     expect(
       screen.getByText(/Decided by rule/),
     ).toBeInTheDocument()
@@ -938,11 +938,11 @@ describe('the Test a case tab asks the server for everything', () => {
         applied_rule: null,
         applied_rule_position: null,
         blocking: true,
-        reasons: ['This company has no country, so no rule could be evaluated.'],
+        reasons: ['Your company has no country, so no tax rule was checked.'],
         warnings: [
           {
             code: 'home_country_missing',
-            text: 'This company has no country, so no tax rule can be evaluated. Set the country in Settings → Company.',
+            text: 'Your company has no country. Set it in Settings → Company.',
           },
         ],
       }),
@@ -955,7 +955,9 @@ describe('the Test a case tab asks the server for everything', () => {
     ).toHaveTextContent('Nothing can be proposed')
     expect(
       screen.getByTestId('tax-warning-home_country_missing'),
-    ).toHaveTextContent('Set the country in Settings → Company')
+    ).toHaveTextContent('Your company has no country. Set it in Settings → Company.')
+    // B1.2: the place the sentence names, one click away.
+    expect(screen.getByTestId('company-country-link')).toHaveAttribute('href', '/settings/company')
     // No invented rate anywhere on the panel. Asserted on the panel's whole
     // text rather than on a query, because "a rate appeared" is a statement
     // about the panel and not about one element.

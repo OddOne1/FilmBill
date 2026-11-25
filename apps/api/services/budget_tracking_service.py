@@ -180,7 +180,7 @@ ACTUALS_IMPORT_APPLIED = "budget.actuals_import_applied"
 def check_amount(amount: Optional[Decimal]) -> Decimal:
     """Positive, or a refusal naming why a negative row is not the answer."""
     if amount is None:
-        raise TrackingError("an entry needs an amount.")
+        raise TrackingError("This entry has no amount. Enter the amount.")
     if amount <= ZERO:
         raise TrackingError(
             f"the amount is {amount}, and an entry is always positive. To "
@@ -878,7 +878,7 @@ def close_commitment(
     which is the point: only the producer knows it is never coming.
     """
     if row.voided_at is not None:
-        raise TrackingError("that commitment has been voided.")
+        raise TrackingError("This order has been voided and cannot change. Add a new order instead.")
     if row.status == STATUS_CANCELLED:
         raise TrackingError(
             "that commitment was cancelled, which is not the same as closed. "
@@ -915,7 +915,7 @@ def cancel_commitment(
     record of that is a close.
     """
     if row.voided_at is not None:
-        raise TrackingError("that commitment has been voided.")
+        raise TrackingError("This order has been voided and cannot change. Add a new order instead.")
     live = [entry for entry in linked_actuals(db, row) if entry.voided_at is None]
     if live:
         raise TrackingError(
@@ -950,7 +950,7 @@ def void_commitment(
     would stop being able to explain itself.
     """
     if row.voided_at is not None:
-        raise TrackingError("that commitment is already voided.")
+        raise TrackingError("This order is already voided. Nothing more to do.")
     text = check_void_reason(reason)
     live = [entry for entry in linked_actuals(db, row) if entry.voided_at is None]
     if live:
@@ -1112,7 +1112,7 @@ def void_actual(
     difference between a 400 that is owed and a 400 that nobody is tracking.
     """
     if row.voided_at is not None:
-        raise TrackingError("that actual is already voided.")
+        raise TrackingError("This invoice is already voided. Nothing more to do.")
     text = check_void_reason(reason)
     before = audit.snapshot(row, ACTUAL_AUDITED)
     row.voided_at = datetime.now(timezone.utc)

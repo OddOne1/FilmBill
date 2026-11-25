@@ -8,6 +8,7 @@ import { api, ApiError } from '@/lib/api'
 import { Input } from '@/components/ui/input'
 import { CountrySelect } from '@/components/ui/country-select'
 import { countryLabel } from '@/lib/countries'
+import { CompanyCountryLink } from '@/components/settings/company-country-link'
 import { usePermissions } from '@/hooks/use-permissions'
 import type {
   Party,
@@ -1016,6 +1017,7 @@ function TaxTab({
               className="mt-2 rounded-md border border-status-warning/40 bg-status-warning/10 px-2 py-1 text-xs text-status-warning"
             >
               {warning.text}
+              <CompanyCountryLink code={warning.code} />
             </p>
           ))}
         </div>

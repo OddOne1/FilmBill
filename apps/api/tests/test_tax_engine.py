@@ -753,9 +753,9 @@ def test_the_reasons_are_sentences_one_per_decision_step():
         "at", TaxInputs("AT", "DE", buyer_vat_verified=True, supply_kind="services")
     )
 
-    assert result.reasons[0] == "The seller is in AT."
+    assert result.reasons[0] == "Your company is in AT."
     assert "another EU country" in result.reasons[1]
-    assert result.reasons[2] == "The buyer's VAT ID is verified."
+    assert result.reasons[2] == "The customer's VAT ID is verified."
     assert result.reasons[3] == "The supply is services."
     assert "Rule 30" in result.reasons[4]
     assert "EU-AE" in result.reasons[5]
@@ -765,7 +765,7 @@ def test_the_reasons_are_sentences_one_per_decision_step():
 
 def test_the_country_is_upper_cased_in_the_reasons_whatever_was_passed():
     result = _propose("at", TaxInputs(" at ", "de", buyer_vat_verified=True))
-    assert result.reasons[0] == "The seller is in AT."
+    assert result.reasons[0] == "Your company is in AT."
     assert "DE" in result.reasons[1]
 
 
@@ -1094,7 +1094,8 @@ def test_the_override_reason_says_which_override_it_was():
             party_override=Override(OVERRIDE_FIXED_CODE, code="AT-20"),
         ),
     )
-    assert any("party override" in reason for reason in result.reasons)
+    # B1.2: in the product's words — the engine's "party" is the customer.
+    assert any("The customer's tax setting" in reason for reason in result.reasons)
 
 
 def test_an_inapplicable_override_says_so_in_the_reasons():

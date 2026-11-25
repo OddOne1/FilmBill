@@ -414,10 +414,9 @@ def create_budget(
     if body.currency is not None and body.currency.upper() != company_currency:
         _refuse(
             budget_service.BudgetError(
-                f"a budget is kept in the company currency, which is "
-                f"{company_currency}. A2 writes no other — a budget that said "
-                f"{body.currency.upper()} and was calculated in "
-                f"{company_currency} would be worse than this refusal."
+                f"A budget is kept in your company's currency, "
+                f"{company_currency}. Leave the currency out, or send "
+                f"{company_currency}."
             ),
             status.HTTP_422_UNPROCESSABLE_ENTITY,
         )
@@ -993,10 +992,9 @@ def update_section(
         if parent is not None and has_children:
             _refuse(
                 budget_service.BudgetError(
-                    f"{row.name!r} has {has_children} sub-section(s) of its "
-                    f"own, so moving it inside {parent.name!r} would make "
-                    f"them a third level — and the calculation engine nests "
-                    f"groups two deep (SCOPE §5.4). Move those out first."
+                    f"Section {row.name!r} has {has_children} sub-section(s), "
+                    f"so inside {parent.name!r} they would be a third level, "
+                    f"and sections nest two deep. Move them out first."
                 )
             )
 
@@ -1081,8 +1079,8 @@ def _check_kind(value: Optional[str]) -> None:
     if value is not None and value not in ITEM_KINDS:
         _refuse(
             budget_service.BudgetError(
-                f"{value!r} is not an item kind. The catalog's are "
-                f"{', '.join(sorted(ITEM_KINDS))}."
+                f"This line's kind {value!r} is not an item kind. Use one "
+                f"of: {', '.join(sorted(ITEM_KINDS))}."
             ),
             status.HTTP_422_UNPROCESSABLE_ENTITY,
         )
@@ -1133,8 +1131,8 @@ def create_line(
     if period_unit not in PERIOD_UNITS:
         _refuse(
             budget_service.BudgetError(
-                f"{period_unit!r} is not a period unit. The engine's are "
-                f"{', '.join(sorted(PERIOD_UNITS))}."
+                f"This line's unit {period_unit!r} is not a period unit. Use "
+                f"one of: {', '.join(sorted(PERIOD_UNITS))}."
             ),
             status.HTTP_422_UNPROCESSABLE_ENTITY,
         )
@@ -1236,7 +1234,8 @@ def update_line(
     if "period_unit" in changes and changes["period_unit"] not in PERIOD_UNITS:
         _refuse(
             budget_service.BudgetError(
-                f"{changes['period_unit']!r} is not a period unit."
+                f"This line's unit {changes['period_unit']!r} is not a period "
+                f"unit. Use one of: {', '.join(sorted(PERIOD_UNITS))}."
             ),
             status.HTTP_422_UNPROCESSABLE_ENTITY,
         )
@@ -1392,12 +1391,9 @@ def _check_source(source: str) -> None:
     if day_type is None or day_type not in PROJECT_DAY_TYPES:
         _refuse(
             budget_service.BudgetError(
-                f"{source!r} is not a global source. A global is either "
-                f"`manual` or counted from the project's days as "
-                f"`days:<type>`, with a type from "
-                f"{', '.join(PROJECT_DAY_TYPES)}. There is no expression "
-                f"language here on purpose (SCOPE §16 D70): a formula field "
-                f"would be a second programming language inside a budget."
+                f"This global's source {source!r} is not one FilmBill knows. "
+                f"Use `manual`, or `days:<type>` with a type from "
+                f"{', '.join(PROJECT_DAY_TYPES)}."
             ),
             status.HTTP_422_UNPROCESSABLE_ENTITY,
         )

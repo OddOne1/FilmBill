@@ -379,7 +379,9 @@ def test_a_third_level_of_section_is_refused_and_names_the_engine_limit(
     assert response.status_code == 409, response.text
     detail = response.json()["detail"]
     assert "two deep" in detail or "2 deep" in detail
-    assert "§5.4" in detail
+    # B1.2 (rule 17f): the limit and what to do, no SCOPE reference.
+    assert "move the section up a level" in detail
+    assert "§" not in detail
 
 
 def test_two_levels_of_section_calculate(pg_client, world, project):
@@ -674,7 +676,8 @@ def test_a_source_that_is_not_in_the_vocabulary_is_refused(
     )
 
     assert response.status_code == 422, response.text
-    assert "expression language" in response.json()["detail"]
+    # B1.2 (rule 17f): what to use instead, in the user's words.
+    assert "Use `manual`, or `days:<type>`" in response.json()["detail"]
 
 
 # ─── The catalog ────────────────────────────────────────────────────────────

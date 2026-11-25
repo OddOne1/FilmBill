@@ -301,15 +301,14 @@ def check_parent_section(
     if parent is None:
         return
     if parent.budget_id != budget.id:
-        raise BudgetError("that section belongs to a different budget.")
+        raise BudgetError(
+            "That section is in a different budget. Pick a section of this one."
+        )
     if parent.parent_id is not None:
         raise BudgetError(
-            f"{parent.name!r} is already inside a section, and a budget "
-            f"nests sections {MAX_SECTION_DEPTH} deep at most — the "
-            f"calculation engine nests groups {MAX_SECTION_DEPTH} deep "
-            f"(SCOPE §5.4), so a third level could be stored and never "
-            f"calculated. Put these lines directly in {parent.name!r}, or "
-            f"move the section up a level."
+            f"Section {parent.name!r} is already inside a section, and "
+            f"sections nest {MAX_SECTION_DEPTH} deep. Put these lines directly "
+            f"in {parent.name!r}, or move the section up a level."
         )
 
 

@@ -112,9 +112,15 @@ def ensure_extras_section(
 
 def _check_kind_and_unit(kind: Optional[str], period_unit: Optional[str]) -> None:
     if kind is not None and kind not in ITEM_KINDS:
-        raise ExtraError(f"{kind!r} is not an item kind.")
+        raise ExtraError(
+            f"This extra's kind {kind!r} is not an item kind. Use one of: "
+            f"{', '.join(sorted(ITEM_KINDS))}."
+        )
     if period_unit is not None and period_unit not in PERIOD_UNITS:
-        raise ExtraError(f"{period_unit!r} is not a period unit.")
+        raise ExtraError(
+            f"This extra's unit {period_unit!r} is not a period unit. Use one "
+            f"of: {', '.join(sorted(PERIOD_UNITS))}."
+        )
 
 
 def propose(

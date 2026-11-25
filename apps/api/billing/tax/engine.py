@@ -175,28 +175,34 @@ class Proposal:
 
 _WARNING_TEXTS: Mapping[str, str] = {
     "buyer_vat_id_not_verified": (
-        "The buyer's VAT ID has not been verified, so a reverse charge is "
-        "not proposed — an unverified ID that turns out to be wrong leaves "
-        "the tax owing from you. Verify it to propose a reverse charge."
+        "The customer's VAT ID is not verified, so no reverse charge is "
+        "proposed. Verify it on the customer."
     ),
     "legal_note_not_reviewed": (
-        "The legal note on this code is the generic wording FilmBill ships "
-        "and has not been reviewed by anybody in this company. Check it with "
-        "your tax advisor and mark it reviewed."
+        "This tax code's legal note is FilmBill's standard wording and "
+        "nobody at your company has reviewed it. Check it with your tax "
+        "advisor and mark it reviewed."
     ),
     "code_inactive": (
-        "The tax code this resolves to is inactive, so nothing can be "
-        "proposed. Set its rate and activate it first."
+        "The tax code this sale needs is switched off, so nothing is "
+        "proposed. Set its rate and switch it on in Settings → Tax."
     ),
+    # B1.2: who is missing the country, in few words, and where to fix it.
+    # The company's name is deliberately NOT interpolated: once the subject
+    # is "Your company" a name adds nothing, and an empty one would bring
+    # back the confusion this wording removes.
     "home_country_missing": (
-        "This company has no country, so no tax rule can be evaluated. Set "
-        "the country in Settings → Company."
+        "Your company has no country. Set it in Settings → Company."
     ),
     "buyer_country_missing": (
-        "The buyer has no country, so there is no way to tell a domestic "
-        "sale from an export. Set the buyer's country."
+        "The customer has no country. Set it on the customer."
     ),
 }
+
+
+#: Whose override a reason talks about, in the product's own words (B1.2):
+#: the engine's `party` is the customer on every screen.
+_OVERRIDE_OWNER: Mapping[str, str] = {"item": "The item's", "party": "The customer's"}
 
 
 def warning_text(code: str) -> str:
@@ -279,11 +285,11 @@ def propose_tax(
     # ── The two facts without which nothing can be decided ──────────────
     if not inputs.seller_country or not inputs.seller_country.strip():
         return _blocked(
-            ["This company has no country, so no rule could be evaluated."],
+            ["Your company has no country, so no tax rule was checked."],
             [_warning("home_country_missing")],
         )
     seller = inputs.seller_country.strip().upper()
-    reasons.append(f"The seller is in {seller}.")
+    reasons.append(f"Your company is in {seller}.")
 
     region = region_of(
         inputs.seller_country,
@@ -291,7 +297,7 @@ def propose_tax(
         eu_member_states=eu_member_states,
     )
     if region is None:
-        reasons.append("The buyer has no country.")
+        reasons.append("The customer has no country, so no tax rule was checked.")
         return _blocked(reasons, [_warning("buyer_country_missing")])
 
     buyer = inputs.buyer_country.strip().upper()
@@ -301,17 +307,17 @@ def propose_tax(
         "non_eu": f"in {buyer}, outside the EU",
     }[region]
     reasons.append(
-        f"The buyer is a {inputs.buyer_type} {where}."
+        f"The customer is a {inputs.buyer_type} {where}."
     )
     if inputs.buyer_type == "business":
         reasons.append(
-            "The buyer's VAT ID is verified."
+            "The customer's VAT ID is verified."
             if inputs.buyer_vat_verified
-            else "The buyer's VAT ID is not verified."
+            else "The customer's VAT ID is not verified."
         )
     reasons.append(f"The supply is {inputs.supply_kind}.")
     if inputs.seller_is_kleinunternehmer:
-        reasons.append("This company is registered as a small business.")
+        reasons.append("Your company is registered as a small business.")
 
     context = {
         "seller_is_kleinunternehmer": inputs.seller_is_kleinunternehmer,
@@ -340,8 +346,8 @@ def propose_tax(
             # to the next one, and then to the rules, rather than blocking:
             # an override that does not apply is not an error.
             reasons.append(
-                f"The {source} override does not apply to this sale, so the "
-                "rules decide."
+                f"{_OVERRIDE_OWNER[source]} tax setting does not apply to "
+                "this sale, so the rules decide."
             )
             continue
         return _combine(overridden, rules_outcome, reasons, by_code, lang)
@@ -425,8 +431,8 @@ def _target_code(
         code = by_code.get(wanted)
         if code is None:
             return None, (
-                f"This resolves to tax code “{wanted}”, which this company "
-                "does not have. Nothing is proposed."
+                f"This sale needs tax code “{wanted}”, which your company "
+                "does not have. Add it in Settings → Tax."
             )
         return code, None
 
@@ -436,14 +442,14 @@ def _target_code(
     tax_class = _resolve_class(wanted_class, by_class)
     if tax_class is None:
         return None, (
-            f"This resolves to the tax class “{wanted_class}”, which this "
-            "company does not have. Nothing is proposed."
+            f"This sale needs the tax class “{wanted_class}”, which your "
+            "company does not have. Add it in Settings → Tax."
         )
     code = by_code.get(tax_class.code)
     if code is None:
         return None, (
             f"Tax class “{tax_class.key}” points at code “{tax_class.code}”, "
-            "which this company does not have. Nothing is proposed."
+            "which your company does not have. Fix the class in Settings → Tax."
         )
     return code, None
 
@@ -467,12 +473,13 @@ def _from_override(
                 applied_rule=f"override:{source}",
                 applied_rule_position=None,
                 reason=(
-                    f"The {source} override names tax code "
-                    f"“{override.code}”, which this company does not have."
+                    f"{_OVERRIDE_OWNER[source]} tax setting names tax code "
+                    f"“{override.code}”, which your company does not have."
                 ),
                 failure=(
-                    f"The {source} override names tax code “{override.code}”, "
-                    "which this company does not have. Nothing is proposed."
+                    f"{_OVERRIDE_OWNER[source]} tax setting names tax code "
+                    f"“{override.code}”, which your company does not have. "
+                    f"Change the setting, or add the code in Settings → Tax."
                 ),
             )
         return _Outcome(
@@ -481,8 +488,8 @@ def _from_override(
             applied_rule=f"override:{source}",
             applied_rule_position=None,
             reason=(
-                f"The {source} override fixes this to tax code "
-                f"“{code.code}”, whatever the rules say."
+                f"{_OVERRIDE_OWNER[source]} tax setting fixes this to tax "
+                f"code “{code.code}”, whatever the rules say."
             ),
         )
 
@@ -498,8 +505,8 @@ def _from_override(
             applied_rule=f"override:{source}",
             applied_rule_position=None,
             reason=(
-                f"The {source} override says to use the domestic rate for "
-                "foreign business buyers."
+                f"{_OVERRIDE_OWNER[source]} tax setting uses the domestic "
+                "rate for business customers abroad."
             ),
             failure=failure,
         )
@@ -509,10 +516,11 @@ def _from_override(
         code=None,
         applied_rule=f"override:{source}",
         applied_rule_position=None,
-        reason=f"The {source} override is of an unknown kind.",
+        reason=f"{_OVERRIDE_OWNER[source]} tax setting is of an unknown kind.",
         failure=(
-            f"The {source} override is of an unknown kind "
-            f"({override.kind!r}). Nothing is proposed."
+            f"{_OVERRIDE_OWNER[source]} tax setting is of an unknown kind "
+            f"({override.kind!r}). Set it again on the "
+            f"{'item' if source == 'item' else 'customer'}."
         ),
     )
 

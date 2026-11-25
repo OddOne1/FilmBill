@@ -6,6 +6,8 @@ import { api, ApiError } from '@/lib/api'
 import { Input } from '@/components/ui/input'
 import { CountrySelect } from '@/components/ui/country-select'
 import { countryLabel } from '@/lib/countries'
+import { CompanyCountryLink } from '@/components/settings/company-country-link'
+import Link from 'next/link'
 import { CompanySection, Field } from '@/components/settings/company-section'
 import { usePermissions } from '@/hooks/use-permissions'
 import { useCompanyStore } from '@/stores/company-store'
@@ -219,10 +221,12 @@ function CodesTab() {
         data-testid="tax-codes-empty"
         className="mt-6 rounded-md border border-border px-3 py-4 text-sm text-text-secondary"
       >
-        This company has no tax codes yet, because it has no country. Set the
-        country on the <strong>Company</strong> screen and the region pack for
-        it is installed — Austria, Germany, or two blank rates you fill in
-        yourself.
+        Your company has no tax codes yet because it has no country. Set it in{' '}
+        <Link href="/settings/company" className="text-accent underline">
+          Settings → Company
+        </Link>{' '}
+        and its rates are installed — Austria, Germany, or two blank rates you
+        fill in yourself.
       </p>
     )
   }
@@ -1537,7 +1541,10 @@ function ProposalPanel({
               className="flex items-start gap-2 rounded-md border border-status-warning/40 bg-status-warning/10 px-3 py-2 text-sm text-status-warning"
             >
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-              <span>{warning.text}</span>
+              <span>
+                {warning.text}
+                <CompanyCountryLink code={warning.code} />
+              </span>
             </li>
           ))}
         </ul>

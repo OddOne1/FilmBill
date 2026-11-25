@@ -852,7 +852,10 @@ def set_etc(
     if found is None:  # pragma: no cover - an active line is always priced
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="That line is not part of the budget's calculation.",
+            detail=(
+                "This line does not count in the budget's totals, so it has "
+                "no forecast. Pick a line on the sheet, or an accepted extra."
+            ),
         )
     return LineTrackingResponse(**vars(found))
 
@@ -866,7 +869,10 @@ def _line_forecast(db: Session, budget: Budget, line: BudgetLine) -> LineTrackin
     if found is None:  # pragma: no cover - an active line is always priced
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="That line is not part of the budget's calculation.",
+            detail=(
+                "This line does not count in the budget's totals, so it has "
+                "no forecast. Pick a line on the sheet, or an accepted extra."
+            ),
         )
     return LineTrackingResponse(**vars(found))
 

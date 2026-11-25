@@ -500,3 +500,43 @@ describe('countries are picked from the list and shown as “Austria (AUT)” (B
     expect(screen.getByLabelText('Country for tax')).toHaveAttribute('role', 'combobox')
   })
 })
+
+describe('the tax tab names whose country is missing (B1.2)', () => {
+  it('“Your company has no country” links to Settings → Company', async () => {
+    mockApi({
+      preview: makePreview({
+        blocking: true,
+        code: null,
+        rate: null,
+        treatment: null,
+        treatment_label: null,
+        warnings: [{ code: 'home_country_missing', text: 'Your company has no country. Set it in Settings → Company.' }],
+      }),
+    })
+    render(<PartyDetailPage />)
+    await ready()
+    fireEvent.click(screen.getByRole('tab', { name: 'Tax' }))
+    const warning = await screen.findByTestId('party-tax-warning-home_country_missing')
+    expect(warning).toHaveTextContent('Your company has no country. Set it in Settings → Company.')
+    expect(screen.getByTestId('company-country-link')).toHaveAttribute('href', '/settings/company')
+  })
+
+  it('“The customer has no country” carries no link to the company screen', async () => {
+    mockApi({
+      preview: makePreview({
+        blocking: true,
+        code: null,
+        rate: null,
+        treatment: null,
+        treatment_label: null,
+        warnings: [{ code: 'buyer_country_missing', text: 'The customer has no country. Set it on the customer.' }],
+      }),
+    })
+    render(<PartyDetailPage />)
+    await ready()
+    fireEvent.click(screen.getByRole('tab', { name: 'Tax' }))
+    const warning = await screen.findByTestId('party-tax-warning-buyer_country_missing')
+    expect(warning).toHaveTextContent('The customer has no country. Set it on the customer.')
+    expect(screen.queryByTestId('company-country-link')).toBeNull()
+  })
+})
