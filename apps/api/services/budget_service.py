@@ -165,6 +165,7 @@ ADJUSTMENT_AUDITED: tuple[str, ...] = (
     "value",
     "base",
     "kinds",
+    "role",
     "is_active",
 )
 
@@ -1059,6 +1060,7 @@ def duplicate(
                 value=row.value,
                 base=row.base,
                 kinds=list(row.kinds or []),
+                role=row.role,
                 is_active=True,
             )
         )
@@ -1111,6 +1113,9 @@ EXAMPLE_SECTIONS: tuple[tuple[str, str, tuple], ...] = (
 #: The 5 % discount on Crew and the 8 % production fee on the whole budget.
 EXAMPLE_CREW_DISCOUNT = ("Crew discount", "discount", "percent", "5")
 EXAMPLE_FEE = ("Production fee", "surcharge", "percent", "8")
+#: `budget_fee_service.ROLE_PRODUCTION_FEE`, spelled here because that module
+#: imports this one.
+EXAMPLE_FEE_ROLE = "production_fee"
 
 
 def standard_tax_ref(db: Session, company_id) -> str:
@@ -1248,6 +1253,10 @@ def create_example_budget(db: Session, membership, project: Project) -> Budget:
             value=Decimal(value),
             base="subtotal",
             kinds=[],
+            # B1.2: the example's 8 % IS its production fee, so the sheet's
+            # fee control shows it. Its numbers are S1's and unchanged; the
+            # company preset is NOT applied to the example.
+            role=EXAMPLE_FEE_ROLE,
             is_active=True,
         )
     )

@@ -195,6 +195,16 @@ export function makeSheet(overrides: { locked?: boolean; closed?: boolean } = {}
         is_active: true,
       },
     ],
+    // B1.2: no fee and no preset — the fixture predates the fee control.
+    production_fee: {
+      enabled: false,
+      percent: null,
+      kinds: [],
+      adjustment_id: null,
+      preset_percent: null,
+      preset_kinds: [],
+      differs_from_preset: false,
+    },
   }
 }
 

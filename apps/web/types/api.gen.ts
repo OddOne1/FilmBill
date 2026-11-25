@@ -1629,6 +1629,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/budgets/{budget_id}/production-fee": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Production Fee
+         * @description This budget's production fee: on with a percent and optional kinds, or
+         *     off. A `surcharge` adjustment with `role = production_fee` — price only
+         *     (D78). Never changes the company preset or another budget.
+         */
+        put: operations["set_production_fee_budgets__budget_id__production_fee_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/budgets/{budget_id}/production-fee/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reset Production Fee
+         * @description Copy the company preset onto this budget again; no preset, no fee.
+         */
+        post: operations["reset_production_fee_budgets__budget_id__production_fee_reset_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/budgets/{budget_id}/reopen": {
         parameters: {
             query?: never;
@@ -2532,6 +2574,33 @@ export interface paths {
          *     `_refuse_reissuing_an_allocated_number` is for.
          */
         patch: operations["update_number_series_company_number_series__series_id__patch"];
+        trace?: never;
+    };
+    "/company/production-fee": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Default Production Fee
+         * @description The production fee a new budget starts with. Its own endpoint, held
+         *     by the company-settings key, so that a fee never rides along on the
+         *     company record every member can read.
+         */
+        get: operations["get_default_production_fee_company_production_fee_get"];
+        /**
+         * Set Default Production Fee
+         * @description Change the preset. No existing budget changes — the preset is copied
+         *     onto a NEW budget, and "Reset to preset" copies it on request.
+         */
+        put: operations["set_default_production_fee_company_production_fee_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/company/tax/classes": {
@@ -4639,6 +4708,8 @@ export interface components {
             mode: string;
             /** Position */
             position: number;
+            /** Role */
+            role?: string | null;
             /** Section Id */
             section_id?: string | null;
             /** Type */
@@ -5474,6 +5545,7 @@ export interface components {
             globals: components["schemas"]["BudgetGlobalResponse"][];
             /** Lines */
             lines: components["schemas"]["BudgetLineResponse"][];
+            production_fee: components["schemas"]["ProductionFeeResponse"];
             /** Sections */
             sections: components["schemas"]["BudgetSectionResponse"][];
         };
@@ -6235,6 +6307,25 @@ export interface components {
             vat_id?: string | null;
             /** Website */
             website?: string | null;
+        };
+        /**
+         * CompanyProductionFeeResponse
+         * @description The production fee a new budget starts with (B1.2). Kept off
+         *     `CompanyResponse` on purpose: every member may read the company, and a
+         *     fee is a price decision Staff do not see.
+         */
+        CompanyProductionFeeResponse: {
+            /** Kinds */
+            kinds?: string[];
+            /** Percent */
+            percent?: string | null;
+        };
+        /** CompanyProductionFeeWrite */
+        CompanyProductionFeeWrite: {
+            /** Kinds */
+            kinds?: string[];
+            /** Percent */
+            percent?: string | null;
         };
         /** CompanyResponse */
         CompanyResponse: {
@@ -8235,6 +8326,42 @@ export interface components {
             requires_special: boolean;
             /** Requires Upper */
             requires_upper: boolean;
+        };
+        /**
+         * ProductionFeeResponse
+         * @description The sheet's Production fee control: this budget's fee and the preset.
+         *
+         *     The fee is the budget's own. The preset is what a NEW budget starts with
+         *     and what "Reset to preset" copies; `differs_from_preset` is the server's
+         *     comparison, so the screen never compares two decimals itself.
+         */
+        ProductionFeeResponse: {
+            /** Adjustment Id */
+            adjustment_id?: string | null;
+            /** Differs From Preset */
+            differs_from_preset: boolean;
+            /** Enabled */
+            enabled: boolean;
+            /** Kinds */
+            kinds?: string[];
+            /** Percent */
+            percent?: string | null;
+            /** Preset Kinds */
+            preset_kinds?: string[];
+            /** Preset Percent */
+            preset_percent?: string | null;
+        };
+        /**
+         * ProductionFeeWrite
+         * @description Set this budget's fee. Off retires it; on with a percent sets it.
+         */
+        ProductionFeeWrite: {
+            /** Enabled */
+            enabled: boolean;
+            /** Kinds */
+            kinds?: string[];
+            /** Percent */
+            percent?: string | null;
         };
         /** ProjectCreate */
         ProjectCreate: {
@@ -12169,6 +12296,76 @@ export interface operations {
             };
         };
     };
+    set_production_fee_budgets__budget_id__production_fee_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProductionFeeWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductionFeeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reset_production_fee_budgets__budget_id__production_fee_reset_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                budget_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductionFeeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     reopen_budget_budgets__budget_id__reopen_post: {
         parameters: {
             query?: never;
@@ -13851,6 +14048,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NumberSeriesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_default_production_fee_company_production_fee_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompanyProductionFeeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_default_production_fee_company_production_fee_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompanyProductionFeeWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompanyProductionFeeResponse"];
                 };
             };
             /** @description Validation Error */

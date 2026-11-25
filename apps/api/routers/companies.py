@@ -42,6 +42,8 @@ from ..schemas.company import (
     BankAccountResponse,
     BankAccountUpdate,
     CompanyCreate,
+    CompanyProductionFeeResponse,
+    CompanyProductionFeeWrite,
     CompanyResponse,
     CompanySummary,
     CompanyUpdate,
@@ -51,6 +53,7 @@ from ..schemas.company import (
 )
 from ..services import (
     audit,
+    budget_fee_service,
     company_service,
     invite_service,
     tax_country,
@@ -339,6 +342,45 @@ def update_active_company(
     db.commit()
     db.refresh(membership.company)
     return membership.company
+
+
+# ─── Budget defaults (B1.2) ─────────────────────────────────────────────────
+
+
+@router.get("/company/production-fee", response_model=CompanyProductionFeeResponse)
+def get_default_production_fee(
+    membership: Membership = Depends(require("company.settings.edit")),
+):
+    """The production fee a new budget starts with. Its own endpoint, held
+    by the company-settings key, so that a fee never rides along on the
+    company record every member can read."""
+    preset = budget_fee_service.preset_of(membership.company)
+    return CompanyProductionFeeResponse(percent=preset["percent"], kinds=preset["kinds"])
+
+
+@router.put("/company/production-fee", response_model=CompanyProductionFeeResponse)
+def set_default_production_fee(
+    body: CompanyProductionFeeWrite,
+    request: Request,
+    db: Session = Depends(get_db),
+    membership: Membership = Depends(require("company.settings.edit")),
+):
+    """Change the preset. No existing budget changes — the preset is copied
+    onto a NEW budget, and "Reset to preset" copies it on request."""
+    try:
+        preset = budget_fee_service.set_preset(
+            db,
+            membership.company,
+            audit.actor_from(request, membership=membership),
+            percent=body.percent,
+            kinds=body.kinds,
+        )
+    except budget_fee_service.BudgetError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)
+        ) from None
+    db.commit()
+    return CompanyProductionFeeResponse(percent=preset["percent"], kinds=preset["kinds"])
 
 
 # ─── Members of the active company ──────────────────────────────────────────

@@ -10,7 +10,8 @@ import {
 } from '@/components/settings/company-section'
 import { usePermissions } from '@/hooks/use-permissions'
 import { useCompanyStore } from '@/stores/company-store'
-import type { Company, CompanyUpdate, CountryChangePlan } from '@/types'
+import { ITEM_KIND_LABELS, ITEM_KINDS } from '@/lib/item-kinds'
+import type { Company, CompanyProductionFee, CompanyUpdate, CountryChangePlan, ItemKind } from '@/types'
 
 /**
  * Settings → Company → General.
@@ -218,6 +219,8 @@ export default function CompanyGeneralPage() {
 
         <SaveRow saving={saving} saved={saved} error={error} />
       </form>
+
+      {allowed && <DefaultProductionFee companyId={activeCompanyId} />}
 
       {changingCountry && (
         <ChangeCountryDialog
@@ -437,5 +440,102 @@ function ChangeCountryDialog({
         </button>
       </div>
     </div>
+  )
+}
+
+/**
+ * The production fee a NEW budget starts with (B1.2). Its own request and
+ * its own save, because it is not printed on anything and lives on its own
+ * endpoint (`/company/production-fee`) so that the fee never rides along on
+ * the company record every member can read. Changing it changes no existing
+ * budget — each budget has its own fee and a "Reset to preset" action.
+ */
+function DefaultProductionFee({ companyId }: { companyId: string | null }) {
+  const [percent, setPercent] = React.useState('')
+  const [kinds, setKinds] = React.useState<ItemKind[]>([])
+  const [onlyKinds, setOnlyKinds] = React.useState(false)
+  const [saving, setSaving] = React.useState(false)
+  const [saved, setSaved] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
+
+  React.useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const preset = await api.get<CompanyProductionFee>('/company/production-fee')
+        if (cancelled) return
+        setPercent(preset.percent ? preset.percent.replace(/\.?0+$/, '') : '')
+        setKinds((preset.kinds ?? []) as ItemKind[])
+        setOnlyKinds((preset.kinds ?? []).length > 0)
+      } catch (err) {
+        if (!cancelled) setError(err instanceof ApiError ? err.detail : 'Could not load the default production fee')
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [companyId])
+
+  async function save(event: React.FormEvent) {
+    event.preventDefault()
+    setSaving(true)
+    setSaved(false)
+    setError(null)
+    try {
+      const raw = percent.trim().replace(',', '.')
+      await api.put<CompanyProductionFee>('/company/production-fee', {
+        percent: raw === '' ? null : raw,
+        kinds: raw !== '' && onlyKinds ? kinds : [],
+      })
+      setSaved(true)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : 'Could not save')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <form onSubmit={save} data-testid="default-production-fee" className="mt-8 space-y-3 border-t border-border pt-6">
+      <h2 className="text-sm font-medium text-text-primary">Default production fee</h2>
+      <p className="text-xs text-text-tertiary">
+        Where a new budget starts. Each budget keeps its own fee afterwards, so changing this changes no
+        existing budget. Leave it empty for no fee.
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <Input
+          aria-label="Default production fee percent"
+          value={percent}
+          placeholder="none"
+          onChange={(e) => setPercent(e.target.value)}
+          className="w-24"
+        />
+        <span className="text-sm text-text-secondary">%</span>
+        <select
+          aria-label="Default production fee on kinds"
+          value={onlyKinds ? 'kinds' : 'all'}
+          onChange={(e) => setOnlyKinds(e.target.value === 'kinds')}
+          className="h-9 rounded-md border border-border bg-bg-primary px-2 text-sm text-text-primary"
+        >
+          <option value="all">on everything</option>
+          <option value="kinds">on certain kinds</option>
+        </select>
+      </div>
+      {onlyKinds && (
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-text-secondary">
+          {ITEM_KINDS.map((kind) => (
+            <label key={kind} className="flex items-center gap-1">
+              <input
+                type="checkbox"
+                checked={kinds.includes(kind)}
+                onChange={() => setKinds((prev) => (prev.includes(kind) ? prev.filter((k) => k !== kind) : [...prev, kind]))}
+              />
+              {ITEM_KIND_LABELS[kind]}
+            </label>
+          ))}
+        </div>
+      )}
+      <SaveRow saving={saving} saved={saved} error={error} label="Save default fee" />
+    </form>
   )
 }

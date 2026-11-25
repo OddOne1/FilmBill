@@ -13,6 +13,7 @@ from typing import Literal, Optional
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from ..core.iban import InvalidIBAN, validate_iban
+from ..core.money import Quantity
 from ..models.company import CompanyRole
 
 
@@ -312,3 +313,22 @@ class BankAccountResponse(BaseModel):
     bank_name: Optional[str] = None
     is_default: bool
     created_at: datetime
+
+
+class CompanyProductionFeeResponse(BaseModel):
+    """The production fee a new budget starts with (B1.2). Kept off
+    `CompanyResponse` on purpose: every member may read the company, and a
+    fee is a price decision Staff do not see."""
+
+    #: NULL — no preset; a new budget starts without a fee.
+    percent: Optional[Quantity] = None
+    #: Empty means everything.
+    kinds: list[str] = Field(default_factory=list)
+
+
+class CompanyProductionFeeWrite(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    #: NULL clears the preset.
+    percent: Optional[Quantity] = None
+    kinds: list[str] = Field(default_factory=list)

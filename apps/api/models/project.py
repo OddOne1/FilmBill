@@ -609,6 +609,11 @@ class BudgetAdjustment(CompanyScoped, Base):
     kinds: Mapped[Optional[list]] = mapped_column(
         JSONB().with_variant(JSON, "sqlite"), nullable=False, server_default="[]"
     )
+    #: What this adjustment IS, when it is more than a discount or surcharge
+    #: (B1.2). `production_fee` — the budget's one production fee, shown as
+    #: its own control and set from the company preset on a new budget. NULL
+    #: for every ordinary adjustment.
+    role: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="true"
     )
@@ -626,6 +631,13 @@ class BudgetAdjustment(CompanyScoped, Base):
 
     __table_args__ = (
         Index("ix_budget_adjustments_budget_section", "budget_id", "section_id"),
+        # At most one active production fee per budget (migration 0019).
+        Index(
+            "uq_budget_adjustments_one_production_fee",
+            "budget_id",
+            unique=True,
+            postgresql_where=text("role = 'production_fee' AND is_active"),
+        ),
     )
 
 

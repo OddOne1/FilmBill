@@ -350,6 +350,12 @@ export type BudgetLineUpdate = Schemas['BudgetLineUpdate']
 export type BudgetGlobal = Schemas['BudgetGlobalResponse']
 export type BudgetAdjustment = Schemas['BudgetAdjustmentResponse']
 export type BudgetAdjustmentCreate = Schemas['BudgetAdjustmentCreate']
+/** B1.2: the sheet's Production fee control — this budget's fee, the
+ *  company preset, and whether they differ (the server's comparison). */
+export type ProductionFee = Schemas['ProductionFeeResponse']
+export type ProductionFeeWrite = Schemas['ProductionFeeWrite']
+/** B1.2: the production fee a new budget starts with (Settings → Company). */
+export type CompanyProductionFee = Schemas['CompanyProductionFeeResponse']
 /** What `GET /budgets/{id}/calculated` returns: the engine's own result for
  *  the sheet, the top sheet, and the factor explanations. Every number the
  *  budget screens show comes out of this — never out of the browser. */

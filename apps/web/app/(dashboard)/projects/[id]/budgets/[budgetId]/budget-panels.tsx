@@ -228,7 +228,8 @@ export function AdjustmentsPanel({ sheet, calc, editable, onChange, onError }: P
       : onlyKinds && kinds.length === 0
         ? 'At least one kind, or “everything”.'
         : null
-  const rows = sheet.adjustments
+  // The production fee has its own control at the top of the sheet (B1.2).
+  const rows = sheet.adjustments.filter((row) => row.role !== 'production_fee')
 
   /** The engine's applied amount, read from the result — never derived. A
    *  whole-budget adjustment is in the document's list, a section's in its

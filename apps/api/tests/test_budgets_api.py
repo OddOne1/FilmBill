@@ -1582,6 +1582,9 @@ def _every_budget_request(project_id, budget_id, section_id, line_id, global_id,
         ("patch", f"/budgets/{budget_id}/extras/{line_id}", {"description": "X"}),
         ("post", f"/budgets/{budget_id}/extras/{line_id}/accept", {}),
         ("post", f"/budgets/{budget_id}/extras/{line_id}/decline", {"note": "x"}),
+        # ── B1.2 production fee ─────────────────────────────────────────
+        ("put", f"/budgets/{budget_id}/production-fee", {"enabled": True, "percent": "12"}),
+        ("post", f"/budgets/{budget_id}/production-fee/reset", None),
     ]
 
 
@@ -1611,7 +1614,7 @@ def test_a_staff_user_gets_no_cost_and_no_margin_from_any_budget_endpoint(
         global_id,
         adjustment_id,
     )
-    assert len(requests) == 54, "a budget endpoint is missing from this walk"
+    assert len(requests) == 56, "a budget endpoint is missing from this walk"
 
     csv_file = "section_code;description\r\n1100;X\r\n".encode("utf-8")
     for method, url, body in requests:
@@ -1629,6 +1632,7 @@ def test_a_staff_user_gets_no_cost_and_no_margin_from_any_budget_endpoint(
         text = response.text.lower()
         assert "cost" not in text, f"{method.upper()} {url} leaked a cost"
         assert "margin" not in text, f"{method.upper()} {url} leaked a margin"
+        assert "fee" not in text, f"{method.upper()} {url} leaked a fee"
 
 
 def test_the_budget_endpoint_count_in_the_staff_walk_is_the_real_one(client):
@@ -1642,7 +1646,8 @@ def test_the_budget_endpoint_count_in_the_staff_walk_is_the_real_one(client):
     all seventeen are in the walk above. **43 → 47 at B1.1**: finish and
     reopen, for a line and for a section; **47 → 50** with the close check,
     close and reopen of a budget; **50 → 54** with extras (propose, edit,
-    accept, decline). The number is raised by hand every time, which is the point — a
+    accept, decline); **54 → 56 at B1.2** with the production fee (set,
+    reset to preset). The number is raised by hand every time, which is the point — a
     count that moved on its own would notice nothing."""
     from fastapi.openapi.utils import get_openapi
 
@@ -1656,7 +1661,7 @@ def test_the_budget_endpoint_count_in_the_staff_walk_is_the_real_one(client):
         if path.startswith("/budgets") or path.endswith("/budgets")
         or "/budgets/" in path
     ]
-    assert len(operations) == 54, sorted(operations)
+    assert len(operations) == 56, sorted(operations)
 
 
 def test_a_budget_of_another_company_is_a_404(pg_client, pg_db, world, project):

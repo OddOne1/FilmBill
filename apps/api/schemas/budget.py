@@ -155,7 +155,40 @@ class BudgetAdjustmentResponse(BaseModel):
     value: Quantity
     base: str
     kinds: list[str] = Field(default_factory=list)
+    #: `production_fee` for the budget's one production fee (B1.2), which the
+    #: sheet shows as its own control; NULL for an ordinary adjustment.
+    role: Optional[str] = None
     is_active: bool = True
+
+
+class ProductionFeeResponse(BaseModel):
+    """The sheet's Production fee control: this budget's fee and the preset.
+
+    The fee is the budget's own. The preset is what a NEW budget starts with
+    and what "Reset to preset" copies; `differs_from_preset` is the server's
+    comparison, so the screen never compares two decimals itself.
+    """
+
+    enabled: bool
+    percent: Optional[Quantity] = None
+    #: Empty means everything.
+    kinds: list[str] = Field(default_factory=list)
+    adjustment_id: Optional[uuid.UUID] = None
+    #: NULL when the company has no preset.
+    preset_percent: Optional[Quantity] = None
+    preset_kinds: list[str] = Field(default_factory=list)
+    differs_from_preset: bool
+
+
+class ProductionFeeWrite(BaseModel):
+    """Set this budget's fee. Off retires it; on with a percent sets it."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool
+    percent: Optional[Quantity] = None
+    #: Empty means everything.
+    kinds: list[str] = Field(default_factory=list)
 
 
 class BudgetResponse(BaseModel):
@@ -194,6 +227,7 @@ class BudgetSheetResponse(BaseModel):
     lines: list[BudgetLineResponse]
     globals: list[BudgetGlobalResponse]
     adjustments: list[BudgetAdjustmentResponse]
+    production_fee: ProductionFeeResponse
 
 
 # ─── The calculated view ────────────────────────────────────────────────────

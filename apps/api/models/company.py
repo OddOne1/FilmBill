@@ -19,7 +19,7 @@ first company is an installation nobody can use.
 import uuid
 from datetime import datetime
 from enum import Enum as PyEnum
-from typing import Optional
+from typing import Any, Optional
 
 from sqlalchemy import (
     Boolean,
@@ -28,6 +28,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Numeric,
     String,
     UniqueConstraint,
     func,
@@ -134,6 +135,19 @@ class Company(Base):
     #: client at read time (CLAUDE.md rule 16); storing one here would freeze
     #: an endpoint into the database and break the moment it changes.
     logo_s3_key: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+
+    # ── Budget defaults (B1.2) ───────────────────────────────────────
+    #: The production fee a NEW budget starts with, as a percent. NULL means
+    #: no preset, and there is no default value (migration 0019): a fee
+    #: nobody chose would land on every budget of a company that never
+    #: opened the setting. Changing it changes no existing budget.
+    default_production_fee_percent: Mapped[Optional[Any]] = mapped_column(
+        Numeric(7, 4), nullable=True
+    )
+    #: The kinds the preset fee is charged on; empty means everything.
+    default_production_fee_kinds: Mapped[list] = mapped_column(
+        JSONB, nullable=False, server_default="[]"
+    )
 
     # ── Security policy, per company ─────────────────────────────────
     #: Company roles whose holders must have two-factor authentication, as a

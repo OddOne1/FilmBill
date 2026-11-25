@@ -17,6 +17,7 @@ import {
 } from '../../../projects-chrome'
 import { BudgetSheetEditor } from './budget-sheet'
 import { AdjustmentsPanel, GlobalsPanel } from './budget-panels'
+import { ProductionFeeControl } from './budget-fee'
 import { BudgetImport } from './budget-import'
 import { CostForecast, LineDrawer, PhaseSheet, PhaseSwitch, type Phase } from './budget-tracking'
 import { CostsTab } from './budget-costs'
@@ -330,6 +331,9 @@ export default function BudgetPage() {
                 <PhaseSwitch phase={phase} onChange={setPhase} />
               </div>
               <HowToRead />
+              {phase === 'estimate' && sheet?.production_fee && (
+                <ProductionFeeControl sheet={sheet} calc={calc} editable={editable} onChange={reload} onError={setError} />
+              )}
               {phase === 'estimate' ? (
                 <div className="grid gap-4 xl:grid-cols-[1fr_20rem]">
                   <BudgetSheetEditor

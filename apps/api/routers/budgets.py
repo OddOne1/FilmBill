@@ -56,6 +56,8 @@ from ..models.project import (
     PROJECT_DAY_TYPES,
 )
 from ..schemas.budget import (
+    ProductionFeeResponse,
+    ProductionFeeWrite,
     BudgetAdjustmentCreate,
     BudgetAdjustmentResponse,
     BudgetAdjustmentUpdate,
@@ -90,6 +92,7 @@ from ..services import (
     audit,
     budget_close_service,
     budget_extras_service,
+    budget_fee_service,
     budget_service,
 )
 from ..services.permissions import scoped
@@ -350,7 +353,7 @@ def _global_response(
     )
 
 
-def _sheet(db: Session, budget: Budget) -> BudgetSheetResponse:
+def _sheet(db: Session, budget: Budget, company) -> BudgetSheetResponse:
     sections = budget_service.active_sections(db, budget)
     lines = budget_service.active_lines(db, [row.id for row in sections])
     return BudgetSheetResponse(
@@ -365,6 +368,9 @@ def _sheet(db: Session, budget: Budget) -> BudgetSheetResponse:
             BudgetAdjustmentResponse.model_validate(row)
             for row in budget_service.active_adjustments(db, budget)
         ],
+        production_fee=ProductionFeeResponse(
+            **budget_fee_service.state(db, budget, company)
+        ),
     )
 
 
@@ -429,14 +435,20 @@ def create_budget(
     if body.is_primary:
         budget_service.set_primary(db, membership, budget)
 
+    actor = _actor(request, membership)
     audit.record(
         db,
-        _actor(request, membership),
+        actor,
         budget,
         budget_service.BUDGET_CREATED,
         None,
         audit.snapshot(budget, budget_service.BUDGET_AUDITED),
         fields=budget_service.BUDGET_AUDITED,
+    )
+    # B1.2: a new budget starts with the company's production fee preset,
+    # when one is set. Copied, not linked — see `budget_fee_service`.
+    budget_fee_service.apply_preset_to_new_budget(
+        db, budget, membership.company, actor
     )
     db.commit()
     db.refresh(budget)
@@ -497,7 +509,7 @@ def read_budget(
     budget = _budget_or_404(db, membership, budget_id)
     budget_service.sync_computed_globals(db, budget)
     db.commit()
-    return _sheet(db, budget)
+    return _sheet(db, budget, membership.company)
 
 
 @router.patch("/budgets/{budget_id}", response_model=BudgetResponse)
@@ -1563,6 +1575,18 @@ def remove_global(
 # ─── Adjustments ────────────────────────────────────────────────────────────
 
 
+def _refuse_role_row(row: BudgetAdjustment) -> None:
+    """The production fee is changed by its own control, so that "one fee
+    per budget" and its audit action have one way in (B1.2)."""
+    if row.role is not None:
+        _refuse(
+            budget_service.BudgetError(
+                "This is the production fee. Change it with the Production "
+                "fee control at the top of the sheet."
+            )
+        )
+
+
 def _check_adjustment_scope(base: str, kinds) -> None:
     """The kind filter (B1.2): only real item kinds, and only with `kinds`.
 
@@ -1672,6 +1696,7 @@ def update_adjustment(
 ):
     budget = _editable(db, _budget_or_404(db, membership, budget_id))
     row = _adjustment_or_404(db, membership, budget, adjustment_id)
+    _refuse_role_row(row)
     changes = body.model_dump(exclude_unset=True)
 
     before = audit.snapshot(row, budget_service.ADJUSTMENT_AUDITED)
@@ -1706,6 +1731,7 @@ def remove_adjustment(
 ):
     budget = _editable(db, _budget_or_404(db, membership, budget_id))
     row = _adjustment_or_404(db, membership, budget, adjustment_id)
+    _refuse_role_row(row)
     before = audit.snapshot(row, budget_service.ADJUSTMENT_AUDITED)
     row.is_active = False
     db.flush()
@@ -1721,6 +1747,61 @@ def remove_adjustment(
     db.commit()
     db.refresh(row)
     return BudgetAdjustmentResponse.model_validate(row)
+
+
+# ─── Production fee (B1.2) ──────────────────────────────────────────────────
+
+
+@router.put(
+    "/budgets/{budget_id}/production-fee", response_model=ProductionFeeResponse
+)
+def set_production_fee(
+    budget_id: uuid.UUID,
+    body: ProductionFeeWrite,
+    request: Request,
+    db: Session = Depends(get_db),
+    membership: Membership = Depends(require("budgets.edit")),
+):
+    """This budget's production fee: on with a percent and optional kinds, or
+    off. A `surcharge` adjustment with `role = production_fee` — price only
+    (D78). Never changes the company preset or another budget."""
+    budget = _editable(db, _budget_or_404(db, membership, budget_id))
+    try:
+        budget_fee_service.set_fee(
+            db,
+            budget,
+            _actor(request, membership),
+            enabled=body.enabled,
+            percent=body.percent,
+            kinds=body.kinds,
+        )
+    except budget_service.BudgetError as error:
+        _refuse(error, status.HTTP_422_UNPROCESSABLE_ENTITY)
+    db.commit()
+    return ProductionFeeResponse(
+        **budget_fee_service.state(db, budget, membership.company)
+    )
+
+
+@router.post(
+    "/budgets/{budget_id}/production-fee/reset",
+    response_model=ProductionFeeResponse,
+)
+def reset_production_fee(
+    budget_id: uuid.UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    membership: Membership = Depends(require("budgets.edit")),
+):
+    """Copy the company preset onto this budget again; no preset, no fee."""
+    budget = _editable(db, _budget_or_404(db, membership, budget_id))
+    budget_fee_service.reset_to_preset(
+        db, budget, membership.company, _actor(request, membership)
+    )
+    db.commit()
+    return ProductionFeeResponse(
+        **budget_fee_service.state(db, budget, membership.company)
+    )
 
 
 # ─── CSV ────────────────────────────────────────────────────────────────────

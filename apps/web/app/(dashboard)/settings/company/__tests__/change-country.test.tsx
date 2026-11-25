@@ -149,7 +149,7 @@ describe('the Country field', () => {
       expect(screen.getByLabelText('Country')).toHaveValue('AT'),
     )
 
-    fireEvent.submit(screen.getByRole('button', { name: /Save/ }).closest('form')!)
+    fireEvent.submit(screen.getByRole('button', { name: /Save changes/ }).closest('form')!)
 
     await waitFor(() => expect(api.patch).toHaveBeenCalled())
     const [, body] = vi.mocked(api.patch).mock.calls[0]

@@ -30,6 +30,7 @@ GET /company/audit-events
 GET /company/bank-accounts
 GET /company/members
 GET /company/number-series
+GET /company/production-fee
 GET /company/tax/classes
 GET /company/tax/codes
 GET /company/tax/id-check-policy
@@ -133,6 +134,7 @@ POST /budgets/{budget_id}/lines/{line_id}/finish
 POST /budgets/{budget_id}/lines/{line_id}/remove
 POST /budgets/{budget_id}/lines/{line_id}/reopen
 POST /budgets/{budget_id}/lock
+POST /budgets/{budget_id}/production-fee/reset
 POST /budgets/{budget_id}/reopen
 POST /budgets/{budget_id}/sections
 POST /budgets/{budget_id}/sections/{section_id}/finish
@@ -190,5 +192,7 @@ POST /site-settings/logo-upload
 POST /users/invite
 POST /users/me/avatar
 PUT /budgets/{budget_id}/lines/{line_id}/etc
+PUT /budgets/{budget_id}/production-fee
 PUT /catalog/items/{item_id}/rates
 PUT /catalog/rental-factor-groups/{group_id}/factors
+PUT /company/production-fee

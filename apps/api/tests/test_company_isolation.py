@@ -142,6 +142,10 @@ CASES: dict[str, object] = {
     },
     "PATCH /company/bank-accounts/{bank_account_id}": {"body": {"label": "Stolen"}},
     "DELETE /company/bank-accounts/{bank_account_id}": {"body": None},
+    # B1.2: the production fee preset. Company-level, no row id — the
+    # header is the whole boundary, which is what the first test walks.
+    "GET /company/production-fee": {"body": None},
+    "PUT /company/production-fee": {"body": {"percent": "8", "kinds": []}},
     # P0b-3. `document_type` is one nothing seeds, so the legitimate-request
     # half of the second test creates a series rather than colliding with a
     # seeded one — a 409 there would read as a scoping failure.
@@ -391,6 +395,12 @@ CASES: dict[str, object] = {
     "POST /budgets/{budget_id}/adjustments/{adjustment_id}/remove": {
         "body": None
     },
+    # B1.2: a budget's own production fee. Naming B's budget while scoped
+    # to A must 404, or A could re-price B's quote.
+    "PUT /budgets/{budget_id}/production-fee": {
+        "body": {"enabled": True, "percent": "12", "kinds": []}
+    },
+    "POST /budgets/{budget_id}/production-fee/reset": {"body": None},
     # The two multipart endpoints, `files` rather than `body` for the reason
     # the catalog's import carries: a JSON body would be refused as malformed
     # multipart with a 422, and a 422 is not a 404.
