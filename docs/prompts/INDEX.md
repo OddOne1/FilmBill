@@ -26,7 +26,7 @@ from them. `docs/SCOPE.md` is where the product is decided.
 | A1 | Lean catalog and the pure calculation engine | [`25-filmbill-A1-catalog-calc-engine.md`](25-filmbill-A1-catalog-calc-engine.md) | `032d77a`…`3c784fd` | done — see notes |
 | A2 | Projects, production days and the Budget sheet | [`26-filmbill-A2-projects-days-budget.md`](26-filmbill-A2-projects-days-budget.md) | `d676093`…`22dbc88` | done — see notes |
 | B1 | Cost planning: committed, actual and cost-to-complete | [`27-filmbill-B1-cost-tracking.md`](27-filmbill-B1-cost-tracking.md) | `ff47f99`…closing commit | done — see notes |
-| B1.1 | Plain labels, mark finished, closing a budget, extras | [`28-filmbill-B1.1-finish-close-extras.md`](28-filmbill-B1.1-finish-close-extras.md) | — | in progress |
+| B1.1 | Plain labels, mark finished, closing a budget, extras | [`28-filmbill-B1.1-finish-close-extras.md`](28-filmbill-B1.1-finish-close-extras.md) | `598a1bc`…closing commit | done — see notes |
 | P0b | Foundations: companies, roles, number series, audit, money, codegen | [`03-filmbill-P0b-foundations.md`](03-filmbill-P0b-foundations.md) | — | superseded — split into P0b-0, P0b-1, P0b-2 |
 
 ---
@@ -1415,4 +1415,26 @@ the top sheet, an actuals CSV in and out. SCOPE D81–D88.
 - Not checked: a click-through in a real browser.
 
 **CI.** Run #48 on `0d859e6`: success, all five jobs.
+
+## B1.1 — plain labels, mark finished, closing a budget, extras
+
+Full report: [`docs/reports/B1.1-report.md`](../reports/B1.1-report.md).
+
+**What.** One glossary module for every budget word, info icons and a
+worked example (EFC/ETC gone from the UI); "Mark finished" for a line and a
+section; closing a locked budget after a review with a stale-digest guard
+(migration 0017); extras as lines in a reserved section, only accepted ones
+counting, baseline and with-extras totals (migration 0018). SCOPE D89–D93.
+
+**Counts.** API **2700 passed, 30 skipped** (2626 before), `-m realdb`
+**1316** (1244); web **710 / 63 files** (668). Same declared environment as
+B1. CI floors raised to **2650** and **1280**.
+
+**Flagged.**
+- **D91 [open]:** a closed budget refuses every cost write, voids included.
+- **D92 [open]:** extras need a budget that is not closed; the production
+  fee applies to an accepted extra (S1: +500.00 → +540.00 net) — prompt 29.
+- "Under plan, not finished" means spent below planned; a close note is at
+  least three words.
+- Not checked: a click-through in a real browser.
 
