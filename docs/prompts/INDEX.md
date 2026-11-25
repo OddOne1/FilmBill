@@ -27,7 +27,7 @@ from them. `docs/SCOPE.md` is where the product is decided.
 | A2 | Projects, production days and the Budget sheet | [`26-filmbill-A2-projects-days-budget.md`](26-filmbill-A2-projects-days-budget.md) | `d676093`…`22dbc88` | done — see notes |
 | B1 | Cost planning: committed, actual and cost-to-complete | [`27-filmbill-B1-cost-tracking.md`](27-filmbill-B1-cost-tracking.md) | `ff47f99`…closing commit | done — see notes |
 | B1.1 | Plain labels, mark finished, closing a budget, extras | [`28-filmbill-B1.1-finish-close-extras.md`](28-filmbill-B1.1-finish-close-extras.md) | `598a1bc`…closing commit | done — see notes |
-| B1.2 | Adjustments by kind and section, production fee preset, country dropdown, clearer messages | [`29-filmbill-B1.2-adjustments-fee-country-messages.md`](29-filmbill-B1.2-adjustments-fee-country-messages.md) | — | in progress |
+| B1.2 | Adjustments by kind and section, production fee preset, country dropdown, clearer messages | [`29-filmbill-B1.2-adjustments-fee-country-messages.md`](29-filmbill-B1.2-adjustments-fee-country-messages.md) | `30ac390`…closing commit | done — see notes |
 | P0b | Foundations: companies, roles, number series, audit, money, codegen | [`03-filmbill-P0b-foundations.md`](03-filmbill-P0b-foundations.md) | — | superseded — split into P0b-0, P0b-1, P0b-2 |
 
 ---
@@ -1437,5 +1437,32 @@ B1. CI floors raised to **2650** and **1280**.
   fee applies to an accepted extra (S1: +500.00 → +540.00 net) — prompt 29.
 - "Under plan, not finished" means spent below planned; a close note is at
   least three words.
+- Not checked: a click-through in a real browser.
+
+## B1.2 — adjustments by kind and section, production fee, countries, messages
+
+Full report: [`docs/reports/B1.2-report.md`](../reports/B1.2-report.md).
+
+**What.** Adjustments on a section or sub-section and on certain kinds, with
+Equipment / Crew discount quick-adds (D94); the production fee as one
+adjustment per budget with a company preset (migration 0019, D95) and a
+per-extra choice through one engine concept, `role` / `exempt_from`
+(migration 0020, D98); one country list, stored 2-letter, shown 3-letter,
+validated by the API (D96); messages that name whose problem it is
+(CLAUDE.md 17f, D97). D91 and D92 decided.
+
+**Counts.** API **2789 passed, 30 skipped** (2700 before), `-m realdb`
+**1385** (1316); web **751 / 67 files** (710). Same declared environment as
+B1.1, with the DB host named `postgres` (the seed script refuses any other
+name — two local failures were that, not the code). CI floors raised to
+**2710** and **1345**.
+
+**Flagged.**
+- **No default production fee [Guessing]** (D95); example fee rows made
+  before 0019 are not marked as the fee.
+- Kosovo (XK) is in the list; tax-identifier countries are not validated
+  against it (XI is a VIES prefix).
+- Two older tests asserted the internal terms rule 17f removes ("§5.4",
+  "expression language"); they now assert the action instead.
 - Not checked: a click-through in a real browser.
 
