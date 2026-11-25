@@ -221,3 +221,19 @@ Nothing extra. Migration **0021_project_blocks** runs when the API starts
 (`alembic upgrade head` in the compose command) and turns the existing days
 into strips in the same step. Check afterwards: the 1000m Days tab shows
 five strips and 3 prep · 8 shoot · 4 travel · 12 post.
+
+## CI on `origin/main`
+
+Merged by fast-forward: `origin/main` `36d552b..08e160a` (no merge commit;
+nothing had landed on `main` meanwhile). CI run **45700421959** on
+`08e160a`: **all five jobs green** — Web lint, typecheck, test, build ·
+API tests · Docker build (no push) · Migrations match the models · API
+types match the schema. In the API job, "Run tests", "Guard against a
+gutted suite" (floor 2790), "Real-database tests ran, not skipped" (floor
+1415, zero skips allowed) and "Alembic history is linear and applies to an
+empty database" all passed. The exact CI pass counts are in the job log,
+which the public API only serves to repository admins, so they are not
+quoted here; the floors passing means at least 2790 and 1415.
+
+This section is the commit after `08e160a`; its own CI run is the one
+reported back to Mathias as the final one.
