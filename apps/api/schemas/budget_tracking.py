@@ -5,8 +5,8 @@ Four things are deliberate.
 **Money is a string in both directions** (rule 1), through `Money` from
 `core/money.py`. A JSON number is refused rather than rounded.
 
-**`remaining_rule` is on the wire.** The default forecasting rule is
-`[Guessing]` (SCOPE D83) and the screen says which rule produced a number, so
+**`remaining_rule` is on the wire.** The default forecasting rule (SCOPE
+D83, kept by D89) can be overridden per line, and the screen says which rule produced a number, so
 the field is part of the contract and not a detail: a sheet that showed an
 EFC without saying whether somebody had typed it would be a sheet nobody
 could argue with.

@@ -39,8 +39,9 @@ actual and not a credit against the order.
   the estimate is zero (a percentage of nothing is a claim, not a number).
 * ``over_budget`` — ``efc > estimate_cost``.
 
-**The default `remaining` rule is [Guessing]** (SCOPE D83, an open decision
-for Mathias and not for the Steuerberater). `max(estimate − actual,
+**The default `remaining` rule was [Guessing] at B1 and is now decided**
+(SCOPE D83, D89: Mathias kept it at B1's acceptance; "Mark finished" —
+an ETC of 0.00 — is how a line stops forecasting its estimate). `max(estimate − actual,
 committed_open)` is the behaviour a production accountant usually expects —
 a line keeps forecasting its estimate until the invoices overtake it — but
 "take the estimate until the line is closed", "take the actual once anything
@@ -107,7 +108,7 @@ STATUS_CANCELLED = "cancelled"
 COMMITMENT_STATUSES: tuple[str, ...] = (STATUS_OPEN, STATUS_CLOSED, STATUS_CANCELLED)
 
 #: Which rule produced a line's `remaining`. Part of the answer, not a
-#: detail: the default one is [Guessing] (see the module docstring).
+#: detail: the default one was [Guessing] until D89 (see the module docstring).
 RULE_ETC = "etc"
 RULE_DEFAULT = "default"
 REMAINING_RULES: tuple[str, ...] = (RULE_ETC, RULE_DEFAULT)
@@ -391,7 +392,7 @@ def track_line(line: LineInput) -> LineTracking:
         remaining = quantize_amount(line.etc)
         rule = RULE_ETC
     else:
-        # The default rule, [Guessing] — SCOPE D83.
+        # The default rule — SCOPE D83, kept by D89.
         by_estimate = estimate_cost - actual
         remaining = quantize_amount(
             committed_open if committed_open > by_estimate else by_estimate

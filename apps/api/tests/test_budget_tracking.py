@@ -5,7 +5,7 @@ budget carries, and the cents the forecast must produce. Data files rather
 than Python for `fixtures/calc/README.md`'s reason — a forecasting rule as an
 expression is reviewable by a programmer, the same rule as a table of inputs
 and expected cents is reviewable by Mathias, and the default `remaining` rule
-needs exactly that review (SCOPE D83 records it as `[Guessing]`).
+needed exactly that review (SCOPE D83; decided by D89 at B1.1).
 
 **What keeps this from being a check satisfied by its own absence**
 (CLAUDE.md 17b): four guards, each on a different way the walk could go quiet.
