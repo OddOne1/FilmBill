@@ -28,7 +28,7 @@ from them. `docs/SCOPE.md` is where the product is decided.
 | B1 | Cost planning: committed, actual and cost-to-complete | [`27-filmbill-B1-cost-tracking.md`](27-filmbill-B1-cost-tracking.md) | `ff47f99`…closing commit | done — see notes |
 | B1.1 | Plain labels, mark finished, closing a budget, extras | [`28-filmbill-B1.1-finish-close-extras.md`](28-filmbill-B1.1-finish-close-extras.md) | `598a1bc`…closing commit | done — see notes |
 | B1.2 | Adjustments by kind and section, production fee preset, country dropdown, clearer messages | [`29-filmbill-B1.2-adjustments-fee-country-messages.md`](29-filmbill-B1.2-adjustments-fee-country-messages.md) | `30ac390`…closing commit | done — see notes |
-| B2a | The project calendar: strips instead of a day table | [`30-filmbill-B2a-project-calendar.md`](30-filmbill-B2a-project-calendar.md) | — | in progress |
+| B2a | The project calendar: strips instead of a day table | [`30-filmbill-B2a-project-calendar.md`](30-filmbill-B2a-project-calendar.md) | `ecc1491`…closing commit | done — see notes |
 | P0b | Foundations: companies, roles, number series, audit, money, codegen | [`03-filmbill-P0b-foundations.md`](03-filmbill-P0b-foundations.md) | — | superseded — split into P0b-0, P0b-1, P0b-2 |
 
 ---
@@ -1466,4 +1466,34 @@ name — two local failures were that, not the code). CI floors raised to
 - Two older tests asserted the internal terms rule 17f removes ("§5.4",
   "expression language"); they now assert the action instead.
 - Not checked: a click-through in a real browser.
+
+## B2a — the project calendar: strips instead of a day table
+
+Full report: [`docs/reports/B2a-report.md`](../reports/B2a-report.md).
+
+**What.** Strips over days, days still the source of truth for counts
+(migration 0021, D99); `days:<type>` counts distinct dates **[Guessing]** and
+may be limited to one strip (D100); existing days turned into strips by the
+run rule with no count moving (D101); travel/off as day overrides and every
+day edited on its own (D102); the calendar screen with drag create / move /
+resize, lanes and "+N", and the booked-days strip (D103). Not built: D104.
+
+**Changed by Mathias during the run, after a local preview** (built from this
+branch on his 1000m days migrated for real): no List view (prompt 30 asked
+for a toggle); clicking a day opens it with its own type, location, start
+and end time and notes; a booked-days strip under the calendar; every end
+date starts at its start date (also on project, costs and audit-log fields).
+
+**Counts.** API **2868 passed, 30 skipped** (2793 before), `-m realdb`
+**1455** (1385); web **780 / 70 files** (751 / 67). Same declared
+environment as B1.2. CI floors raised to **2790** and **1415**.
+
+**Flagged.**
+- Distinct-date counting is **[Guessing]**, open for Mathias (D100).
+- "Start/end time" is the stored call/wrap time — [Likely] what was meant.
+- Part 2's first run failed the central isolation matrix (no case for the
+  new routes); fixed and folded into part 2 before any push.
+- The preview found Chrome's Tab-inside-a-time-field losing unsaved times;
+  time fields now also save on a complete entry.
+- Not checked: Safari/Firefox, touch dragging, the server migration.
 
