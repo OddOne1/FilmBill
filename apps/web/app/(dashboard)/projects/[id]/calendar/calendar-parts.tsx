@@ -167,7 +167,10 @@ export function BookedDays({
     else months.push({ month, dates: [date] })
   }
   return (
-    <nav data-testid="booked-days" aria-label="Booked days" className="rounded-md border border-border p-3">
+    // At most as wide as the calendar it sits under (UI-1): the months wrap
+    // onto further lines, and so do a month's days when there are many; the
+    // horizontal scroll is only a guard for a single very narrow column.
+    <nav data-testid="booked-days" aria-label="Booked days" className="w-full max-w-full overflow-x-auto rounded-md border border-border p-3">
       <p className="mb-2 text-xs font-medium text-text-secondary">Booked days</p>
       <div className="flex flex-wrap items-end gap-x-5 gap-y-3">
         {months.map(({ month, dates: inMonth }) => (
@@ -175,7 +178,7 @@ export function BookedDays({
             <p className={cn('mb-1 text-[11px]', month === currentMonth ? 'font-semibold text-text-primary' : 'text-text-tertiary')}>
               {monthLabel(month, 'short')}
             </p>
-            <div className="flex gap-0.5">
+            <div data-testid="booked-month-days" className="flex flex-wrap gap-0.5">
               {inMonth.map((date) => {
                 const types = Array.from(new Set(typesByDate.get(date) ?? []))
                 return (

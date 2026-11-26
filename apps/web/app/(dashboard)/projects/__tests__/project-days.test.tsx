@@ -213,6 +213,70 @@ describe('the calendar', () => {
   })
 })
 
+describe('always six weeks (UI-1)', () => {
+  const weekStarts = () =>
+    screen.getAllByTestId('calendar-week').map((row) => row.querySelector('[data-testid="calendar-day"]')!.getAttribute('data-date'))
+
+  it('draws six week rows in every month, stepping through the project', async () => {
+    await openDays()
+    for (let step = 0; step < 14; step += 1) {
+      expect(screen.getAllByTestId('calendar-week')).toHaveLength(6)
+      expect(screen.getAllByTestId('calendar-day')).toHaveLength(42)
+      fireEvent.click(screen.getByRole('button', { name: 'Next month' }))
+    }
+  })
+
+  it('March 2027 opens on the week of 22–28 February, and draws a strip that falls in it', async () => {
+    // A strip in the filler week before March: drawn like any other day.
+    current = calendar([strip('b-feb', '2027-02-23', '2027-02-25', { label: 'Recce' }), strip('b-mar', '2027-03-08', '2027-03-09')])
+    await openDays()
+    expect(screen.getByTestId('calendar-month').textContent).toBe('February 2027')
+    fireEvent.click(screen.getByRole('button', { name: 'Next month' }))
+    expect(screen.getByTestId('calendar-month').textContent).toBe('March 2027')
+    expect(weekStarts()).toEqual(['2027-02-22', '2027-03-01', '2027-03-08', '2027-03-15', '2027-03-22', '2027-03-29'])
+    const days = Array.from(bar('b-feb').querySelectorAll('[data-testid="strip-day"]')).map((el) => el.getAttribute('data-date'))
+    expect(days).toEqual(['2027-02-23', '2027-02-24', '2027-02-25'])
+  })
+
+  it('February 2027 has a week before and a week after', async () => {
+    current = calendar([strip('b-feb', '2027-02-10', '2027-02-11')])
+    await openDays()
+    expect(weekStarts()).toEqual(['2027-01-25', '2027-02-01', '2027-02-08', '2027-02-15', '2027-02-22', '2027-03-01'])
+  })
+
+  it('the data the grid draws is the whole project, so the filler weeks are never empty by accident', async () => {
+    // The calendar is one request for every strip of the project, with no
+    // date range at all — so it covers the grid's range (and more) by
+    // construction. Asserted on what was asked for.
+    current = calendar([strip('b-mar', '2027-03-08', '2027-03-09')])
+    await openDays()
+    const calendarCalls = vi.mocked(api.get).mock.calls.map(([path]) => String(path)).filter((path) => path.includes('/calendar'))
+    expect(calendarCalls.length).toBeGreaterThan(0)
+    expect(new Set(calendarCalls)).toEqual(new Set(['/projects/p1/calendar']))
+  })
+
+  it('puts Booked days directly under the calendar, in the calendar’s own column', async () => {
+    await openDays()
+    const column = screen.getByTestId('calendar-column')
+    const booked = screen.getByTestId('booked-days')
+    expect(column).toContainElement(screen.getByTestId('month-grid'))
+    expect(column).toContainElement(booked)
+    // Right after the grid, not after the side panel's row.
+    expect(booked.parentElement!.previousElementSibling).toBe(screen.getByTestId('month-grid'))
+    // Open the side panel: it sits beside the column, and Booked days stays
+    // inside the column — so it is never wider than the calendar.
+    fireEvent.click(bar('b-main'))
+    const panel = await screen.findByTestId('strip-panel')
+    expect(column).not.toContainElement(panel)
+    expect(column).toContainElement(screen.getByTestId('booked-days'))
+    // It fits inside its box: at most the column's width, months and days
+    // wrapping rather than running past it.
+    expect(booked.className).toContain('max-w-full')
+    expect(booked.className).toContain('overflow-x-auto')
+    for (const days of within(booked).getAllByTestId('booked-month-days')) expect(days.className).toContain('flex-wrap')
+  })
+})
+
 describe('creating a strip', () => {
   it('by dragging across empty days, then Create', async () => {
     vi.mocked(api.post).mockResolvedValue(

@@ -9,7 +9,7 @@ import {
   maxDate,
   minDate,
   monthLabel,
-  monthWeeks,
+  monthGridFor,
   shiftMonth,
   todayIso,
   type IsoDate,
@@ -24,9 +24,10 @@ import { countsSentence, typeColour, typeLabel } from './calendar/shared'
 /**
  * The Days tab: the project calendar (B2a).
  *
- * A month grid with the project's strips drawn across their days, the
- * booked days of the whole project in a compact strip below it (click one to
- * jump to its month), and a side
+ * A month grid with the project's strips drawn across their days — always
+ * six weeks (`monthGrid`, UI-1), so it never changes height — the booked
+ * days of the whole project in a compact strip directly under it and at its
+ * width (click one to jump to its month), and a side
  * panel for the strip that is open — with the day that was clicked open for
  * editing. Every day is edited here: its type, location, start and end time
  * and notes. (The old per-day table was dropped at Mathias's request,
@@ -270,10 +271,13 @@ export function DaysTab({
           )}
 
           <div className="mt-3 flex flex-col gap-4 lg:flex-row lg:items-start">
-            <div className="relative min-w-0 flex-1">
+            {/* The calendar's column: the grid, and the Booked days strip
+                under it at the grid's own width (UI-1) — not under the side
+                panel as well. */}
+            <div data-testid="calendar-column" className="relative min-w-0 flex-1">
               <MonthGrid
                 month={shownMonth}
-                weeks={monthWeeks(shownMonth)}
+                weeks={monthGridFor(shownMonth)}
                 strips={strips}
                 today={today}
                 projectStart={project.start_date}
@@ -302,6 +306,16 @@ export function DaysTab({
                 onResize={(strip, start, end) => void resize(strip, start, end)}
                 onShowDay={setDayOpen}
               />
+              <div className="mt-3 min-w-0">
+                <BookedDays
+                  typesByDate={typesByDate}
+                  currentMonth={shownMonth}
+                  onPick={(date) => {
+                    setMonth(date.slice(0, 7))
+                    gridTop.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+                  }}
+                />
+              </div>
               {dayOpen && (
                 <div className="absolute left-1/2 top-12 z-20 w-72 -translate-x-1/2">
                   <DayStripsList
@@ -329,16 +343,6 @@ export function DaysTab({
             )}
           </div>
 
-          <div className="mt-4">
-            <BookedDays
-              typesByDate={typesByDate}
-              currentMonth={shownMonth}
-              onPick={(date) => {
-                setMonth(date.slice(0, 7))
-                gridTop.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
-              }}
-            />
-          </div>
         </>
       )}
 

@@ -74,6 +74,51 @@ export function monthWeeks(month: string): IsoDate[][] {
   return weeks
 }
 
+/** Rows a month grid always has (UI-1): 6 × 7 = 42 days. */
+export const GRID_WEEKS = 6
+
+/**
+ * The project calendar's grid for one month (UI-1 part 4): **always six
+ * week rows, 42 days, Monday first**, so the calendar never changes height
+ * as you step through the months.
+ *
+ * The month's own weeks (`monthWeeks`) are five or six rows, or four for a
+ * February that starts on a Monday and ends on a Sunday. The missing rows
+ * are added like this:
+ *   - six rows: nothing changes;
+ *   - five rows: one week on the side with FEWER filler days — the days of
+ *     the neighbouring month in the first row (before) or the last row
+ *     (after); a tie adds it after;
+ *   - four rows: one week before and one after.
+ * So March 2027 (no leading days, four trailing) starts with 22–28 February,
+ * and February 2027 runs from 25 January to 7 March.
+ *
+ * `month` is 1-based (3 = March).
+ */
+export function monthGrid(year: number, month: number): IsoDate[][] {
+  const key = `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}`
+  const weeks = monthWeeks(key)
+  const week = (start: IsoDate) => Array.from({ length: 7 }, (_, index) => addDays(start, index))
+  const weekBefore = () => weeks.unshift(week(addDays(weeks[0][0], -7)))
+  const weekAfter = () => weeks.push(week(addDays(weeks[weeks.length - 1][0], 7)))
+
+  if (weeks.length === GRID_WEEKS - 2) {
+    weekBefore()
+    weekAfter()
+  } else if (weeks.length === GRID_WEEKS - 1) {
+    const before = weeks[0].filter((date) => date.slice(0, 7) !== key).length
+    const after = weeks[weeks.length - 1].filter((date) => date.slice(0, 7) !== key).length
+    if (before < after) weekBefore()
+    else weekAfter()
+  }
+  return weeks
+}
+
+/** `"2027-03"` → `monthGrid(2027, 3)`. */
+export function monthGridFor(month: string): IsoDate[][] {
+  return monthGrid(Number(month.slice(0, 4)), Number(month.slice(5, 7)))
+}
+
 export function shiftMonth(month: string, by: number): string {
   const year = Number(month.slice(0, 4))
   const index = Number(month.slice(5, 7)) - 1 + by
