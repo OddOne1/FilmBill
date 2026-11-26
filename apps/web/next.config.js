@@ -20,6 +20,9 @@ const nextConfig = {
     return [
       { source: '/parties', destination: '/contacts', permanent: false },
       { source: '/parties/:id', destination: '/contacts/:id', permanent: false },
+      // UI-1: crew are people, so there is no Crew page any more; they are
+      // the Crew tab of the Contacts list.
+      { source: '/crew', destination: '/contacts?tab=crew', permanent: false },
     ]
   },
 }

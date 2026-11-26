@@ -22,21 +22,25 @@ vi.mock('@/lib/api', () => ({
 }))
 
 vi.mock('next/navigation', () => ({
-  usePathname: () => '/crew',
+  usePathname: () => '/contacts',
   useParams: () => ({}),
 }))
 
 import { api } from '@/lib/api'
-import CrewListPage from '../page'
+import ContactsPage from '../page'
 import { findPartyWords } from '@/test/user-words'
 import { useCompanyStore } from '@/stores/company-store'
 
 /**
- * The crew page. What is under test is what the page SENDS and what it
- * shows of what came back: the list is the API's (search, role and sort are
- * query parameters), quick add posts exactly the form, and the import sends
- * the preview's digest and the ticked duplicate lines — read off the
- * FormData that actually went out.
+ * Contacts → Crew (UI-1 part 3: the Crew page and its menu item went away,
+ * and everything on it moved into this tab's toolbar).
+ *
+ * The REAL Contacts page is rendered, opened the way an old `/crew` bookmark
+ * opens it: `/contacts?tab=crew`. What is under test is what the tab SENDS
+ * and what it shows of what came back: the list is the crew endpoint's
+ * (search, role and sort are query parameters), quick add posts exactly the
+ * form, and the import sends the preview's digest and the ticked duplicate
+ * lines — read off the FormData that actually went out.
  */
 
 function seed(permissions = ['parties.view', 'parties.edit']) {
@@ -80,15 +84,51 @@ function routeGets(members = [member()]) {
   vi.mocked(api.get).mockImplementation(async (path: string) => {
     if (path === '/crew/roles') return { used: ['DoP', 'Sound'], catalog: ['Gaffer'] }
     if (path.startsWith('/crew')) return { members, total: members.length }
+    if (path.startsWith('/parties')) return { parties: [], total: 0 }
     throw new Error(`unexpected GET ${path}`)
   })
 }
 
-describe('the crew page', () => {
+function CrewListPage() {
+  return <ContactsPage />
+}
+
+describe('Contacts → Crew', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     seed()
     routeGets()
+    window.history.replaceState(null, '', '/contacts?tab=crew')
+  })
+
+  it('opens on the Crew tab from ?tab=crew, with the three actions in its toolbar', async () => {
+    render(<CrewListPage />)
+    await screen.findAllByTestId('crew-row')
+    expect(screen.getByRole('tab', { name: 'Crew' })).toHaveAttribute('aria-selected', 'true')
+    const toolbar = screen.getByRole('toolbar', { name: 'Crew' })
+    expect(within(toolbar).getByRole('button', { name: /Quick add crew/ })).toBeInTheDocument()
+    expect(within(toolbar).getByRole('button', { name: /Import CSV/ })).toBeInTheDocument()
+    expect(within(toolbar).getByRole('button', { name: /Export CSV/ })).toBeInTheDocument()
+    // The crew list came from the crew endpoint, not the general list.
+    expect(vi.mocked(api.get).mock.calls.some(([path]) => String(path).startsWith('/parties'))).toBe(false)
+  })
+
+  it('reaches the same toolbar by clicking the Crew tab from All', async () => {
+    window.history.replaceState(null, '', '/contacts')
+    render(<CrewListPage />)
+    await waitFor(() => expect(vi.mocked(api.get)).toHaveBeenCalledWith('/parties?'))
+    expect(screen.queryByRole('toolbar', { name: 'Crew' })).toBeNull()
+    fireEvent.click(screen.getByRole('tab', { name: 'Crew' }))
+    await screen.findAllByTestId('crew-row')
+    expect(screen.getByRole('toolbar', { name: 'Crew' })).toBeInTheDocument()
+  })
+
+  it('exports the CSV from the toolbar', async () => {
+    vi.mocked(api.download).mockResolvedValue(new Blob(['name\n'], { type: 'text/csv' }) as never)
+    render(<CrewListPage />)
+    await screen.findAllByTestId('crew-row')
+    fireEvent.click(screen.getByTestId('crew-export'))
+    await waitFor(() => expect(vi.mocked(api.download)).toHaveBeenCalledWith('/crew/export.csv'))
   })
 
   it.each([
@@ -107,7 +147,7 @@ describe('the crew page', () => {
         fireEvent.click(screen.getByTestId('crew-import-open'))
       }
     } else {
-      await screen.findByTestId('crew-no-access')
+      await screen.findByText(/do not have access to this company/)
     }
     expect(findPartyWords(container)).toEqual([])
   })
@@ -129,10 +169,10 @@ describe('the crew page', () => {
     await waitFor(() =>
       expect(within(screen.getByTestId('crew-role-filter')).getByText('Sound')).toBeInTheDocument(),
     )
-    fireEvent.change(screen.getByTestId('crew-search'), { target: { value: 'hub' } })
+    fireEvent.change(screen.getByLabelText('Search contacts'), { target: { value: 'hub' } })
     fireEvent.change(screen.getByTestId('crew-role-filter'), { target: { value: 'Sound' } })
     fireEvent.change(screen.getByTestId('crew-sort'), { target: { value: '-name' } })
-    fireEvent.click(screen.getByTestId('crew-include-inactive'))
+    fireEvent.click(screen.getByLabelText('Show archived'))
     await waitFor(() =>
       expect(vi.mocked(api.get)).toHaveBeenCalledWith(
         '/crew?search=hub&role=Sound&sort=-name&include_inactive=true',
@@ -260,7 +300,9 @@ describe('the crew page', () => {
     seed(['parties.view'])
     render(<CrewListPage />)
     await screen.findAllByTestId('crew-row')
-    expect(screen.getByTestId('crew-read-only')).toHaveTextContent('permission to edit contacts')
+    expect(screen.getByText(/needs permission to edit contacts/)).toBeInTheDocument()
+    // Export is reading, so it stays; the two that write are not offered.
+    expect(screen.getByTestId('crew-export')).toBeInTheDocument()
     expect(screen.queryByTestId('crew-add-open')).not.toBeInTheDocument()
     expect(screen.queryByTestId('crew-import-open')).not.toBeInTheDocument()
   })
@@ -268,7 +310,9 @@ describe('the crew page', () => {
   it('tells somebody without the parties permission why the page is closed, and asks nothing', async () => {
     seed(['projects.view', 'devices.view'])
     render(<CrewListPage />)
-    expect(screen.getByTestId('crew-no-access')).toHaveTextContent('crew list')
+    expect(screen.getByText(/do not have access to this company/)).toBeInTheDocument()
+    expect(screen.queryByTestId('crew-tab')).toBeNull()
+    await new Promise((resolve) => setTimeout(resolve, 300))
     expect(vi.mocked(api.get)).not.toHaveBeenCalled()
   })
 })

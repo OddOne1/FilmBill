@@ -15,6 +15,7 @@ import {
   type ColumnKey,
 } from './contacts-table'
 import { NewPartyPanel } from './new-contact-panel'
+import { CrewTab } from './crew-tab'
 
 /**
  * Contacts — customers, suppliers, partners, crew and the people in them.
@@ -24,6 +25,11 @@ import { NewPartyPanel } from './new-contact-panel'
  * hats: the production company that hires you this month invoices you the
  * next. The tabs are filters over one list rather than separate screens, so
  * a company that is both appears in both and is still one record.
+ *
+ * **The Crew tab is the crew list** (UI-1): crew are people, so they have
+ * no menu item of their own. `/crew` redirects here with `?tab=crew`, and
+ * the tab carries what the old Crew page had — quick add, CSV import and
+ * export, the role filter and sort (`crew-tab.tsx`).
  *
  * **The search is one field over five columns** (name, trading name, party
  * number, VAT ID, email), server-side. Somebody looking for a customer types
@@ -50,6 +56,16 @@ const TABS: {
   { key: 'attention', label: 'Needs attention', needsAttention: true },
 ]
 
+/** The tab named by `?tab=` (an old `/crew` bookmark lands on `crew`). */
+function tabFromLocation(): string | null {
+  try {
+    const wanted = new URLSearchParams(window.location.search).get('tab')
+    return TABS.some((entry) => entry.key === wanted) ? wanted : null
+  } catch {
+    return null
+  }
+}
+
 export default function ContactsPage() {
   const activeCompanyId = useCompanyStore((state) => state.activeCompanyId)
   const { can, loaded } = usePermissions()
@@ -65,11 +81,20 @@ export default function ContactsPage() {
   // Read after mount: `localStorage` does not exist during the server render.
   const [hidden, setHidden] = React.useState<ColumnKey[]>([])
   React.useEffect(() => setHidden(loadHiddenColumns()), [])
+  // Also after mount, for the same reason. Read once: after this the tab is
+  // the page's own state.
+  React.useEffect(() => {
+    const wanted = tabFromLocation()
+    if (wanted) setTab(wanted)
+  }, [])
+  const crewTab = tab === 'crew'
   const allowed = availableColumns(canEdit)
   const columns = allowed.filter((column) => column.fixed || !hidden.includes(column.key))
 
   const refresh = React.useCallback(
     async (spinner = false) => {
+      // The Crew tab loads its own list from the crew endpoint.
+      if (tab === 'crew') return
       if (spinner) setLoading(true)
       const chosen = TABS.find((entry) => entry.key === tab)
       const params = new URLSearchParams()
@@ -171,7 +196,7 @@ export default function ContactsPage() {
           <Input
             aria-label="Search contacts"
             value={search}
-            placeholder="Name, number, VAT ID or email"
+            placeholder={crewTab ? 'Name, role or email' : 'Name, number, VAT ID or email'}
             onChange={(event) => setSearch(event.target.value)}
             className="pl-8"
           />
@@ -184,7 +209,7 @@ export default function ContactsPage() {
           />
           Show archived
         </label>
-        <ColumnPicker columns={allowed} hidden={hidden} onChange={setHidden} />
+        {!crewTab && <ColumnPicker columns={allowed} hidden={hidden} onChange={setHidden} />}
       </div>
 
       {adding && (
@@ -206,7 +231,9 @@ export default function ContactsPage() {
         </p>
       )}
 
-      {loading ? (
+      {crewTab ? (
+        <CrewTab search={search} includeInactive={includeInactive} />
+      ) : loading ? (
         <div className="mt-6 flex items-center gap-2 p-4 text-sm text-text-tertiary">
           <Loader2 className="h-4 w-4 animate-spin" />
           Loading…

@@ -127,27 +127,8 @@ describe('the Parties entry (P1b)', () => {
   })
 })
 
-describe('the Crew entry (B2b)', () => {
-  it('is shown with parties.view, right after Parties', () => {
-    // Crew are parties with a flag, so the entry needs what the list needs.
-    seed(['company.view', 'parties.view'], 'accountant')
-    render(<Sidebar collapsed={false} onToggle={() => {}} />)
-
-    const labels = screen
-      .getAllByRole('link')
-      .map((link) => link.textContent?.trim())
-      .filter(Boolean) as string[]
-    expect(labels.indexOf('Crew')).toBe(labels.indexOf('Contacts') + 1)
-  })
-
-  it('is hidden from staff, who do not hold parties.view', () => {
-    seed(['company.view', 'projects.view', 'catalog.view'], 'staff')
-    render(<Sidebar collapsed={false} onToggle={() => {}} />)
-
-    expect(screen.queryByText('Crew')).not.toBeInTheDocument()
-    expect(screen.getByText('Projects')).toBeInTheDocument()
-  })
-})
+// 'the Crew entry (B2b)' went with UI-1: crew live in Contacts → Crew and
+// there is no menu item for them. See 'no Crew entry (UI-1)' below.
 
 describe('the Gear entry (B2b)', () => {
   it('is shown to staff, who hold devices.view', () => {
@@ -162,5 +143,21 @@ describe('the Gear entry (B2b)', () => {
     render(<Sidebar collapsed={false} onToggle={() => {}} />)
 
     expect(screen.queryByText('Gear')).not.toBeInTheDocument()
+  })
+})
+
+describe('no Crew entry (UI-1)', () => {
+  beforeEach(() => {
+    useNotificationStore.setState({ unreadCount: 0, fetchNotifications: vi.fn() } as never)
+  })
+
+  it('crew live in Contacts → Crew, so the sidebar has Contacts and no Crew', () => {
+    seed(['company.view', 'parties.view', 'parties.edit', 'projects.view', 'devices.view'], 'owner')
+
+    render(<Sidebar collapsed={false} onToggle={() => {}} />)
+
+    expect(screen.getByText('Contacts').closest('a')).toHaveAttribute('href', '/contacts')
+    expect(screen.queryByText('Crew')).toBeNull()
+    expect(document.querySelector('a[href="/crew"]')).toBeNull()
   })
 })

@@ -7,7 +7,6 @@ import {
   Archive,
   ChevronsLeft,
   Clapperboard,
-  Contact,
   LayoutDashboard,
   Package,
   Tags,
@@ -47,9 +46,8 @@ const navItems: NavItem[] = [
   // entry rather than a company setting, because a customer list is not a
   // setting — it is one of the two things the application is about.
   { href: '/contacts', label: 'Contacts', icon: Users, permission: 'parties.view' },
-  // B2b. The people who can be booked on a production. They are parties
-  // with the crew flag, so the entry needs what the parties list needs.
-  { href: '/crew', label: 'Crew', icon: Contact, permission: 'parties.view' },
+  // No Crew entry (UI-1): crew are people, and they live in Contacts → the
+  // Crew tab. `/crew` redirects there (next.config.js).
   // A1. The price list, and the calculator that runs on the same engine
   // every quote and invoice will. `catalog.view` is held by everybody except
   // the tax advisor — staff included, because looking up what a truck costs
