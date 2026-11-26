@@ -21,6 +21,7 @@ import type {
   PartyVatCheck,
   ResolvedField,
   ResolvedRecipient,
+  TaxIdDetect,
   TaxProposal,
 } from '@/types'
 
@@ -62,6 +63,10 @@ const TAX_ID_LABELS: Record<string, string> = {
   company_register: 'company register number',
   other: 'identifier',
 }
+
+/** Mirrors `vat_like_kinds` in the tax-ID data: the kinds one of which is
+ *  THE number a document uses. Only decides whether the direct field shows. */
+const VAT_LIKE_KINDS = ['vat', 'uid_ch', 'abn']
 
 const BUYER_REASONS: Record<string, string> = {
   explicit: 'set by hand on this party',
@@ -1057,12 +1062,27 @@ function TaxTab({
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [preview, setPreview] = React.useState<TaxProposal | null>(null)
+  // P1b-4 part 3: the number typed straight into the tab, and — only when
+  // the server could not tell — the kind the person picked for it.
+  const [directValue, setDirectValue] = React.useState('')
+  const [directKinds, setDirectKinds] = React.useState<string[]>([])
+  const [directKind, setDirectKind] = React.useState('')
 
   React.useEffect(() => {
     setTaxCountry(party.tax_country ?? '')
     setBusinessStatus(party.business_status)
     setStatusNote(party.tax_status_note ?? '')
+    setDirectValue('')
+    setDirectKinds([])
+    setDirectKind('')
   }, [party])
+
+  const activeIds = party.tax_ids.filter((taxId) => taxId.is_active)
+  const hasVatLike = activeIds.some((taxId) => VAT_LIKE_KINDS.includes(taxId.kind))
+  // The note explains a business with no number at all (D65), so it is
+  // shown only while that is the situation.
+  const showNote =
+    party.buyer_type === 'business' && activeIds.length === 0 && !resolved.vat_id.value
 
   React.useEffect(() => {
     void (async () => {
@@ -1078,14 +1098,50 @@ function TaxTab({
     })()
   }, [party])
 
+  /** Add the typed number exactly as "Add another identifier" does —
+   *  `POST /tax-ids` — and then run its first check at once, so the status
+   *  shows without anybody pressing Check now. Returns false when nothing
+   *  may be saved yet (an invalid number, or a kind still to choose). */
+  async function addDirect(): Promise<boolean> {
+    const value = directValue.trim()
+    if (!value) return true
+    let kind = directKind
+    if (!kind) {
+      const found = await api.post<TaxIdDetect>(`/parties/${party.id}/tax-ids/detect`, {
+        value,
+        country: taxCountry || null,
+      })
+      if (found.message) {
+        setError(found.message)
+        return false
+      }
+      if (!found.kind) {
+        setDirectKinds(found.candidates)
+        return false
+      }
+      kind = found.kind
+    }
+    const created = await api.post<PartyTaxId>(`/parties/${party.id}/tax-ids`, {
+      kind,
+      value,
+      country: taxCountry || null,
+    })
+    if (created.verifiable) {
+      await api.post(`/parties/${party.id}/tax-ids/${created.id}/check`, {})
+    }
+    return true
+  }
+
   async function save() {
     setSaving(true)
     setError(null)
     try {
+      if (!(await addDirect())) return
       await api.patch(`/parties/${party.id}`, {
         tax_country: taxCountry || null,
         business_status: businessStatus,
-        tax_status_note: statusNote || null,
+        // Hidden, the note is left exactly as it is.
+        ...(showNote ? { tax_status_note: statusNote || null } : {}),
       })
       await onSaved()
     } catch (err) {
@@ -1097,6 +1153,50 @@ function TaxTab({
 
   return (
     <div className="space-y-6">
+      {/* ── P1b-4 part 3: type the number straight in ─────────────── */}
+      {canEdit && !hasVatLike && (
+        <div data-testid="tax-id-direct" className="space-y-2">
+          <label className="block text-xs font-medium text-text-secondary">
+            VAT / tax ID (optional)
+            <Input
+              aria-label="VAT / tax ID"
+              data-testid="tax-id-direct-value"
+              value={directValue}
+              placeholder={party.tax_id_example ?? undefined}
+              onChange={(event) => {
+                setDirectValue(event.target.value)
+                setDirectKinds([])
+                setDirectKind('')
+              }}
+              className="mt-1"
+            />
+            <span className="mt-1 block text-[11px] font-normal text-text-tertiary">
+              Saved with the button below and checked straight away. The kind
+              of number is worked out from the country for tax and its format.
+            </span>
+          </label>
+          {directKinds.length > 0 && (
+            <label className="block text-xs font-medium text-text-secondary">
+              What kind of number is this?
+              <select
+                aria-label="What kind of number is this?"
+                data-testid="tax-id-direct-kind"
+                value={directKind}
+                onChange={(event) => setDirectKind(event.target.value)}
+                className="mt-1 w-full rounded-md border border-border bg-bg-primary px-3 py-2 text-sm"
+              >
+                <option value="">Choose…</option>
+                {directKinds.map((kind) => (
+                  <option key={kind} value={kind}>
+                    {TAX_ID_LABELS[kind] ?? kind}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+        </div>
+      )}
+
       {/* ── What a document would use ─────────────────────────────── */}
       <div>
         <p className="text-xs font-medium uppercase tracking-wide text-text-tertiary">
@@ -1171,22 +1271,24 @@ function TaxTab({
             party.buyer_type_reason}
           .
         </p>
-        <label className="block text-xs font-medium text-text-secondary">
-          Why there is no number, if there is none
-          <Input
-            aria-label="Tax status note"
-            value={statusNote}
-            disabled={!canEdit}
-            placeholder="Kleinunternehmer, keine UID"
-            onChange={(event) => setStatusNote(event.target.value)}
-            className="mt-1"
-          />
-          <span className="mt-1 block text-[11px] font-normal text-text-tertiary">
-            A business below the small-business threshold holds no VAT ID.
-            Saying so here is better than leaving an empty field that looks
-            like something failed to save.
-          </span>
-        </label>
+        {showNote && (
+          <label className="block text-xs font-medium text-text-secondary">
+            Why there is no VAT ID (optional)
+            <Input
+              aria-label="Why there is no VAT ID"
+              data-testid="party-tax-status-note"
+              value={statusNote}
+              disabled={!canEdit}
+              placeholder="Kleinunternehmer, keine UID"
+              onChange={(event) => setStatusNote(event.target.value)}
+              className="mt-1"
+            />
+            <span className="mt-1 block text-[11px] font-normal text-text-tertiary">
+              A note for you and your accountant, for example a business below
+              the small-business threshold. It changes no tax calculation.
+            </span>
+          </label>
+        )}
 
         {error && (
           <p
@@ -1270,7 +1372,7 @@ function TaxIdList({
             onClick={() => setAdding((open) => !open)}
             className="rounded-md border border-border px-2.5 py-1.5 text-xs text-text-primary hover:bg-bg-hover"
           >
-            {adding ? 'Cancel' : 'Add an identifier'}
+            {adding ? 'Cancel' : 'Add another identifier'}
           </button>
         )}
       </div>

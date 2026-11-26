@@ -468,7 +468,10 @@ describe('a member who may read but not edit', () => {
     // And nothing is editable.
     expect(screen.queryByTestId('party-tax-save')).not.toBeInTheDocument()
     expect(screen.getByLabelText('Country for tax')).toBeDisabled()
-    expect(screen.getByLabelText('Tax status note')).toBeDisabled()
+    expect(screen.getByLabelText('Business or private')).toBeDisabled()
+    // P1b-4 part 3: a number is on file, so there is no "why there is no
+    // VAT ID" note to read or write.
+    expect(screen.queryByLabelText('Why there is no VAT ID')).not.toBeInTheDocument()
   })
 })
 

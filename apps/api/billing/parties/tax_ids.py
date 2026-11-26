@@ -361,3 +361,110 @@ def normalise(kind: str, raw: str, *, country: Optional[str] = None) -> Normalis
     if kind == "abn":
         return _normalise_abn(as_entered, as_entered)
     return _normalise_free_text(kind, as_entered, as_entered, country)
+
+
+# ── Direct entry: which kind is this number? (P1b-4 part 3) ───────────────
+
+
+@dataclass(frozen=True)
+class KindDetection:
+    """What the Tax tab's single field learned about a typed number.
+
+    Exactly one of three shapes:
+      * `kind` set — one structured kind matched; `normalised` is ready to
+        store and `candidates == (kind,)`.
+      * `kind` None and `candidates` non-empty — ambiguous; the screen asks
+        "What kind of number is this?" with these choices.
+      * `kind` None, no candidates, `message` set — this cannot be a number
+        of any kind it could be; nothing is saved.
+    """
+
+    kind: Optional[str]
+    candidates: tuple[str, ...]
+    normalised: Optional[NormalisedTaxId] = None
+    message: Optional[str] = None
+
+
+def _direct_entry() -> dict:
+    return load_formats()["direct_entry"]
+
+
+def _claims_eu_prefix(compact: str) -> bool:
+    """Whether the number starts with an EU VAT country prefix (`AT…`)."""
+    from .vat import known_countries
+
+    prefix = compact[:2]
+    return prefix.isalpha() and (
+        prefix in known_countries() or prefix in ("EL", "GR", "XI")
+    )
+
+
+def detect_kind(value: str, *, country: Optional[str] = None) -> KindDetection:
+    """Try the kinds `direct_entry` names for this country, in order.
+
+    Pure and network-free like the rest of the module: it says which kinds
+    the number COULD be, never that it is real.
+    """
+    as_entered = (value or "").strip()
+    if not as_entered:
+        return KindDetection(
+            kind=None, candidates=(), message="Type the number first."
+        )
+    config = _direct_entry()
+    country = (country or "").strip().upper() or None
+    tried = list(config["always"]) + list(
+        (config.get("by_country") or {}).get(country or "", [])
+    )
+    matches: list[NormalisedTaxId] = []
+    errors: dict[str, str] = {}
+    from .vat import is_checkable
+
+    for kind in tried:
+        try:
+            found = normalise(kind, as_entered, country=country)
+        except TaxIdFormatError as error:
+            errors[kind] = str(error)
+            continue
+        # `vat` on its own takes any two-letter prefix and the loose WSDL
+        # shape, so that a number can always be recorded. For guessing the
+        # kind that is far too loose ("FN 123456a" would be a VAT ID of
+        # country FN): here it counts only for a country with a VAT format
+        # in `vat_formats.yaml`.
+        if kind == "vat" and not is_checkable(found.country):
+            continue
+        matches.append(found)
+
+    if len(matches) == 1:
+        return KindDetection(
+            kind=matches[0].kind, candidates=(matches[0].kind,), normalised=matches[0]
+        )
+    if len(matches) > 1:
+        return KindDetection(
+            kind=None, candidates=tuple(m.kind for m in matches)
+        )
+    compact = strip_separators(as_entered)
+    if _claims_eu_prefix(compact) and "vat" in errors:
+        # It says which EU country it belongs to and does not fit that
+        # country's format: a typo, not a different kind of number.
+        return KindDetection(kind=None, candidates=(), message=errors["vat"])
+    return KindDetection(kind=None, candidates=tuple(config["fallback"]))
+
+
+def example_for(country: Optional[str]) -> Optional[str]:
+    """A placeholder for the field, from examples the data already has.
+
+    The EU examples are `vat.py`'s own (the ones its refusals show); the
+    Swiss and Australian ones are the issuing authorities' worked examples
+    in this file. None when no example is known — no invented formats.
+    """
+    from .vat import _EXAMPLES, vies_country
+
+    code = (country or "").strip().upper()
+    if not code:
+        return None
+    vat_example = _EXAMPLES.get(vies_country(code) or code)
+    if vat_example:
+        return vat_example
+    kind = (_direct_entry().get("example_kind_by_country") or {}).get(code)
+    example = load_formats()["kinds"].get(kind or "", {}).get("example_valid")
+    return str(example) if example else None

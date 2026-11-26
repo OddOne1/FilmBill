@@ -857,9 +857,11 @@ describe('the Kleinunternehmer case', () => {
     expect(screen.getByTestId('party-buyer-type')).toHaveTextContent(
       'set explicitly as a business, with no tax identifier on file',
     )
-    expect(screen.getByLabelText('Tax status note')).toHaveValue(
+    // P1b-4 part 3: relabelled, and it says what it does — nothing to tax.
+    expect(screen.getByLabelText('Why there is no VAT ID')).toHaveValue(
       'Kleinunternehmer nach §6 Abs 1 Z 27 UStG, keine UID',
     )
+    expect(screen.getByText(/It changes no tax calculation\./)).toBeInTheDocument()
     expect(screen.getByTestId('party-resolved-tax-id')).toHaveTextContent(
       'None anywhere in the hierarchy',
     )
@@ -880,5 +882,169 @@ describe('a reader who cannot edit', () => {
     // The history is readable: a reader answering a question about an
     // invoice needs it.
     expect(screen.getByTestId('tax-id-history-t1')).toBeEnabled()
+  })
+})
+
+
+describe('typing the number straight in (P1b-4 part 3)', () => {
+  /** What `POST /tax-ids/detect`, `POST /tax-ids` and `POST …/check` return,
+   *  in the API's own shapes. Records every POST so a test can assert the
+   *  order the screen made them in. */
+  function mockDirect({
+    detect,
+    party = makeParty({ tax_ids: [], vat_verified: false, tax_country: 'AT', tax_id_example: 'ATU12345678' }),
+    resolved = makeResolved({ vat_id: field(null, null), tax_id_kind: field(null, null) }),
+  }: {
+    detect: Record<string, unknown>
+    party?: Party
+    resolved?: ResolvedRecipient
+  }) {
+    mockApi({ party, resolved })
+    vi.mocked(api.post).mockImplementation(async (path: string) => {
+      if (path.endsWith('/tax-preview')) return makePreview() as never
+      if (path.endsWith('/tax-ids/detect')) return detect as never
+      if (path === '/parties/p1/tax-ids') {
+        return taxId({ id: 't9', country: 'AT', value: 'ATU16360407', latest_check: null }) as never
+      }
+      if (path.endsWith('/check')) return check({ id: 'c9', tax_id_id: 't9' }) as never
+      throw new Error(`unexpected POST ${path}`)
+    })
+  }
+
+  function posts(): string[] {
+    return vi.mocked(api.post).mock.calls.map((call) => String(call[0])).filter((p) => !p.endsWith('/tax-preview'))
+  }
+
+  it('is an open field at the top, with the country’s example, and no button to open it', async () => {
+    mockDirect({ detect: {} })
+    render(<PartyDetailPage />)
+    await openTax()
+    const input = screen.getByTestId('tax-id-direct-value')
+    expect(input).toHaveAttribute('placeholder', 'ATU12345678')
+    expect(screen.getByTestId('tax-id-add')).toHaveTextContent('Add another identifier')
+  })
+
+  it('a typed number is detected, added through the ordinary create, and checked at once', async () => {
+    mockDirect({
+      detect: {
+        kind: 'vat',
+        candidates: ['vat'],
+        value: 'ATU16360407',
+        country: 'AT',
+        verifiable: true,
+        message: null,
+      },
+    })
+    render(<PartyDetailPage />)
+    await openTax()
+    fireEvent.change(screen.getByTestId('tax-id-direct-value'), { target: { value: 'ATU 1636 0407' } })
+    fireEvent.click(screen.getByTestId('party-tax-save'))
+
+    await waitFor(() => expect(vi.mocked(api.patch)).toHaveBeenCalled())
+    expect(posts()).toEqual([
+      '/parties/p1/tax-ids/detect',
+      '/parties/p1/tax-ids',
+      '/parties/p1/tax-ids/t9/check',
+    ])
+    expect(vi.mocked(api.post)).toHaveBeenCalledWith('/parties/p1/tax-ids/detect', {
+      value: 'ATU 1636 0407',
+      country: 'AT',
+    })
+    expect(vi.mocked(api.post)).toHaveBeenCalledWith('/parties/p1/tax-ids', {
+      kind: 'vat',
+      value: 'ATU 1636 0407',
+      country: 'AT',
+    })
+  })
+
+  it('the identifier it created then shows with its status', async () => {
+    // After the save the page reloads the party; this is what it gets back.
+    mockApi({
+      party: makeParty({
+        tax_country: 'AT',
+        tax_ids: [taxId({ id: 't9', value: 'ATU16360407', country: 'AT', latest_check: check({ tax_id_id: 't9', status: 'valid' }) })],
+      }),
+    })
+    render(<PartyDetailPage />)
+    await openTax()
+    expect(screen.getByTestId('tax-id-status-valid-t9')).toHaveTextContent('Confirmed')
+    // A primary number is on file, so the direct field has done its job.
+    expect(screen.queryByTestId('tax-id-direct')).not.toBeInTheDocument()
+  })
+
+  it('a kind the server cannot tell asks one question, and saves nothing until answered', async () => {
+    mockDirect({
+      detect: {
+        kind: null,
+        candidates: ['tax_number', 'company_register', 'other'],
+        value: null,
+        country: 'AT',
+        verifiable: false,
+        message: null,
+      },
+    })
+    render(<PartyDetailPage />)
+    await openTax()
+    fireEvent.change(screen.getByTestId('tax-id-direct-value'), { target: { value: '12 345/6789' } })
+    fireEvent.click(screen.getByTestId('party-tax-save'))
+
+    const question = await screen.findByLabelText('What kind of number is this?')
+    expect(posts()).toEqual(['/parties/p1/tax-ids/detect'])
+    expect(vi.mocked(api.patch)).not.toHaveBeenCalled()
+
+    fireEvent.change(question, { target: { value: 'tax_number' } })
+    fireEvent.click(screen.getByTestId('party-tax-save'))
+    await waitFor(() => expect(vi.mocked(api.patch)).toHaveBeenCalled())
+    expect(vi.mocked(api.post)).toHaveBeenCalledWith('/parties/p1/tax-ids', {
+      kind: 'tax_number',
+      value: '12 345/6789',
+      country: 'AT',
+    })
+  })
+
+  it('an invalid number shows the plain message and saves nothing at all', async () => {
+    mockDirect({
+      detect: {
+        kind: null,
+        candidates: [],
+        value: null,
+        country: 'AT',
+        verifiable: false,
+        message: "'ATU1234' does not match the format for AT.",
+      },
+    })
+    render(<PartyDetailPage />)
+    await openTax()
+    fireEvent.change(screen.getByTestId('tax-id-direct-value'), { target: { value: 'ATU1234' } })
+    fireEvent.click(screen.getByTestId('party-tax-save'))
+
+    expect(await screen.findByTestId('party-tax-error')).toHaveTextContent('does not match the format for AT')
+    expect(posts()).toEqual(['/parties/p1/tax-ids/detect'])
+    expect(vi.mocked(api.patch)).not.toHaveBeenCalled()
+  })
+
+  it('the note appears only while a business has no number, and goes when one is added', async () => {
+    const noNumber = makeParty({ tax_ids: [], vat_verified: false, buyer_type: 'business' })
+    mockApi({ party: noNumber, resolved: makeResolved({ vat_id: field(null, null) }) })
+    const { unmount } = render(<PartyDetailPage />)
+    await openTax()
+    expect(screen.getByTestId('party-tax-status-note')).toBeInTheDocument()
+    unmount()
+
+    // A private person: no note, whether or not there is a number.
+    mockApi({
+      party: makeParty({ type: 'person', tax_ids: [], buyer_type: 'private', buyer_type_reason: 'person' }),
+      resolved: makeResolved({ vat_id: field(null, null), buyer_type: 'private' }),
+    })
+    const second = render(<PartyDetailPage />)
+    await openTax()
+    expect(screen.queryByTestId('party-tax-status-note')).not.toBeInTheDocument()
+    second.unmount()
+
+    // A business with an active number: no note either.
+    mockApi()
+    render(<PartyDetailPage />)
+    await openTax()
+    expect(screen.queryByTestId('party-tax-status-note')).not.toBeInTheDocument()
   })
 })

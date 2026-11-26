@@ -135,3 +135,32 @@ vat_like_kinds: [vat, uid_ch, abn]
 #: Length bound for every free-text kind. Generous — the point is to stop a
 #: pasted paragraph, not to second-guess a foreign format.
 free_text_max_length: 64
+
+# ─── P1b-4 part 3: the Tax tab's single "VAT / tax ID" field ─────────────────
+#
+# Which kinds that one field tries, in order, so a person can type a number
+# without first saying what it is. Data, not code (CLAUDE.md rule 7): which
+# kinds are plausible for which country for tax is a fact about the world.
+#
+#   * `always` — kinds whose shape cannot be mistaken for anything else: an
+#     EU VAT ID (its country's pattern, prefix or the contact's country) and
+#     a Swiss UID (CHE/ADM prefix plus check digit).
+#   * `by_country` — kinds tried only when the contact's country for tax is
+#     that country, because their shape alone (11 or 9 digits) says nothing.
+#   * `fallback` — offered as a choice ("What kind of number is this?") when
+#     nothing structured matched and the number did not claim an EU country
+#     prefix. A domestic tax number such as an Austrian Steuernummer lands
+#     here, which is right: it has no format we could check.
+direct_entry:
+  always: [uid_ch, vat]
+  by_country:
+    AU: [abn]
+    US: [ein]
+  fallback: [tax_number, company_register, other]
+  # Whose worked example is the field's placeholder, outside the EU (inside
+  # it the placeholder is vat.py's per-country example). A kind with no
+  # `example_valid` gives no placeholder rather than an invented one.
+  example_kind_by_country:
+    CH: uid_ch
+    AU: abn
+    US: ein

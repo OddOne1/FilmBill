@@ -56,6 +56,8 @@ from ..schemas.party import (
     PartyPage,
     PartyResponse,
     PartyTaxPreviewRequest,
+    TaxIdDetectRequest,
+    TaxIdDetectResponse,
     PartyVatCheckResponse,
     PartyWrite,
     ResolvedFieldResponse,
@@ -253,6 +255,7 @@ def _party_response(
         buyer_type=inputs["buyer_type"],
         buyer_type_reason=inputs["buyer_type_reason"],
         name_not_split=party_service.name_not_split(party),
+        tax_id_example=_tax_id_example(resolved),
         needs_attention_reasons=_attention_reasons(db, party),
         addresses=[
             PartyAddressResponse.model_validate(row)
@@ -280,6 +283,12 @@ def _party_response(
         ],
         duplicates=[DuplicateWarning(**entry) for entry in (duplicates or [])],
     )
+
+
+def _tax_id_example(resolved) -> Optional[str]:
+    from ..billing.parties.tax_ids import example_for
+
+    return example_for(resolved.tax_country.value)
 
 
 def _attention_reasons(db: Session, party: Party) -> list[str]:
@@ -1108,6 +1117,38 @@ def list_tax_ids(
         PartyTaxId.created_at,
     ).all()
     return [_tax_id_response(db, row) for row in rows]
+
+
+@router.post(
+    "/parties/{party_id}/tax-ids/detect",
+    response_model=TaxIdDetectResponse,
+)
+def detect_tax_id_kind(
+    party_id: uuid.UUID,
+    body: TaxIdDetectRequest,
+    db: Session = Depends(get_db),
+    membership: Membership = Depends(require("parties.edit")),
+):
+    """Which kind a typed number is, from the country for tax and its format.
+
+    Writes nothing: the Tax tab asks this first, then adds the identifier
+    through `POST /parties/{id}/tax-ids` and runs its first check exactly as
+    the "Add another identifier" flow does. Gated on `parties.edit` because
+    only somebody who may add a number has a reason to ask.
+    """
+    from ..billing.parties.tax_ids import detect_kind
+
+    party = _party_or_404(db, membership, party_id)
+    country = body.country or party_service.resolve(db, party).tax_country.value
+    found = detect_kind(body.value, country=country)
+    return TaxIdDetectResponse(
+        kind=found.kind,
+        candidates=list(found.candidates),
+        value=found.normalised.value if found.normalised else None,
+        country=found.normalised.country if found.normalised else country,
+        verifiable=bool(found.normalised and found.normalised.verifiable),
+        message=found.message,
+    )
 
 
 @router.post(

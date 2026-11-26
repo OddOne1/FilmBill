@@ -3694,6 +3694,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/parties/{party_id}/tax-ids/detect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Detect Tax Id Kind
+         * @description Which kind a typed number is, from the country for tax and its format.
+         *
+         *     Writes nothing: the Tax tab asks this first, then adds the identifier
+         *     through `POST /parties/{id}/tax-ids` and runs its first check exactly as
+         *     the "Add another identifier" flow does. Gated on `parties.edit` because
+         *     only somebody who may add a number has a reason to ask.
+         */
+        post: operations["detect_tax_id_kind_parties__party_id__tax_ids_detect_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/parties/{party_id}/tax-ids/{tax_id_id}": {
         parameters: {
             query?: never;
@@ -9423,6 +9448,8 @@ export interface components {
             tags: string[];
             /** Tax Country */
             tax_country?: string | null;
+            /** Tax Id Example */
+            tax_id_example?: string | null;
             /**
              * Tax Ids
              * @default []
@@ -10739,6 +10766,48 @@ export interface components {
             max_check_age_days?: number | null;
             /** Recheck Interval Days */
             recheck_interval_days?: number | null;
+        };
+        /**
+         * TaxIdDetectRequest
+         * @description P1b-4 part 3: "which kind of number is this?" for the Tax tab's field.
+         *
+         *     `country` is the country for tax the form currently shows, so a number
+         *     typed in the same save as a changed country is read against the new one;
+         *     without it the contact's resolved country for tax is used.
+         */
+        TaxIdDetectRequest: {
+            /** Country */
+            country?: string | null;
+            /** Value */
+            value: string;
+        };
+        /**
+         * TaxIdDetectResponse
+         * @description One of three answers — see `billing.parties.tax_ids.KindDetection`.
+         *
+         *     `kind` set: store it as that kind. `kind` null with `candidates`: ask
+         *     which. `kind` null, no candidates, `message`: it cannot be a number of
+         *     any kind; save nothing. Nothing is written by asking.
+         */
+        TaxIdDetectResponse: {
+            /**
+             * Candidates
+             * @default []
+             */
+            candidates: ("vat" | "uid_ch" | "abn" | "ein" | "tax_number" | "company_register" | "other")[];
+            /** Country */
+            country?: string | null;
+            /** Kind */
+            kind?: ("vat" | "uid_ch" | "abn" | "ein" | "tax_number" | "company_register" | "other") | null;
+            /** Message */
+            message?: string | null;
+            /** Value */
+            value?: string | null;
+            /**
+             * Verifiable
+             * @default false
+             */
+            verifiable: boolean;
         };
         /**
          * TaxNoTaxCaseCreate
@@ -17459,6 +17528,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PartyTaxIdResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    detect_tax_id_kind_parties__party_id__tax_ids_detect_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                party_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaxIdDetectRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxIdDetectResponse"];
                 };
             };
             /** @description Validation Error */

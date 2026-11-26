@@ -280,6 +280,10 @@ class PartyResponse(BaseModel):
     #: were split, or imported from a single `name` column. Listed under
     #: Needs attention until somebody enters the parts.
     name_not_split: bool = False
+    #: P1b-4 part 3. A placeholder for the Tax tab's "VAT / tax ID" field,
+    #: following the contact's country for tax and taken from examples the
+    #: tax-ID data already has. Null when none is known.
+    tax_id_example: Optional[str] = None
     #: Why this party is in the Needs attention view, as stable codes the
     #: screen turns into sentences: `name_not_split`, `tax_id_changed`.
     needs_attention_reasons: list[str] = []
@@ -588,3 +592,39 @@ class TaxIdCheckPolicyUpdate(BaseModel):
     initial_check_offsets: Optional[list[int]] = None
     recheck_interval_days: Optional[int] = None
     max_check_age_days: Optional[int] = None
+
+
+class TaxIdDetectRequest(BaseModel):
+    """P1b-4 part 3: "which kind of number is this?" for the Tax tab's field.
+
+    `country` is the country for tax the form currently shows, so a number
+    typed in the same save as a changed country is read against the new one;
+    without it the contact's resolved country for tax is used.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    value: str = Field(min_length=1, max_length=80)
+    country: Optional[str] = Field(default=None, min_length=2, max_length=2)
+
+    @field_validator("country")
+    @classmethod
+    def _country(cls, value: Optional[str]) -> Optional[str]:
+        return normalise_country(value)
+
+
+class TaxIdDetectResponse(BaseModel):
+    """One of three answers — see `billing.parties.tax_ids.KindDetection`.
+
+    `kind` set: store it as that kind. `kind` null with `candidates`: ask
+    which. `kind` null, no candidates, `message`: it cannot be a number of
+    any kind; save nothing. Nothing is written by asking.
+    """
+
+    kind: Optional[TaxIdKind] = None
+    candidates: list[TaxIdKind] = []
+    #: The number as it would be stored, when `kind` is set.
+    value: Optional[str] = None
+    country: Optional[str] = None
+    verifiable: bool = False
+    message: Optional[str] = None

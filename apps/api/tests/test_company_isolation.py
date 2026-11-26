@@ -244,6 +244,9 @@ CASES: dict[str, object] = {
     "POST /parties/{party_id}/tax-ids": {
         "body": {"kind": "vat", "value": "ATU16360407"}
     },
+    # P1b-4 part 3. Writes nothing, but it reads the party's country for
+    # tax — another company's — so it is a 404 like the rest.
+    "POST /parties/{party_id}/tax-ids/detect": {"body": {"value": "ATU16360407"}},
     "PATCH /parties/{party_id}/tax-ids/{tax_id_id}": {
         "body": {"notes": "theirs"}
     },
