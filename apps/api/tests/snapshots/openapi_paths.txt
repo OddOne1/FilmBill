@@ -36,6 +36,9 @@ GET /company/tax/codes
 GET /company/tax/id-check-policy
 GET /company/tax/no-tax-categories
 GET /company/tax/rules
+GET /crew
+GET /crew/export.csv
+GET /crew/roles
 GET /email-settings
 GET /events/me
 GET /files/object/{path}
@@ -165,6 +168,9 @@ POST /company/tax/country-change/preview
 POST /company/tax/no-tax-cases
 POST /company/tax/propose
 POST /company/tax/rates
+POST /crew
+POST /crew/import
+POST /crew/import/preview
 POST /email-settings/test
 POST /me/notifications/read-all
 POST /me/notifications/{notification_id}/read

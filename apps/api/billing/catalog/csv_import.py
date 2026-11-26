@@ -275,7 +275,7 @@ def _decode(payload: bytes | str) -> str:
     )
 
 
-def _normalise_header(name: str) -> str:
+def _normalise_header(name: str, aliases: Optional[Mapping[str, str]] = None) -> str:
     """`" Bill Rate Day "` → `bill_rate_day`.
 
     Spaces, case and hyphens are forgiven because a header row is typed by
@@ -287,7 +287,7 @@ def _normalise_header(name: str) -> str:
     cleaned = cleaned.replace("-", "_").replace(" ", "_")
     while "__" in cleaned:
         cleaned = cleaned.replace("__", "_")
-    return _HEADER_ALIASES.get(cleaned, cleaned)
+    return (_HEADER_ALIASES if aliases is None else aliases).get(cleaned, cleaned)
 
 
 #: German (and a few obvious English) spellings for the same columns.
@@ -334,12 +334,22 @@ def detect_delimiter(text: str) -> str:
         return best if counts[best] else ";"
 
 
-def read_rows(payload: bytes | str) -> tuple[list[dict[str, str]], tuple[str, ...], str]:
+def read_rows(
+    payload: bytes | str,
+    *,
+    columns: Sequence[str] = COLUMNS,
+    required: Sequence[str] = REQUIRED_COLUMNS,
+    aliases: Optional[Mapping[str, str]] = None,
+) -> tuple[list[dict[str, str]], tuple[str, ...], str]:
     """`(rows, ignored columns, delimiter)`. Raises `ImportFormatError`.
 
     Each row is a dict keyed by normalised column name, with the file's line
     number under `_line`. Blank lines are dropped — a spreadsheet export ends
     with one and it is not a row anybody wrote.
+
+    `columns`, `required` and `aliases` default to the catalog's. B2b's crew
+    and gear imports pass their own, so every import in the system reads a
+    BOM, a Windows encoding and a `;`/`,` separator the same way.
     """
     text = _decode(payload)
     if not text.strip():
@@ -353,19 +363,19 @@ def read_rows(payload: bytes | str) -> tuple[list[dict[str, str]], tuple[str, ..
     except StopIteration:  # pragma: no cover - guarded by the blank check
         raise ImportFormatError("the file has no header row.") from None
 
-    header = [_normalise_header(name) for name in raw_header]
-    missing = [name for name in REQUIRED_COLUMNS if name not in header]
+    header = [_normalise_header(name, aliases) for name in raw_header]
+    missing = [name for name in required if name not in header]
     if missing:
         raise ImportFormatError(
             f"the header row is missing the column(s) "
             f"{', '.join(missing)}. The columns this import reads are "
-            f"{', '.join(COLUMNS)} — the first line of the file has to name "
+            f"{', '.join(columns)} — the first line of the file has to name "
             f"them, and it was read as {', '.join(name for name in header if name)} "
             f"with {delimiter!r} as the separator."
         )
 
     ignored = tuple(
-        sorted({name for name in header if name and name not in COLUMNS})
+        sorted({name for name in header if name and name not in columns})
     )
 
     rows: list[dict[str, str]] = []

@@ -232,6 +232,16 @@ class Party(CompanyScoped, Base):
     is_partner: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="false"
     )
+    #: B2b. Crew: somebody who can be booked on a production — a DoP, a
+    #: gaffer, a sound recordist. A third hat beside the two above, never a
+    #: type: a freelancer who is crew and also invoices as a supplier stays
+    #: ONE record. The flag allocates no number (only `is_customer` and
+    #: `is_supplier` do, in `party_service.allocate_party_number`), and it
+    #: never puts a party into a customer or supplier picker. Their roles
+    #: and skills are the party's `tags`.
+    is_crew: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
     #: A Postgres array, so Part 3's tag filter can use `&&` and `@>` rather
     #: than a LIKE over a joined string.
     #:
@@ -342,6 +352,11 @@ class Party(CompanyScoped, Base):
         ),
         Index("ix_parties_company_parent", "company_id", "parent_id"),
         Index("ix_parties_company_name", "company_id", "name"),
+        Index(
+            "ix_parties_company_crew",
+            "company_id",
+            postgresql_where=text("is_crew"),
+        ),
     )
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid

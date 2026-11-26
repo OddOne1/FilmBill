@@ -12,6 +12,7 @@ from .routers import (
     calc,
     catalog,
     companies,
+    crew,
     email_settings,
     events,
     files,
@@ -92,6 +93,7 @@ app.include_router(setup.router)
 app.include_router(companies.router)
 app.include_router(number_series.router)
 app.include_router(parties.router)
+app.include_router(crew.router)
 app.include_router(projects.router)
 app.include_router(project_calendar.router)
 app.include_router(budgets.router)

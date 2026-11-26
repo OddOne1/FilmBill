@@ -62,6 +62,7 @@ function makeParty(overrides: Partial<Party> = {}): Party {
     is_customer: false,
     is_supplier: false,
     is_partner: false,
+    is_crew: false,
     tags: [],
     party_number: null,
     language: null,
@@ -538,5 +539,25 @@ describe('the tax tab names whose country is missing (B1.2)', () => {
     const warning = await screen.findByTestId('party-tax-warning-buyer_country_missing')
     expect(warning).toHaveTextContent('The customer has no country. Set it on the customer.')
     expect(screen.queryByTestId('company-country-link')).toBeNull()
+  })
+})
+
+describe('the crew flag (B2b)', () => {
+  it('makes a party crew and saves its roles as tags in the same PATCH', async () => {
+    mockApi()
+    render(<PartyDetailPage />)
+    await ready()
+    expect(screen.queryByLabelText('Crew roles')).toBeNull()
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Crew' }))
+    const roles = screen.getByLabelText('Crew roles')
+    fireEvent.change(roles, { target: { value: 'Gaffer' } })
+    fireEvent.keyDown(roles, { key: 'Enter' })
+    fireEvent.click(screen.getAllByRole('button', { name: 'Save' })[0])
+    await waitFor(() =>
+      expect(vi.mocked(api.patch)).toHaveBeenCalledWith(
+        '/parties/p-person',
+        expect.objectContaining({ is_crew: true, tags: ['Gaffer'] }),
+      ),
+    )
   })
 })

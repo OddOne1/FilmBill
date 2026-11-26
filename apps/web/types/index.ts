@@ -255,6 +255,20 @@ export const VAT_NOT_CHECKABLE = 'not_checkable'
  *  be missed here. */
 export type TaxIdKind = PartyTaxIdCreate['kind']
 
+// ─── Crew (B2b) ─────────────────────────────────────────────────────────────
+//
+// A crew member is a party with `is_crew` — these are the crew list's narrow
+// view of one. The full record is the party's own page.
+
+export type CrewMember = Schemas['CrewMemberResponse']
+export type CrewPage = Schemas['CrewPage']
+export type CrewCreate = Schemas['CrewCreate']
+export type CrewCreateResult = Schemas['CrewCreateResponse']
+export type CrewRoleSuggestions = Schemas['CrewRoleSuggestions']
+export type CrewImportRow = Schemas['CrewImportRowResponse']
+export type CrewImportPreview = Schemas['CrewImportPreviewResponse']
+export type CrewImportResult = Schemas['CrewImportApplyResponse']
+
 // ─── Catalog (A1) ───────────────────────────────────────────────────────────
 
 export type Item = Schemas['ItemResponse']

@@ -98,8 +98,12 @@ _SCOPED_PREFIXES = (
     "/calc",
     "/projects",
     "/budgets",
+    # B2b. The crew list and the gear list — top-level paths a fifth and
+    # sixth time, named here for the same reason as the four above.
+    "/crew",
+    "/devices",
 )
-_SCOPED_EXACT = ("/companies", "/company", "/parties", "/projects")
+_SCOPED_EXACT = ("/companies", "/company", "/parties", "/projects", "/crew", "/devices")
 
 
 def _is_company_scoped(path: str) -> bool:
@@ -510,6 +514,20 @@ CASES: dict[str, object] = {
                 "text/csv",
             )
         },
+    },
+    # B2b part 1. The crew list has no id in any path — a crew member is a
+    # party, and `/parties/{party_id}` is where one is read by id — so the
+    # header is the whole boundary here, which is what the first test walks.
+    # The second sends each as a legitimate request and expects success.
+    "GET /crew": {"body": None},
+    "GET /crew/roles": {"body": None},
+    "GET /crew/export.csv": {"body": None},
+    "POST /crew": {"body": {"name": "Stolen", "roles": ["DoP"]}},
+    "POST /crew/import/preview": {
+        "files": {"file": ("crew.csv", b"name;roles\nStolen Person;Gaffer\n", "text/csv")}
+    },
+    "POST /crew/import": {
+        "files": {"file": ("crew.csv", b"name;roles\nStolen Person;Gaffer\n", "text/csv")}
     },
     # Pure arithmetic, no stored row — and still a company endpoint.
     "POST /calc/preview": {

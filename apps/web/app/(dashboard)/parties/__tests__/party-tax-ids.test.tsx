@@ -116,6 +116,7 @@ function makeParty(overrides: Partial<Party> = {}): Party {
     is_customer: true,
     is_supplier: false,
     is_partner: false,
+    is_crew: false,
     tags: [],
     party_number: 'K-0002',
     language: null,

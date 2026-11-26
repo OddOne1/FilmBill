@@ -87,6 +87,11 @@ PARTY_AUDITED = (
     "is_customer",
     "is_supplier",
     "is_partner",
+    # B2b. On a create it is part of the snapshot; on an update a change to
+    # it is its own event, `party.crew_flag_set`, so "who made this person
+    # crew" is one filter on the audit log rather than a search inside every
+    # `party.updated` row.
+    "is_crew",
     "party_number",
     "parent_id",
     "language",
@@ -109,6 +114,10 @@ PARTY_AUDITED = (
 #: `services/audit.redact` — the same treatment the company's own gets, for
 #: the same reason (D43): an audit log must not become a way round the gate
 #: on the thing it describes.
+#: What `party.updated` records. Everything above except the crew flag,
+#: which gets its own event (see `PARTY_AUDITED`).
+PARTY_UPDATE_AUDITED = tuple(name for name in PARTY_AUDITED if name != "is_crew")
+
 BANK_ACCOUNT_AUDITED = ("label", "iban", "bic", "bank_name", "is_default")
 
 
@@ -205,8 +214,8 @@ def _party_response(
             for name in (
                 "id", "type", "parent_id", "name", "trading_name", "legal_form",
                 "register_number", "register_court", "title", "position",
-                "is_customer", "is_supplier", "is_partner", "party_number",
-                "language", "default_currency", "payment_terms_days",
+                "is_customer", "is_supplier", "is_partner", "is_crew",
+                "party_number", "language", "default_currency", "payment_terms_days",
                 "payment_terms_text", "po_reference", "notes",
                 "business_status", "tax_country", "tax_override",
                 "tax_status_note", "recheck_interval_days",
@@ -294,7 +303,7 @@ def list_parties(
     search: Optional[str] = Query(default=None, max_length=255),
     role: Optional[str] = Query(
         default=None,
-        description="customer | supplier | partner | person",
+        description="customer | supplier | partner | crew | person",
     ),
     type: Optional[str] = Query(default=None),
     include_inactive: bool = False,
@@ -342,6 +351,8 @@ def list_parties(
         query = query.filter(Party.is_supplier.is_(True))
     elif role == "partner":
         query = query.filter(Party.is_partner.is_(True))
+    elif role == "crew":
+        query = query.filter(Party.is_crew.is_(True))
     elif role == "person":
         query = query.filter(Party.type == "person")
 
@@ -503,15 +514,26 @@ def update_party(
     party_service.allocate_party_number(db, party=party)
 
     after = audit.snapshot(party, PARTY_AUDITED)
-    if audit.diff(before, after, fields=PARTY_AUDITED):
+    actor = audit.actor_from(request, membership=membership)
+    if audit.diff(before, after, fields=PARTY_UPDATE_AUDITED):
         audit.record(
             db,
-            audit.actor_from(request, membership=membership),
+            actor,
             party,
             "party.updated",
             before,
             after,
-            fields=PARTY_AUDITED,
+            fields=PARTY_UPDATE_AUDITED,
+        )
+    if before["is_crew"] != after["is_crew"]:
+        audit.record(
+            db,
+            actor,
+            party,
+            "party.crew_flag_set",
+            {"is_crew": before["is_crew"]},
+            {"is_crew": after["is_crew"]},
+            fields=("is_crew",),
         )
 
     duplicates = party_service.find_duplicates(

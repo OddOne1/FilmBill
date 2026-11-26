@@ -8,6 +8,7 @@ import {
   Bell,
   ChevronsLeft,
   Clapperboard,
+  Contact,
   LayoutDashboard,
   Tags,
   Users,
@@ -48,6 +49,9 @@ const navItems: NavItem[] = [
   // entry rather than a company setting, because a customer list is not a
   // setting — it is one of the two things the application is about.
   { href: '/parties', label: 'Parties', icon: Users, permission: 'parties.view' },
+  // B2b. The people who can be booked on a production. They are parties
+  // with the crew flag, so the entry needs what the parties list needs.
+  { href: '/crew', label: 'Crew', icon: Contact, permission: 'parties.view' },
   // A1. The price list, and the calculator that runs on the same engine
   // every quote and invoice will. `catalog.view` is held by everybody except
   // the tax advisor — staff included, because looking up what a truck costs

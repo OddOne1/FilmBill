@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { AlertTriangle, Loader2, ShieldQuestion } from 'lucide-react'
 import { api, ApiError } from '@/lib/api'
+import { RolePicker } from '@/components/shared/role-picker'
 import { Input } from '@/components/ui/input'
 import { CountrySelect } from '@/components/ui/country-select'
 import { countryLabel } from '@/lib/countries'
@@ -280,6 +281,8 @@ function BasicsTab({
     is_customer: party.is_customer,
     is_supplier: party.is_supplier,
     is_partner: party.is_partner,
+    is_crew: party.is_crew ?? false,
+    tags: party.tags ?? [],
     party_number: party.party_number ?? '',
     notes: party.notes ?? '',
   })
@@ -295,6 +298,8 @@ function BasicsTab({
       is_customer: party.is_customer,
       is_supplier: party.is_supplier,
       is_partner: party.is_partner,
+      is_crew: party.is_crew ?? false,
+      tags: party.tags ?? [],
       party_number: party.party_number ?? '',
       notes: party.notes ?? '',
     })
@@ -312,6 +317,8 @@ function BasicsTab({
         is_customer: draft.is_customer,
         is_supplier: draft.is_supplier,
         is_partner: draft.is_partner,
+        is_crew: draft.is_crew,
+        tags: draft.tags,
         party_number: draft.party_number || null,
         notes: draft.notes || null,
       })
@@ -333,10 +340,14 @@ function BasicsTab({
             party.is_customer && 'customer',
             party.is_supplier && 'supplier',
             party.is_partner && 'partner',
+            party.is_crew && 'crew',
           ]
             .filter(Boolean)
             .join(', ') || '—'}
         </Row>
+        {party.is_crew && (
+          <Row label="Crew roles">{(party.tags ?? []).join(', ') || '—'}</Row>
+        )}
         <Row label="Number">{party.party_number ?? '—'}</Row>
         <Row label="Payment terms">
           <Inherited
@@ -397,7 +408,10 @@ function BasicsTab({
             ['is_customer', 'Customer'],
             ['is_supplier', 'Supplier'],
             ['is_partner', 'Partner'],
-          ] as ['is_customer' | 'is_supplier' | 'is_partner', string][]
+            // B2b. Bookable on a production; listed under Crew. Gives no
+            // number — only customer and supplier do.
+            ['is_crew', 'Crew'],
+          ] as ['is_customer' | 'is_supplier' | 'is_partner' | 'is_crew', string][]
         ).map(([key, label]) => (
           <label key={key} className="flex items-center gap-2 text-sm text-text-secondary">
             <input
@@ -409,6 +423,19 @@ function BasicsTab({
           </label>
         ))}
       </fieldset>
+      {draft.is_crew && (
+        <div className="text-xs font-medium text-text-secondary">
+          <label htmlFor="party-crew-roles">Crew roles</label>
+          <div className="mt-1">
+            <RolePicker
+              id="party-crew-roles"
+              value={draft.tags}
+              onChange={(tags) => setDraft({ ...draft, tags })}
+              suggestions={[]}
+            />
+          </div>
+        </div>
+      )}
       <label className="block text-xs font-medium text-text-secondary">
         Number
         <Input

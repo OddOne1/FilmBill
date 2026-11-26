@@ -324,6 +324,9 @@ def make_party(
     tax_status_note: Optional[str] = None,
     party_number: Optional[str] = None,
     is_active: bool = True,
+    is_crew: bool = False,
+    tags: Optional[list] = None,
+    email: Optional[str] = None,
 ):
     """One party, written directly.
 
@@ -353,11 +356,26 @@ def make_party(
         tax_status_note=tax_status_note,
         party_number=party_number,
         is_active=is_active,
-        tags=[],
+        is_crew=is_crew,
+        tags=list(tags or []),
         einvoice_routing={},
     )
     db.add(row)
     db.flush()
+
+    if email:
+        from apps.api.models.party import PartyContactPoint
+
+        db.add(
+            PartyContactPoint(
+                company_id=company.id,
+                party_id=row.id,
+                kind="email",
+                value=email,
+                purpose="general",
+                is_primary=True,
+            )
+        )
 
     if vat_id:
         db.add(

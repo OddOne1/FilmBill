@@ -232,6 +232,7 @@ class PartyResponse(BaseModel):
     is_customer: bool = False
     is_supplier: bool = False
     is_partner: bool = False
+    is_crew: bool = False
     tags: list[str] = []
     party_number: Optional[str] = None
     language: Optional[str] = None
@@ -327,6 +328,7 @@ class PartyWrite(BaseModel):
     is_customer: Optional[bool] = None
     is_supplier: Optional[bool] = None
     is_partner: Optional[bool] = None
+    is_crew: Optional[bool] = None
     tags: Optional[list[str]] = None
     party_number: Optional[str] = Field(default=None, max_length=32)
     language: Optional[str] = Field(default=None, max_length=5)

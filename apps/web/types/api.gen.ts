@@ -2935,6 +2935,118 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/crew": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Crew
+         * @description Everybody flagged crew. Archived people are hidden unless asked for.
+         */
+        get: operations["list_crew_crew_get"];
+        put?: never;
+        /**
+         * Quick Add
+         * @description A person with a name and, if known, roles, phone, email and notes.
+         *
+         *     No address, no tax data, no number. Somebody who looks like a party
+         *     already on file is created anyway and the answer says who it looked
+         *     like — a warning, never a refusal, like every party create.
+         */
+        post: operations["quick_add_crew_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/crew/export.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Crew
+         * @description The list in the import's own columns: `name;roles;email;phone;notes`.
+         */
+        get: operations["export_crew_crew_export_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/crew/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Apply Crew Import
+         * @description Create the preview's new people, plus the duplicates that were ticked.
+         *
+         *     Never updates, archives or flags an existing party. Error lines are
+         *     listed and skipped; they never stop the rest of the file.
+         */
+        post: operations["apply_crew_import_crew_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/crew/import/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Crew Import
+         * @description What the file would create, which lines look like people already on
+         *     file, and which lines cannot be read. Writes nothing.
+         */
+        post: operations["preview_crew_import_crew_import_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/crew/roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Crew Roles
+         * @description The roles already used, and the catalog's labor items, as suggestions.
+         */
+        get: operations["crew_roles_crew_roles_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/email-settings": {
         parameters: {
             query?: never;
@@ -4736,6 +4848,24 @@ export interface components {
              */
             file: string;
         };
+        /** Body_apply_crew_import_crew_import_post */
+        Body_apply_crew_import_crew_import_post: {
+            /**
+             * Digest
+             * @description The preview's digest. When the file no longer plans the same thing, nothing is written.
+             */
+            digest?: string | null;
+            /**
+             * File
+             * Format: binary
+             */
+            file: string;
+            /**
+             * Include Lines
+             * @description Comma-separated line numbers of the duplicate lines to create anyway.
+             */
+            include_lines?: string | null;
+        };
         /** Body_apply_import_budgets__budget_id__import_post */
         Body_apply_import_budgets__budget_id__import_post: {
             /**
@@ -4759,6 +4889,14 @@ export interface components {
         };
         /** Body_preview_actuals_import_budgets__budget_id__actuals_import_preview_post */
         Body_preview_actuals_import_budgets__budget_id__actuals_import_preview_post: {
+            /**
+             * File
+             * Format: binary
+             */
+            file: string;
+        };
+        /** Body_preview_crew_import_crew_import_preview_post */
+        Body_preview_crew_import_crew_import_preview_post: {
             /**
              * File
              * Format: binary
@@ -7119,6 +7257,179 @@ export interface components {
             password: string;
         };
         /**
+         * CrewCreate
+         * @description Quick add. The name is the only thing required.
+         */
+        CrewCreate: {
+            /** Email */
+            email?: string | null;
+            /** Name */
+            name: string;
+            /** Notes */
+            notes?: string | null;
+            /** Phone */
+            phone?: string | null;
+            /**
+             * Roles
+             * @default []
+             */
+            roles: string[];
+        };
+        /** CrewCreateResponse */
+        CrewCreateResponse: {
+            /**
+             * Duplicates
+             * @default []
+             */
+            duplicates: components["schemas"]["CrewDuplicateWarning"][];
+            member: components["schemas"]["CrewMemberResponse"];
+        };
+        /**
+         * CrewDuplicateWarning
+         * @description "This might be somebody you already have." Never blocking.
+         */
+        CrewDuplicateWarning: {
+            /** Detail */
+            detail: string;
+            /** Name */
+            name: string;
+            /**
+             * Party Id
+             * Format: uuid
+             */
+            party_id: string;
+            /** Reason */
+            reason: string;
+        };
+        /** CrewImportApplyResponse */
+        CrewImportApplyResponse: {
+            /** Created */
+            created: number;
+            /** Digest */
+            digest: string;
+            /** Errors */
+            errors: number;
+            /** Rows */
+            rows: components["schemas"]["CrewImportRowResponse"][];
+            /** Skipped */
+            skipped: number;
+        };
+        /** CrewImportPreviewResponse */
+        CrewImportPreviewResponse: {
+            /** Created */
+            created: number;
+            /** Delimiter */
+            delimiter: string;
+            /** Digest */
+            digest: string;
+            /** Duplicates */
+            duplicates: number;
+            /** Errors */
+            errors: number;
+            /**
+             * Ignored Columns
+             * @default []
+             */
+            ignored_columns: string[];
+            /** Rows */
+            rows: components["schemas"]["CrewImportRowResponse"][];
+        };
+        /** CrewImportRowResponse */
+        CrewImportRowResponse: {
+            /** Action */
+            action: string;
+            /** Duplicate Of Line */
+            duplicate_of_line?: number | null;
+            /** Duplicate Of Name */
+            duplicate_of_name?: string | null;
+            /** Duplicate Of Party Id */
+            duplicate_of_party_id?: string | null;
+            /** Duplicate Reason */
+            duplicate_reason?: string | null;
+            /** Email */
+            email?: string | null;
+            /** Line Number */
+            line_number: number;
+            /** Message */
+            message?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Party Id */
+            party_id?: string | null;
+            /** Phone */
+            phone?: string | null;
+            /**
+             * Roles
+             * @default []
+             */
+            roles: string[];
+        };
+        /** CrewMemberResponse */
+        CrewMemberResponse: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Email */
+            email?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /**
+             * Is Customer
+             * @default false
+             */
+            is_customer: boolean;
+            /**
+             * Is Supplier
+             * @default false
+             */
+            is_supplier: boolean;
+            /** Name */
+            name: string;
+            /** Notes */
+            notes?: string | null;
+            /** Party Number */
+            party_number?: string | null;
+            /** Phone */
+            phone?: string | null;
+            /**
+             * Roles
+             * @default []
+             */
+            roles: string[];
+        };
+        /** CrewPage */
+        CrewPage: {
+            /** Members */
+            members: components["schemas"]["CrewMemberResponse"][];
+            /** Total */
+            total: number;
+        };
+        /** CrewRoleSuggestions */
+        CrewRoleSuggestions: {
+            /**
+             * Catalog
+             * @default []
+             */
+            catalog: string[];
+            /**
+             * Used
+             * @default []
+             */
+            used: string[];
+        };
+        /**
          * DuplicateWarning
          * @description "This might be one you already have." Never blocking.
          */
@@ -8242,6 +8553,8 @@ export interface components {
             einvoice_routing?: {
                 [key: string]: unknown;
             } | null;
+            /** Is Crew */
+            is_crew?: boolean | null;
             /** Is Customer */
             is_customer?: boolean | null;
             /** Is Partner */
@@ -8368,6 +8681,11 @@ export interface components {
              * @default true
              */
             is_active: boolean;
+            /**
+             * Is Crew
+             * @default false
+             */
+            is_crew: boolean;
             /**
              * Is Customer
              * @default false
@@ -8693,6 +9011,8 @@ export interface components {
             einvoice_routing?: {
                 [key: string]: unknown;
             } | null;
+            /** Is Crew */
+            is_crew?: boolean | null;
             /** Is Customer */
             is_customer?: boolean | null;
             /** Is Partner */
@@ -15028,6 +15348,216 @@ export interface operations {
             };
         };
     };
+    list_crew_crew_get: {
+        parameters: {
+            query?: {
+                /** @description Name, role or email. */
+                search?: string | null;
+                /** @description One role, case-insensitive. */
+                role?: string | null;
+                /** @description Archived people too. */
+                include_inactive?: boolean;
+                sort?: "name" | "-name" | "role" | "-role" | "created" | "-created";
+                limit?: number;
+                offset?: number;
+            };
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CrewPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    quick_add_crew_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CrewCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CrewCreateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_crew_crew_export_csv_get: {
+        parameters: {
+            query?: {
+                include_inactive?: boolean;
+            };
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    apply_crew_import_crew_import_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_apply_crew_import_crew_import_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CrewImportApplyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_crew_import_crew_import_preview_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_preview_crew_import_crew_import_preview_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CrewImportPreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    crew_roles_crew_roles_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CrewRoleSuggestions"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_email_settings_email_settings_get: {
         parameters: {
             query?: never;
@@ -15303,7 +15833,7 @@ export interface operations {
         parameters: {
             query?: {
                 search?: string | null;
-                /** @description customer | supplier | partner | person */
+                /** @description customer | supplier | partner | crew | person */
                 role?: string | null;
                 type?: string | null;
                 include_inactive?: boolean;

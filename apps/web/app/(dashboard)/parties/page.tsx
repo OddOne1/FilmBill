@@ -34,6 +34,7 @@ const TABS: {
   { key: 'customers', label: 'Customers', role: 'customer' },
   { key: 'suppliers', label: 'Suppliers', role: 'supplier' },
   { key: 'partners', label: 'Partners', role: 'partner' },
+  { key: 'crew', label: 'Crew', role: 'crew' },
   { key: 'people', label: 'People', type: 'person' },
   // Last, and its own tab rather than a filter inside the others: it is a
   // worklist, not a view of the customer base. Somebody opens it to find
