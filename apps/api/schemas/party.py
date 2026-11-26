@@ -222,7 +222,16 @@ class PartyResponse(BaseModel):
     id: uuid.UUID
     type: str
     parent_id: Optional[uuid.UUID] = None
+    #: The display name. For a person with name parts it is "First Middle
+    #: Last", derived on write; otherwise what somebody typed.
     name: str
+    #: P1b-4. A person's name in parts, null for an organisation or
+    #: department and for a person whose name has not been split yet.
+    first_name: Optional[str] = None
+    middle_name: Optional[str] = None
+    last_name: Optional[str] = None
+    #: P1b-4. An organisation's or department's second line.
+    name_addition: Optional[str] = None
     trading_name: Optional[str] = None
     legal_form: Optional[str] = None
     register_number: Optional[str] = None
@@ -263,6 +272,13 @@ class PartyResponse(BaseModel):
     #: screen can show the reason rather than re-deriving it.
     buyer_type: Optional[str] = None
     buyer_type_reason: Optional[str] = None
+    #: P1b-4. A person with no first and no last name: created before names
+    #: were split, or imported from a single `name` column. Listed under
+    #: Needs attention until somebody enters the parts.
+    name_not_split: bool = False
+    #: Why this party is in the Needs attention view, as stable codes the
+    #: screen turns into sentences: `name_not_split`, `tax_id_changed`.
+    needs_attention_reasons: list[str] = []
     #: Sub-resources, served with the party because every screen that shows
     #: one shows all of them.
     #:
@@ -287,6 +303,7 @@ class PartyChild(BaseModel):
     id: uuid.UUID
     type: str
     name: str
+    name_addition: Optional[str] = None
     position: Optional[str] = None
     party_number: Optional[str] = None
     is_active: bool = True
@@ -318,6 +335,14 @@ class PartyWrite(BaseModel):
     #: and a form that re-sends a field it did not touch is a form that
     #: eventually overwrites somebody else's change to it.
     name: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    #: P1b-4. A person's name in parts. When a first or last name is set,
+    #: `name` is derived from them and a different `name` sent alongside is
+    #: refused — the parts are the record, the name is how it reads.
+    first_name: Optional[str] = Field(default=None, max_length=255)
+    middle_name: Optional[str] = Field(default=None, max_length=255)
+    last_name: Optional[str] = Field(default=None, max_length=255)
+    #: P1b-4. An organisation's or department's second line.
+    name_addition: Optional[str] = Field(default=None, max_length=255)
     parent_id: Optional[uuid.UUID] = None
     trading_name: Optional[str] = Field(default=None, max_length=255)
     legal_form: Optional[str] = Field(default=None, max_length=64)
@@ -365,8 +390,11 @@ class PartyWrite(BaseModel):
 
 
 class PartyCreate(PartyWrite):
+    """`name` is required unless this is a person with a first or last name,
+    in which case it is derived from them (P1b-4). The router says which."""
+
     type: PartyType
-    name: str = Field(min_length=1, max_length=255)
+    name: Optional[str] = Field(default=None, min_length=1, max_length=255)
 
 
 class PartyPage(BaseModel):

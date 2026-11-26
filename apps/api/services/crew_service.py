@@ -17,6 +17,7 @@ from ..billing.resources.crew_csv import (
     CrewImportContext,
     CrewImportPlan,
     CrewValues,
+    display_name,
     looks_like_email,
     normalise_name,
     normalise_roles,
@@ -34,6 +35,9 @@ SOURCE_IMPORT = "crew_import"
 CREW_CREATED_FIELDS = (
     "type",
     "name",
+    "first_name",
+    "middle_name",
+    "last_name",
     "is_crew",
     "is_customer",
     "is_supplier",
@@ -149,16 +153,32 @@ def import_context(db: Session, company_id: uuid.UUID) -> CrewImportContext:
 
 def clean_values(
     *,
-    name: str,
+    name: Optional[str] = None,
     roles: Iterable[Optional[str]] = (),
     email: Optional[str] = None,
     phone: Optional[str] = None,
     notes: Optional[str] = None,
+    first_name: Optional[str] = None,
+    middle_name: Optional[str] = None,
+    last_name: Optional[str] = None,
 ) -> CrewValues:
-    """The quick-add form's values, held to the import's rules."""
-    clean_name = " ".join((name or "").split())
+    """The quick-add form's values, held to the import's rules.
+
+    P1b-4: the parts win when there are any, and `name` is derived from
+    them; a bare `name` is still accepted (older callers) and stored with
+    no parts, exactly like an import line from the old single column.
+    """
+    first = " ".join((first_name or "").split()) or None
+    middle = " ".join((middle_name or "").split()) or None
+    last = " ".join((last_name or "").split()) or None
+    if middle and not first and not last:
+        raise CrewError(
+            "This person has a middle name but no first or last name. Enter "
+            "at least one of them."
+        )
+    clean_name = display_name(first, middle, last) or " ".join((name or "").split())
     if not clean_name:
-        raise CrewError("This person has no name. Type one in.")
+        raise CrewError("This person has no name. Enter a first or last name.")
     try:
         clean_roles = normalise_roles(roles)
     except ValueError as error:
@@ -175,6 +195,9 @@ def clean_values(
         email=clean_email,
         phone=(phone or "").strip() or None,
         notes=(notes or "").strip() or None,
+        first_name=first,
+        middle_name=middle,
+        last_name=last,
     )
 
 
@@ -197,6 +220,9 @@ def create_member(
         type="person",
         parent_id=None,
         name=values.name,
+        first_name=values.first_name,
+        middle_name=values.middle_name,
+        last_name=values.last_name,
         is_crew=True,
         is_customer=False,
         is_supplier=False,
@@ -226,6 +252,9 @@ def create_member(
     after = {
         "type": party.type,
         "name": party.name,
+        "first_name": party.first_name,
+        "middle_name": party.middle_name,
+        "last_name": party.last_name,
         "is_crew": True,
         "is_customer": False,
         "is_supplier": False,

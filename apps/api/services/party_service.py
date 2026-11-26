@@ -170,6 +170,100 @@ def _depth_of(db: Session, company_id: uuid.UUID, party: Party) -> int:
     return depth
 
 
+# ─── Names (P1b-4) ──────────────────────────────────────────────────────────
+
+NAME_PART_FIELDS = ("first_name", "middle_name", "last_name")
+NAME_FIELDS = NAME_PART_FIELDS + ("name_addition",)
+
+
+def clean_name_changes(changes: dict) -> dict:
+    """Blank name parts and second lines become None, inner spaces collapse.
+
+    A form posts `""` for an untouched box; stored as `""` it would trip the
+    CHECK that keeps parts on people, and read as "has a first name".
+    """
+    for field in NAME_FIELDS:
+        if field in changes:
+            value = changes[field]
+            changes[field] = " ".join(str(value).split()) or None if value else None
+    return changes
+
+
+def validate_names(party_type: str, current: Optional[Party], changes: dict) -> None:
+    """Refuse name combinations that cannot be stored, with a sentence each.
+
+    `current` is the party being edited, or None on create. `changes` has
+    been through `clean_name_changes`.
+    """
+    from ..models.party import person_display_name
+
+    def after(field: str):
+        if field in changes:
+            return changes[field]
+        return getattr(current, field, None) if current is not None else None
+
+    if party_type != PARTY_PERSON:
+        if any(after(field) for field in NAME_PART_FIELDS):
+            raise PartyError(
+                "First, middle and last name are for people. An organisation "
+                "or department has one name and an optional additional line."
+            )
+    elif after("name_addition"):
+        raise PartyError(
+            "The additional line is for organisations and departments. For a "
+            "person, put it in the position instead."
+        )
+
+    if party_type == PARTY_PERSON:
+        first, middle, last = (after(field) for field in NAME_PART_FIELDS)
+        if middle and not first and not last:
+            raise PartyError(
+                "This person has a middle name but no first or last name. "
+                "Enter at least one of them."
+            )
+        derived = person_display_name(first, middle, last)
+        sent = changes.get("name")
+        if derived is not None and sent is not None and " ".join(sent.split()) != derived:
+            raise PartyError(
+                "This person's name is made from the first, middle and last "
+                "name. Change those fields instead of the name."
+            )
+        if current is None and derived is None and not (sent or "").strip():
+            raise PartyError(
+                "This person has no name. Enter a first or last name."
+            )
+    elif current is None and not (changes.get("name") or "").strip():
+        raise PartyError(f"This {party_type} has no name. Enter one.")
+
+
+def name_not_split(party: Party) -> bool:
+    """A person with neither a first nor a last name on file."""
+    return party.type == PARTY_PERSON and not party.first_name and not party.last_name
+
+
+def name_not_split_clause():
+    """The same condition as a SQL expression, for the list's filter."""
+    from sqlalchemy import and_
+
+    return and_(
+        Party.type == PARTY_PERSON,
+        Party.first_name.is_(None),
+        Party.last_name.is_(None),
+    )
+
+
+def sort_key_columns():
+    """How every party list sorts: people by last name, everybody else (and
+    people with no last name) by `name`, case-insensitively, then by first
+    name and id so the order is total."""
+    return (
+        func.lower(func.coalesce(Party.last_name, Party.name)),
+        func.lower(func.coalesce(Party.first_name, "")),
+        func.lower(Party.name),
+        Party.id,
+    )
+
+
 # ─── Building the chain the resolver takes ──────────────────────────────────
 
 

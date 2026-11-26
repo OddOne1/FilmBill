@@ -1,6 +1,10 @@
 """The crew list as a CSV file: reading it, planning the import, writing it.
 
-Columns `name;roles;email;phone;notes`, roles separated by `|`. UTF-8 with or
+Columns `first_name;middle_name;last_name;roles;email;phone;notes`, roles
+separated by `|` (P1b-4). The older single `name` column is still read: such
+a person is stored with that `name` and NO name parts — the order of names
+varies and a split would be a guess — and shows under Needs attention as
+"name not split". When a line has both, the parts win and `name` is derived. UTF-8 with or
 without a BOM, `;` or `,` — the reader is the catalog's (`read_rows`), so a
 file Excel wrote in Vienna is read the way every other import here reads it.
 
@@ -40,6 +44,7 @@ __all__ = [
     "CrewRow",
     "CrewValues",
     "ImportFormatError",
+    "display_name",
     "export_crew_csv",
     "normalise_name",
     "normalise_roles",
@@ -48,11 +53,41 @@ __all__ = [
     "split_roles",
 ]
 
-CREW_COLUMNS: tuple[str, ...] = ("name", "roles", "email", "phone", "notes")
-CREW_REQUIRED: tuple[str, ...] = ("name",)
+CREW_COLUMNS: tuple[str, ...] = (
+    "first_name",
+    "middle_name",
+    "last_name",
+    "name",
+    "roles",
+    "email",
+    "phone",
+    "notes",
+)
+#: What the export writes. `name` is last of the name columns and always
+#: filled with the display name, so a person whose name was never split
+#: survives an export and re-import with nothing lost.
+EXPORT_COLUMNS: tuple[str, ...] = CREW_COLUMNS
+#: The header must name at least one of these. Checked by
+#: `plan_crew_file`, because `read_rows` only knows "all of these".
+CREW_NAME_COLUMNS: tuple[str, ...] = ("first_name", "last_name", "name")
 
 #: German and obvious English spellings of the same five columns.
 CREW_ALIASES: Mapping[str, str] = {
+    "first": "first_name",
+    "firstname": "first_name",
+    "given_name": "first_name",
+    "vorname": "first_name",
+    "middle": "middle_name",
+    "middlename": "middle_name",
+    "mittelname": "middle_name",
+    "zweiter_vorname": "middle_name",
+    "last": "last_name",
+    "lastname": "last_name",
+    "surname": "last_name",
+    "family_name": "last_name",
+    "nachname": "last_name",
+    "familienname": "last_name",
+    "zuname": "last_name",
     "role": "roles",
     "rollen": "roles",
     "rolle": "roles",
@@ -127,11 +162,37 @@ def looks_like_email(value: str) -> bool:
 
 @dataclass(frozen=True)
 class CrewValues:
+    #: The display name: "First Middle Last" when there are parts, otherwise
+    #: the single name the line gave.
     name: str
     roles: tuple[str, ...] = ()
     email: Optional[str] = None
     phone: Optional[str] = None
     notes: Optional[str] = None
+    #: P1b-4. All None for a line that gave only the old `name` column.
+    first_name: Optional[str] = None
+    middle_name: Optional[str] = None
+    last_name: Optional[str] = None
+
+    @property
+    def name_not_split(self) -> bool:
+        return self.first_name is None and self.last_name is None
+
+
+def _part(value: Optional[str]) -> Optional[str]:
+    return " ".join((value or "").split()) or None
+
+
+def display_name(
+    first_name: Optional[str], middle_name: Optional[str], last_name: Optional[str]
+) -> Optional[str]:
+    """The same rule as `models.party.person_display_name`, kept here
+    because `billing/` imports no models. `test_crew_api` asserts the two
+    agree on the cases that matter."""
+    first, middle, last = _part(first_name), _part(middle_name), _part(last_name)
+    if first is None and last is None:
+        return None
+    return " ".join(part for part in (first, middle, last) if part)
 
 
 @dataclass(frozen=True)
@@ -221,13 +282,28 @@ class CrewImportPlan:
 
 
 def _values(row: Mapping[str, str]) -> CrewValues:
-    name = " ".join((row.get("name") or "").split())
-    if not name:
-        raise ValueError("This line has no name. Every person needs one.")
-    if len(name) > 255:
+    first = _part(row.get("first_name"))
+    middle = _part(row.get("middle_name"))
+    last = _part(row.get("last_name"))
+    if middle and not first and not last:
         raise ValueError(
-            f"The name is {len(name)} characters long; it can be at most 255."
+            "This line has a middle name but no first or last name. Add one "
+            "of them."
         )
+    derived = display_name(first, middle, last)
+    # The parts win when there are any; otherwise the old single column,
+    # stored as it is and with no parts (never split by guessing).
+    name = derived or " ".join((row.get("name") or "").split())
+    if not name:
+        raise ValueError(
+            "This line has no name. Fill in the first or last name."
+        )
+    for label, value in (("name", name), ("first name", first), ("middle name", middle), ("last name", last)):
+        if value and len(value) > 255:
+            raise ValueError(
+                f"The {label} is {len(value)} characters long; it can be at "
+                "most 255."
+            )
     roles = split_roles(row.get("roles"))
     email = (row.get("email") or "").strip() or None
     if email is not None and not looks_like_email(email):
@@ -241,7 +317,16 @@ def _values(row: Mapping[str, str]) -> CrewValues:
     if phone is not None and len(phone) > 255:
         raise ValueError("The phone number is longer than 255 characters.")
     notes = (row.get("notes") or "").strip() or None
-    return CrewValues(name=name, roles=roles, email=email, phone=phone, notes=notes)
+    return CrewValues(
+        name=name,
+        roles=roles,
+        email=email,
+        phone=phone,
+        notes=notes,
+        first_name=first,
+        middle_name=middle,
+        last_name=last,
+    )
 
 
 def plan_crew_import(
@@ -264,7 +349,11 @@ def plan_crew_import(
 
     for raw in rows:
         line = int(raw.get("_line") or 0)
-        shown = (raw.get("name") or "").strip() or None
+        shown = (
+            display_name(raw.get("first_name"), raw.get("middle_name"), raw.get("last_name"))
+            or (raw.get("name") or "").strip()
+            or None
+        )
         try:
             values = _values(raw)
         except ValueError as error:
@@ -344,8 +433,15 @@ def plan_crew_file(payload: bytes | str, context: CrewImportContext) -> CrewImpo
     """Read the file and plan it. Raises `ImportFormatError` for a file that
     cannot be read at all; a bad ROW is an error row, never an exception."""
     rows, ignored, delimiter = read_rows(
-        payload, columns=CREW_COLUMNS, required=CREW_REQUIRED, aliases=CREW_ALIASES
+        payload, columns=CREW_COLUMNS, required=(), aliases=CREW_ALIASES
     )
+    header = {key for row in rows for key in row}
+    if not any(column in header for column in CREW_NAME_COLUMNS):
+        raise ImportFormatError(
+            "the header row has no name column. Name the columns "
+            "first_name;middle_name;last_name (or the older single name), "
+            "followed by roles;email;phone;notes."
+        )
     return plan_crew_import(rows, context, ignored_columns=ignored, delimiter=delimiter)
 
 
@@ -353,15 +449,19 @@ def plan_crew_file(payload: bytes | str, context: CrewImportContext) -> CrewImpo
 
 
 def export_crew_csv(people: Sequence[CrewValues]) -> bytes:
-    """The import's own five columns, `;`, UTF-8 with a BOM — so an export
-    can be edited in Excel and imported again (it would come back as
-    duplicates, held back, which is the point)."""
+    """The import's own columns, `;`, UTF-8 with a BOM — so an export can be
+    edited in Excel and imported again (it would come back as duplicates,
+    held back, which is the point). `name` carries the display name for
+    everybody, so a person whose name was never split loses nothing."""
     buffer = io.StringIO()
     writer = csv.writer(buffer, delimiter=";", lineterminator="\r\n")
-    writer.writerow(CREW_COLUMNS)
+    writer.writerow(EXPORT_COLUMNS)
     for person in people:
         writer.writerow(
             [
+                person.first_name or "",
+                person.middle_name or "",
+                person.last_name or "",
                 person.name,
                 ROLE_SEPARATOR.join(person.roles),
                 person.email or "",

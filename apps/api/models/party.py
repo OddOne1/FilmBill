@@ -211,7 +211,24 @@ class Party(CompanyScoped, Base):
     )
 
     # ── Identity ─────────────────────────────────────────────────────
+    #: The display name, and the ONE string every query reads, sorts and
+    #: prints — pickers, budgets, projects, audit labels. For a person with
+    #: name fields it is derived on write as "First Middle Last" by
+    #: `derive_person_name` (P1b-4), so the two can never disagree; a person
+    #: without name fields keeps the name somebody typed, untouched, because
+    #: splitting "Reisinger Philipp Maximilian" automatically would guess the
+    #: order of the names and get it wrong.
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    #: P1b-4. A person's name in parts. All three nullable: a person created
+    #: before P1b-4 has none of them, and is listed under Needs attention as
+    #: "name not split" until somebody enters them.
+    first_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    middle_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    last_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    #: P1b-4. An organisation's or department's second line — "Marketing
+    #: department", "Studio Vienna", "c/o …". Shown in lists and on the
+    #: detail page; whether it prints on a document is a P2 question.
+    name_addition: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     trading_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     legal_form: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     register_number: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
@@ -343,6 +360,17 @@ class Party(CompanyScoped, Base):
             name="ck_parties_organisation_has_no_parent",
         ),
         CheckConstraint("id <> parent_id", name="ck_parties_not_its_own_parent"),
+        # P1b-4. Name parts belong to people, the second line to
+        # organisations and departments.
+        CheckConstraint(
+            "type = 'person' OR (first_name IS NULL AND middle_name IS NULL "
+            "AND last_name IS NULL)",
+            name="ck_parties_name_parts_person_only",
+        ),
+        CheckConstraint(
+            "type <> 'person' OR name_addition IS NULL",
+            name="ck_parties_name_addition_not_person",
+        ),
         Index(
             "uq_parties_company_number",
             "company_id",
@@ -877,3 +905,58 @@ event.listen(
         dialect="postgresql"
     ),
 )
+
+
+# ─── P1b-4: a person's display name, derived from its parts ─────────────────
+
+
+def _clean_part(value: Optional[str]) -> Optional[str]:
+    """Inner whitespace collapsed, blank → None."""
+    if value is None:
+        return None
+    cleaned = " ".join(str(value).split())
+    return cleaned or None
+
+
+def person_display_name(
+    first_name: Optional[str],
+    middle_name: Optional[str],
+    last_name: Optional[str],
+) -> Optional[str]:
+    """`"First Middle Last"`, or None when there is no first or last name.
+
+    A middle name alone is not a name, so it derives nothing; the service
+    refuses that combination with a sentence before it gets here.
+    """
+    first, middle, last = (_clean_part(v) for v in (first_name, middle_name, last_name))
+    if first is None and last is None:
+        return None
+    return " ".join(part for part in (first, middle, last) if part)
+
+
+def derive_person_name(party: "Party") -> None:
+    """Normalise a person's name parts and rebuild `name` from them.
+
+    Runs on EVERY insert and update of a party (the mapper events below), so
+    no write path — the parties router, crew quick add, the CSV import, a
+    script — can store a `name` that disagrees with the parts. A person with
+    no first and no last name keeps its stored `name` untouched.
+    """
+    if party.type != PARTY_PERSON:
+        return
+    party.first_name = _clean_part(party.first_name)
+    party.middle_name = _clean_part(party.middle_name)
+    party.last_name = _clean_part(party.last_name)
+    derived = person_display_name(party.first_name, party.middle_name, party.last_name)
+    if derived is not None and party.name != derived:
+        party.name = derived
+
+
+@event.listens_for(Party, "before_insert")
+def _derive_name_on_insert(mapper, connection, target) -> None:  # noqa: ARG001
+    derive_person_name(target)
+
+
+@event.listens_for(Party, "before_update")
+def _derive_name_on_update(mapper, connection, target) -> None:  # noqa: ARG001
+    derive_person_name(target)

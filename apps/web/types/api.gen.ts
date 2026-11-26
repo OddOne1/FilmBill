@@ -2972,7 +2972,8 @@ export interface paths {
         };
         /**
          * Export Crew
-         * @description The list in the import's own columns: `name;roles;email;phone;notes`.
+         * @description The list in the import's own columns:
+         *     `first_name;middle_name;last_name;name;roles;email;phone;notes`.
          */
         get: operations["export_crew_crew_export_csv_get"];
         put?: never;
@@ -7501,13 +7502,22 @@ export interface components {
         };
         /**
          * CrewCreate
-         * @description Quick add. The name is the only thing required.
+         * @description Quick add. A first or last name is the only thing required.
+         *
+         *     P1b-4: `name` is the older single field, still accepted and stored with
+         *     no parts; when a first or last name is given, `name` is derived.
          */
         CrewCreate: {
             /** Email */
             email?: string | null;
+            /** First Name */
+            first_name?: string | null;
+            /** Last Name */
+            last_name?: string | null;
+            /** Middle Name */
+            middle_name?: string | null;
             /** Name */
-            name: string;
+            name?: string | null;
             /** Notes */
             notes?: string | null;
             /** Phone */
@@ -7591,10 +7601,16 @@ export interface components {
             duplicate_reason?: string | null;
             /** Email */
             email?: string | null;
+            /** First Name */
+            first_name?: string | null;
+            /** Last Name */
+            last_name?: string | null;
             /** Line Number */
             line_number: number;
             /** Message */
             message?: string | null;
+            /** Middle Name */
+            middle_name?: string | null;
             /** Name */
             name?: string | null;
             /** Notes */
@@ -7618,6 +7634,8 @@ export interface components {
             created_at: string;
             /** Email */
             email?: string | null;
+            /** First Name */
+            first_name?: string | null;
             /**
              * Id
              * Format: uuid
@@ -7638,6 +7656,10 @@ export interface components {
              * @default false
              */
             is_supplier: boolean;
+            /** Last Name */
+            last_name?: string | null;
+            /** Middle Name */
+            middle_name?: string | null;
             /** Name */
             name: string;
             /** Notes */
@@ -9112,6 +9134,8 @@ export interface components {
             is_active: boolean;
             /** Name */
             name: string;
+            /** Name Addition */
+            name_addition?: string | null;
             /** Party Number */
             party_number?: string | null;
             /** Position */
@@ -9166,7 +9190,11 @@ export interface components {
             /** Value */
             value: string;
         };
-        /** PartyCreate */
+        /**
+         * PartyCreate
+         * @description `name` is required unless this is a person with a first or last name,
+         *     in which case it is derived from them (P1b-4). The router says which.
+         */
         PartyCreate: {
             /** Business Status */
             business_status?: ("auto" | "business" | "private") | null;
@@ -9176,6 +9204,8 @@ export interface components {
             einvoice_routing?: {
                 [key: string]: unknown;
             } | null;
+            /** First Name */
+            first_name?: string | null;
             /** Is Crew */
             is_crew?: boolean | null;
             /** Is Customer */
@@ -9186,10 +9216,16 @@ export interface components {
             is_supplier?: boolean | null;
             /** Language */
             language?: string | null;
+            /** Last Name */
+            last_name?: string | null;
             /** Legal Form */
             legal_form?: string | null;
+            /** Middle Name */
+            middle_name?: string | null;
             /** Name */
-            name: string;
+            name?: string | null;
+            /** Name Addition */
+            name_addition?: string | null;
             /** Notes */
             notes?: string | null;
             /** Parent Id */
@@ -9294,6 +9330,8 @@ export interface components {
             einvoice_routing: {
                 [key: string]: unknown;
             };
+            /** First Name */
+            first_name?: string | null;
             /**
              * Id
              * Format: uuid
@@ -9326,11 +9364,27 @@ export interface components {
             is_supplier: boolean;
             /** Language */
             language?: string | null;
+            /** Last Name */
+            last_name?: string | null;
             latest_vat_check?: components["schemas"]["PartyVatCheckResponse"] | null;
             /** Legal Form */
             legal_form?: string | null;
+            /** Middle Name */
+            middle_name?: string | null;
             /** Name */
             name: string;
+            /** Name Addition */
+            name_addition?: string | null;
+            /**
+             * Name Not Split
+             * @default false
+             */
+            name_not_split: boolean;
+            /**
+             * Needs Attention Reasons
+             * @default []
+             */
+            needs_attention_reasons: string[];
             /** Notes */
             notes?: string | null;
             /** Parent Id */
@@ -9634,6 +9688,8 @@ export interface components {
             einvoice_routing?: {
                 [key: string]: unknown;
             } | null;
+            /** First Name */
+            first_name?: string | null;
             /** Is Crew */
             is_crew?: boolean | null;
             /** Is Customer */
@@ -9644,10 +9700,16 @@ export interface components {
             is_supplier?: boolean | null;
             /** Language */
             language?: string | null;
+            /** Last Name */
+            last_name?: string | null;
             /** Legal Form */
             legal_form?: string | null;
+            /** Middle Name */
+            middle_name?: string | null;
             /** Name */
             name?: string | null;
+            /** Name Addition */
+            name_addition?: string | null;
             /** Notes */
             notes?: string | null;
             /** Parent Id */
@@ -16933,7 +16995,7 @@ export interface operations {
                 role?: string | null;
                 type?: string | null;
                 include_inactive?: boolean;
-                /** @description Only parties with a tax identifier whose latest check differed from the one before it, and which nobody has acknowledged yet. */
+                /** @description Only parties that need somebody to look: a tax identifier whose latest check differed from the one before it and which nobody has acknowledged yet, or a person whose name has not been split into first and last name. */
                 needs_attention?: boolean;
                 limit?: number;
                 offset?: number;

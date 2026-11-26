@@ -56,6 +56,8 @@ function makeParty(overrides: Partial<Party> = {}): Party {
     business_status: 'auto',
     tax_country: 'AT',
     tax_status_note: null,
+    name_not_split: false,
+    needs_attention_reasons: [],
     recheck_interval_days: null,
     tax_override: null,
     einvoice_routing: {},
@@ -239,6 +241,7 @@ describe('adding a party', () => {
       expect(vi.mocked(api.post)).toHaveBeenCalledWith('/parties', {
         type: 'organisation',
         name: 'Neue GmbH',
+        name_addition: null,
         parent_id: null,
       }),
     )
@@ -282,6 +285,76 @@ describe('adding a party', () => {
 
     expect(await screen.findByTestId('parties-new-error')).toHaveTextContent(
       'cannot belong to a person',
+    )
+  })
+})
+
+describe('names (P1b-4)', () => {
+  it('a new person is entered as first, middle and last name, never as one name', async () => {
+    mockApi()
+    render(<PartiesPage />)
+    await screen.findByText('ORF')
+    fireEvent.click(screen.getByTestId('parties-new'))
+    fireEvent.change(await screen.findByLabelText('What kind'), {
+      target: { value: 'person' },
+    })
+    // The organisation-only fields are gone, the person's are there.
+    expect(screen.queryByLabelText('Additional line')).not.toBeInTheDocument()
+    const submit = screen.getByTestId('parties-new-submit')
+    expect(submit).toBeDisabled()
+    expect(submit).toHaveTextContent('Enter a first or last name first')
+
+    fireEvent.change(screen.getByTestId('parties-new-first'), { target: { value: 'Philipp' } })
+    fireEvent.change(screen.getByTestId('parties-new-middle'), { target: { value: 'Maximilian' } })
+    fireEvent.change(screen.getByTestId('parties-new-last'), { target: { value: 'Reisinger' } })
+    fireEvent.change(screen.getByLabelText('Position'), { target: { value: 'DoP' } })
+    fireEvent.click(submit)
+
+    await waitFor(() =>
+      expect(vi.mocked(api.post)).toHaveBeenCalledWith('/parties', {
+        type: 'person',
+        first_name: 'Philipp',
+        middle_name: 'Maximilian',
+        last_name: 'Reisinger',
+        title: null,
+        position: 'DoP',
+        parent_id: null,
+      }),
+    )
+  })
+
+  it('an organisation gets its additional line, and the list shows it beneath the name', async () => {
+    mockApi([makeParty({ name_addition: 'Studio Vienna' })])
+    render(<PartiesPage />)
+    expect(await screen.findByTestId('party-name-addition-p1')).toHaveTextContent('Studio Vienna')
+
+    fireEvent.click(screen.getByTestId('parties-new'))
+    fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'Neue GmbH' } })
+    fireEvent.change(screen.getByLabelText('Additional line'), { target: { value: 'c/o Studio' } })
+    fireEvent.click(screen.getByTestId('parties-new-submit'))
+    await waitFor(() =>
+      expect(vi.mocked(api.post)).toHaveBeenCalledWith('/parties', {
+        type: 'organisation',
+        name: 'Neue GmbH',
+        name_addition: 'c/o Studio',
+        parent_id: null,
+      }),
+    )
+  })
+
+  it('a person whose name is not split carries the reason as its chip', async () => {
+    mockApi([
+      makeParty({
+        id: 'p9',
+        type: 'person',
+        name: 'Reisinger Philipp Maximilian',
+        name_not_split: true,
+        needs_attention_reasons: ['name_not_split'],
+      }),
+    ])
+    render(<PartiesPage />)
+    expect(await screen.findByTestId('party-chip-attention-p9')).toHaveTextContent(
+      'Name not split',
     )
   })
 })
@@ -332,6 +405,8 @@ describe('needs attention', () => {
     // registry answer about them changed.
     mockApi([
       makeParty({
+        // What the API sends with a flagged identifier (P1b-4 served field).
+        needs_attention_reasons: ['tax_id_changed'],
         tax_ids: [
           {
             id: 't1',

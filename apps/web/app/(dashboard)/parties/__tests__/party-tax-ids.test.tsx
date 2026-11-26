@@ -128,6 +128,8 @@ function makeParty(overrides: Partial<Party> = {}): Party {
     business_status: 'auto',
     tax_country: 'DE',
     tax_status_note: null,
+    name_not_split: false,
+    needs_attention_reasons: [],
     recheck_interval_days: null,
     tax_override: null,
     einvoice_routing: {},

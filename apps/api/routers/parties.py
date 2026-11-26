@@ -74,6 +74,13 @@ router = APIRouter(tags=["parties"])
 #: invoice will say.
 PARTY_AUDITED = (
     "name",
+    # P1b-4. The parts a person's name is derived from, and the second line
+    # of an organisation — a change to any of them restates what a future
+    # document will say, like `name` itself.
+    "first_name",
+    "middle_name",
+    "last_name",
+    "name_addition",
     "trading_name",
     # `vat_id` is gone from here with the column (D59). A change to an
     # identifier is audited on the identifier itself, under
@@ -212,7 +219,8 @@ def _party_response(
         **{
             name: getattr(party, name)
             for name in (
-                "id", "type", "parent_id", "name", "trading_name", "legal_form",
+                "id", "type", "parent_id", "name", "first_name", "middle_name",
+                "last_name", "name_addition", "trading_name", "legal_form",
                 "register_number", "register_court", "title", "position",
                 "is_customer", "is_supplier", "is_partner", "is_crew",
                 "party_number", "language", "default_currency", "payment_terms_days",
@@ -239,6 +247,8 @@ def _party_response(
         latest_vat_check=_check_response(latest) if latest else None,
         buyer_type=inputs["buyer_type"],
         buyer_type_reason=inputs["buyer_type_reason"],
+        name_not_split=party_service.name_not_split(party),
+        needs_attention_reasons=_attention_reasons(db, party),
         addresses=[
             PartyAddressResponse.model_validate(row)
             for row in db.query(PartyAddress)
@@ -261,10 +271,35 @@ def _party_response(
             PartyChild.model_validate(row)
             for row in db.query(Party)
             .filter(Party.company_id == party.company_id, Party.parent_id == party.id)
-            .order_by(Party.type, Party.name)
+            .order_by(Party.type, *party_service.sort_key_columns())
         ],
         duplicates=[DuplicateWarning(**entry) for entry in (duplicates or [])],
     )
+
+
+def _attention_reasons(db: Session, party: Party) -> list[str]:
+    """Why the party is in the Needs attention view. Same two conditions as
+    the list's filter, so a row there always says why it is there."""
+    reasons = []
+    if party_service.name_not_split(party):
+        reasons.append("name_not_split")
+    if (
+        db.query(PartyTaxId.id)
+        .filter(PartyTaxId.party_id == party.id, PartyTaxId.needs_attention.is_(True))
+        .first()
+        is not None
+    ):
+        reasons.append("tax_id_changed")
+    return reasons
+
+
+def _check_names(party_type: str, current: Optional[Party], changes: dict) -> None:
+    """P1b-4's name rules, as a 422 with the service's sentence."""
+    party_service.clean_name_changes(changes)
+    try:
+        party_service.validate_names(party_type, current, changes)
+    except party_service.PartyError as error:
+        _refuse(error, status.HTTP_422_UNPROCESSABLE_ENTITY)
 
 
 def _normalised_vat(party_or_body, raw: Optional[str], country: Optional[str]):
@@ -289,10 +324,15 @@ def _apply(db: Session, membership: Membership, party: Party, changes: dict) -> 
     A party PATCH that could still set a number would be a second write path
     for the thing the whole of P1b-2 exists to give one.
     """
+    from ..models.party import derive_person_name
+
     for field, value in changes.items():
         if field == "parent_id":
             continue
         setattr(party, field, value)
+    # Now rather than only at flush (the mapper event does it then too), so
+    # the audit snapshot taken next already shows the derived name.
+    derive_person_name(party)
 
 
 # ─── The list ───────────────────────────────────────────────────────────────
@@ -310,8 +350,10 @@ def list_parties(
     needs_attention: bool = Query(
         default=False,
         description=(
-            "Only parties with a tax identifier whose latest check differed "
-            "from the one before it, and which nobody has acknowledged yet."
+            "Only parties that need somebody to look: a tax identifier whose "
+            "latest check differed from the one before it and which nobody "
+            "has acknowledged yet, or a person whose name has not been split "
+            "into first and last name."
         ),
     ),
     limit: int = Query(default=50, ge=1, le=200),
@@ -342,7 +384,12 @@ def list_parties(
             )
             .subquery()
         )
-        query = query.filter(Party.id.in_(db.query(flagged.c.party_id)))
+        query = query.filter(
+            or_(
+                Party.id.in_(db.query(flagged.c.party_id)),
+                party_service.name_not_split_clause(),
+            )
+        )
     if type:
         query = query.filter(Party.type == type)
     if role == "customer":
@@ -382,6 +429,13 @@ def list_parties(
         query = query.filter(
             or_(
                 func.lower(Party.name).like(needle),
+                # P1b-4: any part of a person's name, and an organisation's
+                # second line. `name` already holds the parts of a split
+                # person; these catch a search for one part on its own.
+                func.lower(Party.first_name).like(needle),
+                func.lower(Party.middle_name).like(needle),
+                func.lower(Party.last_name).like(needle),
+                func.lower(Party.name_addition).like(needle),
                 func.lower(Party.trading_name).like(needle),
                 func.lower(Party.party_number).like(needle),
                 Party.id.in_(db.query(emails.c.party_id)),
@@ -391,7 +445,10 @@ def list_parties(
 
     total = query.count()
     rows = (
-        query.order_by(Party.type, Party.name).limit(limit).offset(offset).all()
+        query.order_by(*party_service.sort_key_columns())
+        .limit(limit)
+        .offset(offset)
+        .all()
     )
     return PartyPage(
         parties=[_party_response(db, membership, row) for row in rows],
@@ -419,6 +476,7 @@ def create_party(
     changes = body.model_dump(exclude_unset=True)
     party_type = changes.pop("type")
     parent_id = changes.get("parent_id")
+    _check_names(party_type, None, changes)
 
     try:
         party_service.validate_parent(
@@ -491,6 +549,7 @@ def update_party(
     """Change a party. `type` cannot change — see `PartyWrite`."""
     party = _party_or_404(db, membership, party_id)
     changes = body.model_dump(exclude_unset=True)
+    _check_names(party.type, party, changes)
 
     if "parent_id" in changes and changes["parent_id"] != party.parent_id:
         try:
@@ -627,7 +686,7 @@ def list_children(
         query = query.filter(Party.is_active.is_(True))
     return [
         PartyChild.model_validate(row)
-        for row in query.order_by(Party.type, Party.name)
+        for row in query.order_by(Party.type, *party_service.sort_key_columns())
     ]
 
 

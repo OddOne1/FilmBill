@@ -4,10 +4,17 @@ import * as React from 'react'
 import Link from 'next/link'
 import { api, ApiError } from '@/lib/api'
 import { RolePicker } from '@/components/shared/role-picker'
+import {
+  EMPTY_PERSON_NAME,
+  PersonNameFields,
+  hasPersonName,
+  personNamePayload,
+  type PersonName,
+} from '@/components/shared/person-name-fields'
 import type { CrewCreateResult } from '@/types'
 
 /**
- * Quick add: a name, and whatever else is known. No address, no tax data,
+ * Quick add: a first and last name, and whatever else is known. No address, no tax data,
  * no number — those belong to the full party record, one click away.
  *
  * The form stays open after a save, emptied, because the case it exists for
@@ -22,7 +29,7 @@ export function QuickAdd({
   onAdded: () => void
   onClose: () => void
 }) {
-  const [name, setName] = React.useState('')
+  const [name, setName] = React.useState<PersonName>(EMPTY_PERSON_NAME)
   const [roles, setRoles] = React.useState<string[]>([])
   const [phone, setPhone] = React.useState('')
   const [email, setEmail] = React.useState('')
@@ -30,29 +37,29 @@ export function QuickAdd({
   const [busy, setBusy] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [last, setLast] = React.useState<CrewCreateResult | null>(null)
-  const nameRef = React.useRef<HTMLInputElement>(null)
+  const formRef = React.useRef<HTMLFormElement>(null)
 
   const save = async (event: React.FormEvent) => {
     event.preventDefault()
-    if (!name.trim()) return
+    if (!hasPersonName(name)) return
     setBusy(true)
     setError(null)
     try {
       const result = await api.post<CrewCreateResult>('/crew', {
-        name,
+        ...personNamePayload(name),
         roles,
         phone: phone || null,
         email: email || null,
         notes: notes || null,
       })
       setLast(result)
-      setName('')
+      setName(EMPTY_PERSON_NAME)
       setRoles([])
       setPhone('')
       setEmail('')
       setNotes('')
       onAdded()
-      nameRef.current?.focus()
+      formRef.current?.querySelector<HTMLInputElement>('input')?.focus()
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : 'This person could not be saved. Try again.')
     } finally {
@@ -65,22 +72,19 @@ export function QuickAdd({
 
   return (
     <form
+      ref={formRef}
       onSubmit={(event) => void save(event)}
       data-testid="crew-quick-add"
       className="mt-5 rounded-md border border-border bg-bg-secondary p-4"
     >
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="text-xs text-text-secondary">
-          Name
-          <input
-            ref={nameRef}
-            autoFocus
-            data-testid="crew-add-name"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            className={field}
-          />
-        </label>
+      <PersonNameFields
+        value={name}
+        onChange={setName}
+        testIdPrefix="crew-add"
+        autoFocus
+        inputClassName={field}
+      />
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <div className="text-xs text-text-secondary">
           <label htmlFor="crew-roles">Roles</label>
           <div className="mt-1">
@@ -121,7 +125,7 @@ export function QuickAdd({
         <button
           type="submit"
           data-testid="crew-add-save"
-          disabled={busy || !name.trim()}
+          disabled={busy || !hasPersonName(name)}
           className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
         >
           Add to crew
@@ -129,10 +133,10 @@ export function QuickAdd({
         <button type="button" onClick={onClose} className="text-sm text-text-secondary hover:text-text-primary">
           Close
         </button>
-        {!name.trim() && !busy && (
+        {!hasPersonName(name) && !busy && (
           // 17c: the button is disabled and this says why.
           <span data-testid="crew-add-why" className="text-xs text-text-tertiary">
-            Type a name to add this person. Everything else is optional.
+            Type a first or last name to add this person. Everything else is optional.
           </span>
         )}
       </div>

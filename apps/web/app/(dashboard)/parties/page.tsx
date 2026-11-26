@@ -6,6 +6,13 @@ import { Loader2, Plus, Search } from 'lucide-react'
 import { api, ApiError } from '@/lib/api'
 import { Input } from '@/components/ui/input'
 import { usePermissions } from '@/hooks/use-permissions'
+import {
+  EMPTY_PERSON_NAME,
+  PersonNameFields,
+  hasPersonName,
+  personNamePayload,
+  type PersonName,
+} from '@/components/shared/person-name-fields'
 import { useCompanyStore } from '@/stores/company-store'
 import type { Party, PartyPage, PartyType } from '@/types'
 
@@ -249,10 +256,20 @@ function PartyRow({ party }: { party: Party }) {
       <span className="w-20 font-mono text-xs text-text-tertiary">
         {party.party_number ?? '—'}
       </span>
-      <span className="flex-1 truncate text-sm text-text-primary">
-        {party.name}
-        {party.trading_name && (
-          <span className="ml-2 text-text-tertiary">({party.trading_name})</span>
+      <span className="min-w-0 flex-1 text-sm text-text-primary">
+        <span className="block truncate">
+          {party.name}
+          {party.trading_name && (
+            <span className="ml-2 text-text-tertiary">({party.trading_name})</span>
+          )}
+        </span>
+        {party.name_addition && (
+          <span
+            data-testid={`party-name-addition-${party.id}`}
+            className="block truncate text-xs text-text-tertiary"
+          >
+            {party.name_addition}
+          </span>
         )}
       </span>
       <span className="w-24 text-xs text-text-tertiary">{party.type}</span>
@@ -274,9 +291,12 @@ function PartyRow({ party }: { party: Party }) {
             and nobody has acknowledged it. Shown on every tab, not only the
             worklist, because somebody looking at a customer for an unrelated
             reason should see it. */}
-        {party.tax_ids.some((taxId) => taxId.needs_attention) && (
+        {(party.needs_attention_reasons ?? []).length > 0 && (
           <Chip tone="warning" testId={`party-chip-attention-${party.id}`}>
-            Needs attention
+            {party.name_not_split &&
+            (party.needs_attention_reasons ?? []).length === 1
+              ? 'Name not split'
+              : 'Needs attention'}
           </Chip>
         )}
       </span>
@@ -317,6 +337,10 @@ function NewPartyPanel({
 }) {
   const [type, setType] = React.useState<PartyType>('organisation')
   const [name, setName] = React.useState('')
+  const [nameAddition, setNameAddition] = React.useState('')
+  const [personName, setPersonName] = React.useState<PersonName>(EMPTY_PERSON_NAME)
+  const [title, setTitle] = React.useState('')
+  const [position, setPosition] = React.useState('')
   const [parentId, setParentId] = React.useState('')
   const [organisations, setOrganisations] = React.useState<Party[]>([])
   const [saving, setSaving] = React.useState(false)
@@ -338,16 +362,30 @@ function NewPartyPanel({
 
   const choice = TYPE_CHOICES.find((entry) => entry.value === type)
   const needsParent = type === 'department'
+  const isPerson = type === 'person'
+  const hasName = isPerson ? hasPersonName(personName) : Boolean(name.trim())
 
   async function create() {
     setSaving(true)
     setError(null)
     try {
-      await api.post('/parties', {
-        type,
-        name,
-        parent_id: parentId || null,
-      })
+      await api.post(
+        '/parties',
+        isPerson
+          ? {
+              type,
+              ...personNamePayload(personName),
+              title: title.trim() || null,
+              position: position.trim() || null,
+              parent_id: parentId || null,
+            }
+          : {
+              type,
+              name,
+              name_addition: nameAddition.trim() || null,
+              parent_id: parentId || null,
+            },
+      )
       await onCreated()
     } catch (err) {
       setError(
@@ -396,15 +434,56 @@ function NewPartyPanel({
           <p className="text-xs text-text-tertiary">{choice.help}</p>
         )}
 
-        <label className="block text-xs font-medium text-text-secondary">
-          Name
-          <Input
-            aria-label="Name"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            className="mt-1"
-          />
-        </label>
+        {isPerson ? (
+          <>
+            <label className="block text-xs font-medium text-text-secondary">
+              Title (optional)
+              <Input
+                aria-label="Title"
+                value={title}
+                placeholder="Dr., Mag."
+                onChange={(event) => setTitle(event.target.value)}
+                className="mt-1"
+              />
+            </label>
+            <PersonNameFields
+              value={personName}
+              onChange={setPersonName}
+              testIdPrefix="parties-new"
+            />
+            <label className="block text-xs font-medium text-text-secondary">
+              Position (optional)
+              <Input
+                aria-label="Position"
+                value={position}
+                onChange={(event) => setPosition(event.target.value)}
+                className="mt-1"
+              />
+            </label>
+          </>
+        ) : (
+          <>
+            <label className="block text-xs font-medium text-text-secondary">
+              Name
+              <Input
+                aria-label="Name"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                className="mt-1"
+              />
+            </label>
+            <label className="block text-xs font-medium text-text-secondary">
+              Additional line (optional)
+              <Input
+                aria-label="Additional line"
+                value={nameAddition}
+                placeholder="Marketing department, Studio Vienna, c/o …"
+                onChange={(event) => setNameAddition(event.target.value)}
+                className="mt-1"
+              />
+            </label>
+          </>
+        )}
 
         {type !== 'organisation' && (
           <label className="block text-xs font-medium text-text-secondary">
@@ -441,14 +520,18 @@ function NewPartyPanel({
           type="button"
           data-testid="parties-new-submit"
           onClick={() => void create()}
-          disabled={saving || !name.trim() || (needsParent && !parentId)}
+          disabled={saving || !hasName || (needsParent && !parentId)}
           className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white disabled:opacity-60"
         >
           {saving
             ? 'Adding…'
-            : needsParent && !parentId
-              ? 'Choose an organisation first'
-              : 'Add party'}
+            : !hasName
+              ? isPerson
+                ? 'Enter a first or last name first'
+                : 'Enter a name first'
+              : needsParent && !parentId
+                ? 'Choose an organisation first'
+                : 'Add party'}
         </button>
       </div>
     </div>

@@ -62,6 +62,9 @@ def _members(db: Session, membership: Membership, rows: list[Party]) -> list[Cre
         CrewMemberResponse(
             id=row.id,
             name=row.name,
+            first_name=row.first_name,
+            middle_name=row.middle_name,
+            last_name=row.last_name,
             roles=list(row.tags or []),
             email=contacts[row.id].get("email"),
             phone=contacts[row.id].get("phone"),
@@ -109,6 +112,9 @@ def _crew_query(
         query = query.filter(
             or_(
                 func.lower(Party.name).like(needle),
+                func.lower(Party.first_name).like(needle),
+                func.lower(Party.middle_name).like(needle),
+                func.lower(Party.last_name).like(needle),
                 func.lower(func.array_to_string(Party.tags, "|")).like(needle),
                 Party.id.in_(emails),
             )
@@ -122,8 +128,10 @@ def _crew_query(
         order = [first_role.desc() if descending else first_role]
     else:
         order = []
-    name_order = func.lower(Party.name)
-    order.append(name_order.desc() if descending and key == "name" else name_order)
+    # P1b-4: by last name, and by `name` for somebody without one — the same
+    # key as every party list (`party_service.sort_key_columns`).
+    for column in party_service.sort_key_columns()[:3]:
+        order.append(column.desc() if descending and key == "name" else column)
     order.append(Party.id)
     return query.order_by(*order)
 
@@ -169,7 +177,8 @@ def export_crew(
     db: Session = Depends(get_db),
     membership: Membership = Depends(require("parties.view")),
 ):
-    """The list in the import's own columns: `name;roles;email;phone;notes`."""
+    """The list in the import's own columns:
+    `first_name;middle_name;last_name;name;roles;email;phone;notes`."""
     rows = _crew_query(
         db, membership, search=None, role=None, include_inactive=include_inactive, sort="name"
     ).all()
@@ -178,6 +187,9 @@ def export_crew(
         [
             CrewValues(
                 name=member.name,
+                first_name=member.first_name,
+                middle_name=member.middle_name,
+                last_name=member.last_name,
                 roles=tuple(member.roles),
                 email=member.email,
                 phone=member.phone,
@@ -209,6 +221,9 @@ def quick_add(
     try:
         values = crew_service.clean_values(
             name=body.name,
+            first_name=body.first_name,
+            middle_name=body.middle_name,
+            last_name=body.last_name,
             roles=body.roles,
             email=body.email,
             phone=body.phone,
@@ -275,6 +290,9 @@ def _row(row, *, action: Optional[str] = None, party_id=None) -> CrewImportRowRe
         line_number=row.line_number,
         action=action or row.action,
         name=values.name if values else row.name,
+        first_name=values.first_name if values else None,
+        middle_name=values.middle_name if values else None,
+        last_name=values.last_name if values else None,
         roles=list(values.roles) if values else [],
         email=values.email if values else None,
         phone=values.phone if values else None,

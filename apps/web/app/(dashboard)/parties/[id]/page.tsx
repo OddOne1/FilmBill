@@ -6,6 +6,10 @@ import { useParams } from 'next/navigation'
 import { AlertTriangle, Loader2, ShieldQuestion } from 'lucide-react'
 import { api, ApiError } from '@/lib/api'
 import { RolePicker } from '@/components/shared/role-picker'
+import {
+  PersonNameFields,
+  personNamePayload,
+} from '@/components/shared/person-name-fields'
 import { Input } from '@/components/ui/input'
 import { CountrySelect } from '@/components/ui/country-select'
 import { countryLabel } from '@/lib/countries'
@@ -141,8 +145,13 @@ export default function PartyDetailPage() {
       <div className="mt-2 flex items-start justify-between gap-4">
         <div>
           <h1 className="text-lg font-semibold text-text-primary">
-            {party.name}
+            {party.title ? `${party.title} ${party.name}` : party.name}
           </h1>
+          {party.name_addition && (
+            <p data-testid="party-name-addition" className="text-sm text-text-secondary">
+              {party.name_addition}
+            </p>
+          )}
           <p className="mt-1 text-sm text-text-secondary">
             {party.type}
             {party.party_number && ` · ${party.party_number}`}
@@ -158,6 +167,20 @@ export default function PartyDetailPage() {
         <p className="mt-4 rounded-md border border-border bg-bg-secondary px-3 py-2 text-xs text-text-secondary">
           You can read this party but not change it — editing needs the
           parties permission.
+        </p>
+      )}
+
+      {party.name_not_split && (
+        <p
+          role="status"
+          data-testid="party-name-not-split"
+          className="mt-4 rounded-md border border-status-warning/40 bg-status-warning/10 px-3 py-2 text-xs text-status-warning"
+        >
+          Name not split into first and last yet. This person is stored as
+          “{party.name}”.{' '}
+          {canEdit
+            ? 'Enter the first, middle and last name on the Basics tab; the displayed name follows.'
+            : 'Somebody who can edit contacts can enter the parts.'}
         </p>
       )}
 
@@ -275,6 +298,11 @@ function BasicsTab({
 }) {
   const [draft, setDraft] = React.useState({
     name: party.name,
+    first_name: party.first_name ?? '',
+    middle_name: party.middle_name ?? '',
+    last_name: party.last_name ?? '',
+    name_addition: party.name_addition ?? '',
+    title: party.title ?? '',
     trading_name: party.trading_name ?? '',
     legal_form: party.legal_form ?? '',
     position: party.position ?? '',
@@ -288,10 +316,16 @@ function BasicsTab({
   })
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
+  const isPerson = party.type === 'person'
 
   React.useEffect(() => {
     setDraft({
       name: party.name,
+      first_name: party.first_name ?? '',
+      middle_name: party.middle_name ?? '',
+      last_name: party.last_name ?? '',
+      name_addition: party.name_addition ?? '',
+      title: party.title ?? '',
       trading_name: party.trading_name ?? '',
       legal_form: party.legal_form ?? '',
       position: party.position ?? '',
@@ -309,11 +343,23 @@ function BasicsTab({
     setSaving(true)
     setError(null)
     try {
+      // A person's display name is built by the API from the parts, so a
+      // person's save never sends `name` (P1b-4). An unsplit person whose
+      // parts are still empty keeps the stored name untouched.
+      const identity = isPerson
+        ? {
+            ...personNamePayload(draft),
+            title: draft.title || null,
+            position: draft.position || null,
+          }
+        : {
+            name: draft.name,
+            name_addition: draft.name_addition || null,
+            trading_name: draft.trading_name || null,
+          }
       await api.patch(`/parties/${party.id}`, {
-        name: draft.name,
-        trading_name: draft.trading_name || null,
+        ...identity,
         legal_form: draft.legal_form || null,
-        position: draft.position || null,
         is_customer: draft.is_customer,
         is_supplier: draft.is_supplier,
         is_partner: draft.is_partner,
@@ -334,7 +380,17 @@ function BasicsTab({
     return (
       <div>
         <Row label="Name">{party.name}</Row>
-        <Row label="Trading name">{party.trading_name ?? '—'}</Row>
+        {isPerson ? (
+          <>
+            <Row label="Title">{party.title ?? '—'}</Row>
+            <Row label="Position">{party.position ?? '—'}</Row>
+          </>
+        ) : (
+          <>
+            <Row label="Additional line">{party.name_addition ?? '—'}</Row>
+            <Row label="Trading name">{party.trading_name ?? '—'}</Row>
+          </>
+        )}
         <Row label="Roles">
           {[
             party.is_customer && 'customer',
@@ -366,38 +422,81 @@ function BasicsTab({
 
   return (
     <div className="space-y-4">
-      <label className="block text-xs font-medium text-text-secondary">
-        Name
-        <Input
-          aria-label="Name"
-          value={draft.name}
-          onChange={(event) => setDraft({ ...draft, name: event.target.value })}
-          className="mt-1"
-        />
-      </label>
-      <label className="block text-xs font-medium text-text-secondary">
-        Trading name
-        <Input
-          aria-label="Trading name"
-          value={draft.trading_name}
-          onChange={(event) =>
-            setDraft({ ...draft, trading_name: event.target.value })
-          }
-          className="mt-1"
-        />
-      </label>
-      {party.type === 'person' && (
-        <label className="block text-xs font-medium text-text-secondary">
-          Position
-          <Input
-            aria-label="Position"
-            value={draft.position}
-            onChange={(event) =>
-              setDraft({ ...draft, position: event.target.value })
-            }
-            className="mt-1"
-          />
-        </label>
+      {isPerson ? (
+        <>
+          <label className="block text-xs font-medium text-text-secondary">
+            Title (optional)
+            <Input
+              aria-label="Title"
+              value={draft.title}
+              placeholder="Dr., Mag."
+              onChange={(event) => setDraft({ ...draft, title: event.target.value })}
+              className="mt-1"
+            />
+          </label>
+          <div>
+            <PersonNameFields
+              value={draft}
+              onChange={(next) => setDraft({ ...draft, ...next })}
+              testIdPrefix="party-basics"
+            />
+            {party.name_not_split && (
+              <p
+                data-testid="party-basics-old-name"
+                className="mt-1 text-[11px] text-text-tertiary"
+              >
+                Stored today as “{party.name}”. Enter the parts in the right
+                boxes — the order of names in the old one may be surname first.
+              </p>
+            )}
+          </div>
+          <label className="block text-xs font-medium text-text-secondary">
+            Position
+            <Input
+              aria-label="Position"
+              value={draft.position}
+              onChange={(event) =>
+                setDraft({ ...draft, position: event.target.value })
+              }
+              className="mt-1"
+            />
+          </label>
+        </>
+      ) : (
+        <>
+          <label className="block text-xs font-medium text-text-secondary">
+            Name
+            <Input
+              aria-label="Name"
+              value={draft.name}
+              onChange={(event) => setDraft({ ...draft, name: event.target.value })}
+              className="mt-1"
+            />
+          </label>
+          <label className="block text-xs font-medium text-text-secondary">
+            Additional line (optional)
+            <Input
+              aria-label="Additional line"
+              value={draft.name_addition}
+              placeholder="Marketing department, Studio Vienna, c/o …"
+              onChange={(event) =>
+                setDraft({ ...draft, name_addition: event.target.value })
+              }
+              className="mt-1"
+            />
+          </label>
+          <label className="block text-xs font-medium text-text-secondary">
+            Trading name
+            <Input
+              aria-label="Trading name"
+              value={draft.trading_name}
+              onChange={(event) =>
+                setDraft({ ...draft, trading_name: event.target.value })
+              }
+              className="mt-1"
+            />
+          </label>
+        </>
       )}
       <fieldset className="space-y-1">
         <legend className="text-xs font-medium text-text-secondary">
@@ -754,7 +853,14 @@ function HierarchyTab({ party }: { party: Party }) {
                 className="flex items-center gap-3 rounded-md border border-border px-3 py-2 text-sm hover:bg-bg-hover/50"
               >
                 <span className="w-24 text-xs text-text-tertiary">{child.type}</span>
-                <span className="flex-1 text-text-primary">{child.name}</span>
+                <span className="flex-1 text-text-primary">
+                  {child.name}
+                  {child.name_addition && (
+                    <span className="ml-2 text-xs text-text-tertiary">
+                      {child.name_addition}
+                    </span>
+                  )}
+                </span>
                 {!child.is_active && (
                   <span className="text-[11px] text-status-warning">archived</span>
                 )}

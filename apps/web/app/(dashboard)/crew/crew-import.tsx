@@ -94,8 +94,10 @@ export function CrewImport({ onApplied }: { onApplied: () => void }) {
         />
       </label>
       <p className="mt-2 text-xs text-text-tertiary">
-        Columns <code>name;roles;email;phone;notes</code> — only the name is
-        required. Several roles are separated by <code>|</code>, for example{' '}
+        Columns <code>first_name;middle_name;last_name;roles;email;phone;notes</code>{' '}
+        — a first or last name is required. A file with the older single{' '}
+        <code>name</code> column still works: those people keep the name as
+        written and are listed under Needs attention until you split it. Several roles are separated by <code>|</code>, for example{' '}
         <code>DoP|Camera operator</code>. Semicolons or commas, with or without
         a BOM. People who look like somebody already on file are held back
         until you tick them; nobody already on file is ever changed.

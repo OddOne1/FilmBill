@@ -506,7 +506,9 @@ def test_a_file_without_a_name_column_is_refused_with_the_columns_named(pg_clien
     response = pg_client.post(
         "/crew/import/preview",
         headers=_h(world),
-        files={"file": ("crew.csv", b"vorname;email\nAnna;a@b.at\n", "text/csv")},
+        # P1b-4: `vorname` is now read as `first_name`, so the file without a
+        # name column is one with only roles and email.
+        files={"file": ("crew.csv", b"rolle;email\nDoP;a@b.at\n", "text/csv")},
     )
     assert response.status_code == 422
     assert "name" in response.json()["detail"]
@@ -521,9 +523,12 @@ def test_the_export_is_the_import_format_and_comes_back_as_duplicates(pg_client,
     content = response.content
     assert content.startswith("﻿".encode("utf-8"))
     lines = content.decode("utf-8-sig").splitlines()
-    assert lines[0] == "name;roles;email;phone;notes"
-    assert lines[1] == 'Anna Huber;DoP|Sound;anna@example.com;+43 1;"Ja; gern"'
-    assert lines[2] == "Ben Ohr;;;;"
+    # P1b-4: the three name parts first, then the display name. These two
+    # were added through the older single `name` field, so their parts are
+    # empty and the name column carries the whole name.
+    assert lines[0] == "first_name;middle_name;last_name;name;roles;email;phone;notes"
+    assert lines[1] == ';;;Anna Huber;DoP|Sound;anna@example.com;+43 1;"Ja; gern"'
+    assert lines[2] == ";;;Ben Ohr;;;;"
 
     again = _preview(pg_client, world, content)
     assert [row["action"] for row in again["rows"]] == ["duplicate", "duplicate"]

@@ -126,9 +126,16 @@ describe('the crew page', () => {
     render(<CrewListPage />)
     fireEvent.click(await screen.findByTestId('crew-add-open'))
     expect(screen.getByTestId('crew-add-save')).toBeDisabled()
-    expect(screen.getByTestId('crew-add-why')).toHaveTextContent('Type a name to add this person.')
+    expect(screen.getByTestId('crew-add-why')).toHaveTextContent(
+      'Type a first or last name to add this person.',
+    )
 
-    fireEvent.change(screen.getByTestId('crew-add-name'), { target: { value: 'Lea Ton' } })
+    // P1b-4: a middle name alone is not a name — still disabled, still says why.
+    fireEvent.change(screen.getByTestId('crew-add-middle'), { target: { value: 'M.' } })
+    expect(screen.getByTestId('crew-add-save')).toBeDisabled()
+    fireEvent.change(screen.getByTestId('crew-add-middle'), { target: { value: '' } })
+    fireEvent.change(screen.getByTestId('crew-add-first'), { target: { value: 'Lea' } })
+    fireEvent.change(screen.getByTestId('crew-add-last'), { target: { value: 'Ton' } })
     // A suggested role, clicked.
     fireEvent.click(screen.getAllByTestId('role-suggestion').find((b) => b.textContent?.includes('Sound'))!)
     fireEvent.change(screen.getByTestId('crew-add-email'), { target: { value: 'lea@ton.at' } })
@@ -137,7 +144,9 @@ describe('the crew page', () => {
 
     await waitFor(() =>
       expect(vi.mocked(api.post)).toHaveBeenCalledWith('/crew', {
-        name: 'Lea Ton',
+        first_name: 'Lea',
+        middle_name: null,
+        last_name: 'Ton',
         roles: ['Sound'],
         phone: null,
         email: 'lea@ton.at',
@@ -149,7 +158,8 @@ describe('the crew page', () => {
       'There is already a party called Lea Ton.',
     )
     // Emptied for the next person.
-    expect(screen.getByTestId('crew-add-name')).toHaveValue('')
+    expect(screen.getByTestId('crew-add-first')).toHaveValue('')
+    expect(screen.getByTestId('crew-add-last')).toHaveValue('')
   })
 
   it('the import sends the preview digest and only the ticked duplicate lines', async () => {

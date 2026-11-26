@@ -18,6 +18,10 @@ CrewSort = Literal["name", "-name", "role", "-role", "created", "-created"]
 class CrewMemberResponse(BaseModel):
     id: uuid.UUID
     name: str
+    #: P1b-4. Null for somebody whose name has not been split yet.
+    first_name: Optional[str] = None
+    middle_name: Optional[str] = None
+    last_name: Optional[str] = None
     #: The party's `tags`: free text such as "DoP", "Gaffer", "Sound".
     roles: list[str] = []
     #: The primary email and phone, if any.
@@ -40,11 +44,18 @@ class CrewPage(BaseModel):
 
 
 class CrewCreate(BaseModel):
-    """Quick add. The name is the only thing required."""
+    """Quick add. A first or last name is the only thing required.
+
+    P1b-4: `name` is the older single field, still accepted and stored with
+    no parts; when a first or last name is given, `name` is derived.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
-    name: str = Field(min_length=1, max_length=255)
+    name: Optional[str] = Field(default=None, max_length=255)
+    first_name: Optional[str] = Field(default=None, max_length=255)
+    middle_name: Optional[str] = Field(default=None, max_length=255)
+    last_name: Optional[str] = Field(default=None, max_length=255)
     roles: list[str] = []
     email: Optional[str] = Field(default=None, max_length=255)
     phone: Optional[str] = Field(default=None, max_length=255)
@@ -78,6 +89,11 @@ class CrewImportRowResponse(BaseModel):
     #: `created` and `skipped`.
     action: str
     name: Optional[str] = None
+    #: P1b-4. Empty for a line that used the older single `name` column;
+    #: such a person is created with the name as given, not split.
+    first_name: Optional[str] = None
+    middle_name: Optional[str] = None
+    last_name: Optional[str] = None
     roles: list[str] = []
     email: Optional[str] = None
     phone: Optional[str] = None

@@ -74,6 +74,8 @@ function makeParty(overrides: Partial<Party> = {}): Party {
     business_status: 'auto',
     tax_country: null,
     tax_status_note: null,
+    name_not_split: false,
+    needs_attention_reasons: [],
     recheck_interval_days: null,
     tax_override: null,
     einvoice_routing: {},
@@ -559,5 +561,73 @@ describe('the crew flag (B2b)', () => {
         expect.objectContaining({ is_crew: true, tags: ['Gaffer'] }),
       ),
     )
+  })
+})
+
+describe('a person’s name in parts (P1b-4)', () => {
+  it('a person not split yet shows the notice, the old name, and empty boxes', async () => {
+    mockApi({
+      party: makeParty({
+        name: 'Reisinger Philipp Maximilian',
+        name_not_split: true,
+        needs_attention_reasons: ['name_not_split'],
+      }),
+    })
+    render(<PartyDetailPage />)
+    await ready()
+    expect(screen.getByTestId('party-name-not-split')).toHaveTextContent(
+      'Name not split into first and last yet',
+    )
+    expect(screen.getByTestId('party-basics-old-name')).toHaveTextContent(
+      'Reisinger Philipp Maximilian',
+    )
+    expect(screen.getByTestId('party-basics-first')).toHaveValue('')
+    expect(screen.getByTestId('party-basics-middle')).toHaveValue('')
+    expect(screen.getByTestId('party-basics-last')).toHaveValue('')
+  })
+
+  it('saving a person sends the parts and never a name of its own', async () => {
+    mockApi({
+      party: makeParty({
+        name: 'Reisinger Philipp Maximilian',
+        name_not_split: true,
+        needs_attention_reasons: ['name_not_split'],
+      }),
+    })
+    render(<PartyDetailPage />)
+    await ready()
+    fireEvent.change(screen.getByTestId('party-basics-first'), { target: { value: 'Philipp' } })
+    fireEvent.change(screen.getByTestId('party-basics-middle'), { target: { value: 'Maximilian' } })
+    fireEvent.change(screen.getByTestId('party-basics-last'), { target: { value: 'Reisinger' } })
+    fireEvent.click(screen.getByTestId('party-basics-save'))
+    await waitFor(() => expect(vi.mocked(api.patch)).toHaveBeenCalled())
+    const body = vi.mocked(api.patch).mock.calls[0][1] as Record<string, unknown>
+    expect(body).toMatchObject({
+      first_name: 'Philipp',
+      middle_name: 'Maximilian',
+      last_name: 'Reisinger',
+    })
+    expect(body).not.toHaveProperty('name')
+    expect(body).not.toHaveProperty('name_addition')
+  })
+
+  it('an organisation shows its additional line under the name and edits it', async () => {
+    mockApi({
+      party: makeParty({
+        type: 'organisation',
+        name: 'ORF',
+        name_addition: 'Studio Vienna',
+      }),
+    })
+    render(<PartyDetailPage />)
+    await ready()
+    expect(screen.getByTestId('party-name-addition')).toHaveTextContent('Studio Vienna')
+    expect(screen.queryByTestId('party-name-not-split')).not.toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Additional line'), { target: { value: 'c/o Küniglberg' } })
+    fireEvent.click(screen.getByTestId('party-basics-save'))
+    await waitFor(() => expect(vi.mocked(api.patch)).toHaveBeenCalled())
+    const body = vi.mocked(api.patch).mock.calls[0][1] as Record<string, unknown>
+    expect(body).toMatchObject({ name: 'ORF', name_addition: 'c/o Küniglberg' })
+    expect(body).not.toHaveProperty('first_name')
   })
 })
