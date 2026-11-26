@@ -30,7 +30,7 @@ from them. `docs/SCOPE.md` is where the product is decided.
 | B1.2 | Adjustments by kind and section, production fee preset, country dropdown, clearer messages | [`29-filmbill-B1.2-adjustments-fee-country-messages.md`](29-filmbill-B1.2-adjustments-fee-country-messages.md) | `30ac390`…closing commit | done — see notes |
 | B2a | The project calendar: strips instead of a day table | [`30-filmbill-B2a-project-calendar.md`](30-filmbill-B2a-project-calendar.md) | `ecc1491`…closing commit | done — see notes |
 | B2b | Crew and gear records: crew as flagged parties, devices with serial numbers | [`31-filmbill-B2b-crew-and-gear-records.md`](31-filmbill-B2b-crew-and-gear-records.md) | `b9110e3`…closing commit | done — see notes |
-| P1b-4 | Contacts rework: person names, sole proprietors, direct tax-ID entry, Contacts layout, people inside organisations | [`32-filmbill-P1b4-contacts-rework.md`](32-filmbill-P1b4-contacts-rework.md) | in progress | in progress |
+| P1b-4 | Contacts rework: person names, sole proprietors, direct tax-ID entry, Contacts layout, people inside organisations | [`32-filmbill-P1b4-contacts-rework.md`](32-filmbill-P1b4-contacts-rework.md) | `ce142a0`…closing commit | done — see notes |
 | P0b | Foundations: companies, roles, number series, audit, money, codegen | [`03-filmbill-P0b-foundations.md`](03-filmbill-P0b-foundations.md) | — | superseded — split into P0b-0, P0b-1, P0b-2 |
 
 ---
@@ -1535,4 +1535,31 @@ environment as B2a. CI floors raised to **2900** and **1525**.
   read `[-1]` of an unordered audit query (heap reuse after the fixture's
   DELETEs); fixed by ordering on `created_at` — trap 20.
 - Not checked: the pages in a real browser, the server migrations.
+
+## P1b-4 — the contacts rework
+
+Full report: [`docs/reports/P1b4-report.md`](../reports/P1b4-report.md).
+
+**Built.** Names in parts with a derived display name and no automatic split
+(migration 0024, D112); organisations' second line (D113); sole proprietors
+as one record (migration 0025, D114); direct tax-ID entry with data-driven
+kind detection and the note's honest wording (D115); Contacts as the UI word,
+`/contacts` with redirects, "Phone & email" (D116); the full-width table, +N
+chips, column drop and picker, internal columns for `parties.edit` withheld
+by the API (D117); people and departments created inside an organisation,
+"Add people now" in one transaction (D118). §17 Q11 for the Steuerberater.
+
+**Numbers.** API 3097 passed / 30 skipped (2984 before); `-m realdb` 1647
+(1568); web 858 / 76 files (811 / 73). CI floors raised to **3010** and
+**1600**.
+
+**Flagged.**
+- No contact CSV exists; only the crew CSV took the new columns.
+- Staff hold no `parties.view`; the role without the internal columns is the
+  accountant. The detail page still shows readers the Tax tab (open, D117).
+- "Add people now" writes one audit event; the people have none of their own.
+- The wording guard reads the rendered screen, not source (rule 11).
+- A full run beside the real-DB run failed the rate-limiter test: shared
+  Redis between my two runs; alone it is green. Run them one at a time.
+- Not checked: the layout in a real browser, the server migrations.
 
