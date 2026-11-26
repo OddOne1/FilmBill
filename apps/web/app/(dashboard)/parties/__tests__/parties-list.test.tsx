@@ -57,6 +57,7 @@ function makeParty(overrides: Partial<Party> = {}): Party {
     tax_country: 'AT',
     tax_status_note: null,
     name_not_split: false,
+    is_sole_proprietor: false,
     needs_attention_reasons: [],
     recheck_interval_days: null,
     tax_override: null,

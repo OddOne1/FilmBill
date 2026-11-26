@@ -67,6 +67,7 @@ const BUYER_REASONS: Record<string, string> = {
   explicit: 'set by hand on this party',
   organisation: 'an organisation, or somebody inside one',
   person_with_vat_id: 'a person with a VAT ID — a sole trader',
+  sole_proprietor: 'a person who also works as a business (sole proprietor)',
   explicit_without_tax_id:
     'set explicitly as a business, with no tax identifier on file',
   person: 'a person with no VAT ID',
@@ -303,6 +304,9 @@ function BasicsTab({
     last_name: party.last_name ?? '',
     name_addition: party.name_addition ?? '',
     title: party.title ?? '',
+    is_sole_proprietor: party.is_sole_proprietor ?? false,
+    business_name: party.business_name ?? '',
+    register_number: party.register_number ?? '',
     trading_name: party.trading_name ?? '',
     legal_form: party.legal_form ?? '',
     position: party.position ?? '',
@@ -326,6 +330,9 @@ function BasicsTab({
       last_name: party.last_name ?? '',
       name_addition: party.name_addition ?? '',
       title: party.title ?? '',
+      is_sole_proprietor: party.is_sole_proprietor ?? false,
+      business_name: party.business_name ?? '',
+      register_number: party.register_number ?? '',
       trading_name: party.trading_name ?? '',
       legal_form: party.legal_form ?? '',
       position: party.position ?? '',
@@ -351,6 +358,14 @@ function BasicsTab({
             ...personNamePayload(draft),
             title: draft.title || null,
             position: draft.position || null,
+            // P1b-4 part 2. One record, person and business at once. The
+            // business name is cleared with the box, so an unticked person
+            // never carries a business name nobody can see.
+            is_sole_proprietor: draft.is_sole_proprietor,
+            business_name: draft.is_sole_proprietor
+              ? draft.business_name.trim() || null
+              : null,
+            register_number: draft.register_number.trim() || null,
           }
         : {
             name: draft.name,
@@ -384,6 +399,13 @@ function BasicsTab({
           <>
             <Row label="Title">{party.title ?? '—'}</Row>
             <Row label="Position">{party.position ?? '—'}</Row>
+            {party.is_sole_proprietor && (
+              <Row label="Sole proprietor">
+                {party.business_name
+                  ? `Yes, trading as ${party.business_name}`
+                  : 'Yes, under their own name'}
+              </Row>
+            )}
           </>
         ) : (
           <>
@@ -461,6 +483,70 @@ function BasicsTab({
               className="mt-1"
             />
           </label>
+          <label className="flex items-center gap-2 text-sm text-text-secondary">
+            <input
+              type="checkbox"
+              data-testid="party-sole-proprietor"
+              checked={draft.is_sole_proprietor}
+              onChange={(event) =>
+                setDraft({ ...draft, is_sole_proprietor: event.target.checked })
+              }
+            />
+            Also works as a business (sole proprietor / Einzelunternehmen)
+          </label>
+          {draft.is_sole_proprietor && (
+            <div
+              data-testid="party-sole-proprietor-fields"
+              className="space-y-3 rounded-md border border-border p-3"
+            >
+              <label className="block text-xs font-medium text-text-secondary">
+                Business name (optional)
+                <Input
+                  aria-label="Business name"
+                  value={draft.business_name}
+                  placeholder="Leave empty to invoice under the person's own name"
+                  onChange={(event) =>
+                    setDraft({ ...draft, business_name: event.target.value })
+                  }
+                  className="mt-1"
+                />
+              </label>
+              <label className="block text-xs font-medium text-text-secondary">
+                Legal form
+                <Input
+                  aria-label="Legal form"
+                  list="party-legal-form-suggestions"
+                  value={draft.legal_form}
+                  placeholder="Einzelunternehmen"
+                  onChange={(event) =>
+                    setDraft({ ...draft, legal_form: event.target.value })
+                  }
+                  className="mt-1"
+                />
+                <datalist id="party-legal-form-suggestions">
+                  <option value="Einzelunternehmen" />
+                  <option value="e.U." />
+                </datalist>
+              </label>
+              <label className="block text-xs font-medium text-text-secondary">
+                Register number (optional)
+                <Input
+                  aria-label="Register number"
+                  value={draft.register_number}
+                  placeholder="FN 123456a"
+                  onChange={(event) =>
+                    setDraft({ ...draft, register_number: event.target.value })
+                  }
+                  className="mt-1"
+                />
+              </label>
+              <p className="text-[11px] text-text-tertiary">
+                The VAT ID and other tax numbers go on the Tax tab, exactly as
+                for an organisation. A sole proprietor counts as a business
+                for tax unless you set it otherwise there.
+              </p>
+            </div>
+          )}
         </>
       ) : (
         <>
@@ -1860,6 +1946,9 @@ function ResolvedPanel({
       </h2>
       <dl className="mt-3 space-y-3 text-sm">
         <Resolved label="Made out to" field={resolved.invoice_name} resolved={resolved} />
+        {resolved.owner_name?.value ? (
+          <Resolved label="Owner" field={resolved.owner_name} resolved={resolved} />
+        ) : null}
         <Resolved label="Attention of" field={resolved.contact_name} resolved={resolved} />
         <div>
           <dt className="text-xs text-text-tertiary">Billing address</dt>

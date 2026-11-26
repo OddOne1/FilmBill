@@ -116,7 +116,15 @@ def party_facts(db: Session, party: Party) -> PartyFacts:
             if part
         ) or None
     return PartyFacts(
-        name=party.name or "",
+        # P1b-4: a sole proprietor trading under a business name is
+        # registered under that name, so that is what the registry's answer
+        # is compared with.
+        name=(
+            party.business_name
+            if getattr(party, "is_sole_proprietor", False) and party.business_name
+            else party.name
+        )
+        or "",
         street=getattr(address, "street", None),
         postcode=getattr(address, "zip", None),
         city=getattr(address, "city", None),

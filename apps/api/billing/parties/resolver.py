@@ -42,6 +42,9 @@ BUYER_REASONS = (
     "person_with_vat_id",
     #: A person without one.
     "person",
+    #: P1b-4. A person flagged as a sole proprietor (Einzelunternehmen):
+    #: a person and a business at once, whether or not a VAT ID is on file.
+    "sole_proprietor",
     #: Set to `business` by hand, with no tax identifier anywhere in the
     #: chain. The Austrian Kleinunternehmer (D65): a real business, below the
     #: small-business threshold, holding no UID at all. It needs its own
@@ -87,6 +90,12 @@ class PartyLevel:
     id: Any = None
     name: Optional[str] = None
     trading_name: Optional[str] = None
+    #: P1b-4. A person who also works as a business (Einzelunternehmen), and
+    #: the business name they trade under, if they use one rather than their
+    #: own name. Meaningful only on a person; the service never sets them on
+    #: anything else and the database refuses it.
+    is_sole_proprietor: bool = False
+    business_name: Optional[str] = None
     billing_address: Optional[PartyAddressValue] = None
     postal_address: Optional[PartyAddressValue] = None
     vat_id: Optional[str] = None
@@ -151,6 +160,14 @@ class ResolvedRecipient:
 
     contact_name: ResolvedField = field(default_factory=ResolvedField)
     invoice_name: ResolvedField = field(default_factory=ResolvedField)
+    #: P1b-4. The person behind a sole proprietor's business name, so a
+    #: document can print "Studio Licht — Inhaber Sam Licht". Empty whenever
+    #: `invoice_name` already IS the person's own name, and for everybody who
+    #: is not a sole proprietor.
+    owner_name: ResolvedField = field(default_factory=ResolvedField)
+    #: P1b-4. Whether the party the invoice is made out to is a sole
+    #: proprietor. A plain flag, not inherited: it is a fact about one person.
+    is_sole_proprietor: bool = False
     billing_address: ResolvedField = field(default_factory=ResolvedField)
     vat_id: ResolvedField = field(default_factory=ResolvedField)
     vat_verified: ResolvedField = field(default_factory=ResolvedField)
@@ -256,6 +273,22 @@ def resolve_recipient(chain: Sequence[PartyLevel]) -> ResolvedRecipient:
         if _present(outermost.name)
         else ResolvedField()
     )
+    # P1b-4. A sole proprietor is invoiced under their business name if they
+    # use one, and otherwise under their own name — which is what the line
+    # above already says. When the business name wins, the person's own name
+    # is carried beside it as the owner, so a document can print both.
+    # [Guessing] — which name an Austrian e.U.'s invoice must carry is the
+    # §17 question for the Steuerberater.
+    owner_name = ResolvedField()
+    sole_proprietor = bool(
+        outermost.level == LEVEL_PERSON and outermost.is_sole_proprietor
+    )
+    if sole_proprietor and _present(outermost.business_name):
+        invoice_name = ResolvedField(
+            value=outermost.business_name.strip(), source=outermost.level
+        )
+        if _present(outermost.name):
+            owner_name = ResolvedField(value=outermost.name, source=outermost.level)
 
     billing = _first_address(chain, "billing_address")
     vat = _first(chain, "vat_id")
@@ -289,6 +322,8 @@ def resolve_recipient(chain: Sequence[PartyLevel]) -> ResolvedRecipient:
         names={level.level: level.name for level in chain},
         contact_name=contact_name,
         invoice_name=invoice_name,
+        owner_name=owner_name,
+        is_sole_proprietor=sole_proprietor,
         billing_address=billing,
         vat_id=vat,
         vat_verified=vat_verified,
@@ -347,7 +382,8 @@ def recipient_buyer_type(resolved: ResolvedRecipient) -> tuple[str, str]:
     """`(business | private, reason)`.
 
     The rule (SCOPE D55): `auto` means **business if this is an organisation
-    or has a VAT ID**, and a person without one is private. `business` and
+    or has a VAT ID**, and a person without one is private. P1b-4 adds: a
+    person flagged as a sole proprietor is a business too. `business` and
     `private` set by hand win over the derivation.
 
     A sole trader is the case that makes the VAT ID clause necessary: a
@@ -373,6 +409,11 @@ def recipient_buyer_type(resolved: ResolvedRecipient) -> tuple[str, str]:
         return "business", "organisation"
     if LEVEL_ORGANISATION in resolved.ids or LEVEL_DEPARTMENT in resolved.ids:
         return "business", "organisation"
+    # P1b-4. A sole proprietor is a business by saying so, with or without a
+    # number — the Einzelunternehmen below the small-business threshold holds
+    # none. An explicit `private` above still wins.
+    if resolved.is_sole_proprietor:
+        return "business", "sole_proprietor"
     if _present(resolved.vat_id.value):
         return "business", "person_with_vat_id"
     return "private", "person"

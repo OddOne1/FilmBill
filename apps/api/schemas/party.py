@@ -232,6 +232,10 @@ class PartyResponse(BaseModel):
     last_name: Optional[str] = None
     #: P1b-4. An organisation's or department's second line.
     name_addition: Optional[str] = None
+    #: P1b-4. A person who also works as a business (Einzelunternehmen), and
+    #: the business name they trade under, if any.
+    is_sole_proprietor: bool = False
+    business_name: Optional[str] = None
     trading_name: Optional[str] = None
     legal_form: Optional[str] = None
     register_number: Optional[str] = None
@@ -268,7 +272,7 @@ class PartyResponse(BaseModel):
     #: The latest check, if there is one, so the chip needs no second call.
     latest_vat_check: Optional[PartyVatCheckResponse] = None
     #: `business`/`private` and why — `explicit`, `organisation`,
-    #: `person_with_vat_id` or `person`. Derived by the resolver so the
+    #: `person_with_vat_id`, `sole_proprietor` (P1b-4) or `person`. Derived by the resolver so the
     #: screen can show the reason rather than re-deriving it.
     buyer_type: Optional[str] = None
     buyer_type_reason: Optional[str] = None
@@ -343,6 +347,9 @@ class PartyWrite(BaseModel):
     last_name: Optional[str] = Field(default=None, max_length=255)
     #: P1b-4. An organisation's or department's second line.
     name_addition: Optional[str] = Field(default=None, max_length=255)
+    #: P1b-4. Person only: also works as a business, and under which name.
+    is_sole_proprietor: Optional[bool] = None
+    business_name: Optional[str] = Field(default=None, max_length=255)
     parent_id: Optional[uuid.UUID] = None
     trading_name: Optional[str] = Field(default=None, max_length=255)
     legal_form: Optional[str] = Field(default=None, max_length=64)
@@ -427,6 +434,11 @@ class ResolvedRecipientResponse(BaseModel):
     names: JsonObject = {}
     contact_name: ResolvedFieldResponse
     invoice_name: ResolvedFieldResponse
+    #: P1b-4. The person behind a sole proprietor's business name, when the
+    #: business name is what `invoice_name` says. Null otherwise.
+    owner_name: ResolvedFieldResponse
+    #: P1b-4. Whether the party invoiced is a sole proprietor.
+    is_sole_proprietor: bool = False
     billing_address: ResolvedFieldResponse
     vat_id: ResolvedFieldResponse
     vat_verified: ResolvedFieldResponse

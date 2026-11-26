@@ -230,6 +230,18 @@ class Party(CompanyScoped, Base):
     #: detail page; whether it prints on a document is a P2 question.
     name_addition: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     trading_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    #: P1b-4 part 2. A person who also works as a business — a sole
+    #: proprietor, an Austrian Einzelunternehmen. ONE record, person and
+    #: business at once: they can be crew, supplier and customer, carry typed
+    #: tax IDs and checks exactly like an organisation, and `business_status
+    #: = auto` resolves them to business. Person-only (CHECK below).
+    is_sole_proprietor: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+    #: The name a sole proprietor trades under, if they use one rather than
+    #: their own ("Studio Licht"). When set it is what an invoice is made out
+    #: to, and the person's own name is carried as the owner.
+    business_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     legal_form: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     register_number: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     register_court: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
@@ -370,6 +382,11 @@ class Party(CompanyScoped, Base):
         CheckConstraint(
             "type <> 'person' OR name_addition IS NULL",
             name="ck_parties_name_addition_not_person",
+        ),
+        # P1b-4 part 2. Only a person is a sole proprietor.
+        CheckConstraint(
+            "type = 'person' OR (NOT is_sole_proprietor AND business_name IS NULL)",
+            name="ck_parties_sole_proprietor_person_only",
         ),
         Index(
             "uq_parties_company_number",

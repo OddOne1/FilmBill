@@ -9196,6 +9196,8 @@ export interface components {
          *     in which case it is derived from them (P1b-4). The router says which.
          */
         PartyCreate: {
+            /** Business Name */
+            business_name?: string | null;
             /** Business Status */
             business_status?: ("auto" | "business" | "private") | null;
             /** Default Currency */
@@ -9212,6 +9214,8 @@ export interface components {
             is_customer?: boolean | null;
             /** Is Partner */
             is_partner?: boolean | null;
+            /** Is Sole Proprietor */
+            is_sole_proprietor?: boolean | null;
             /** Is Supplier */
             is_supplier?: boolean | null;
             /** Language */
@@ -9292,6 +9296,8 @@ export interface components {
              * @default []
              */
             bank_accounts: components["schemas"]["PartyBankAccountResponse"][];
+            /** Business Name */
+            business_name?: string | null;
             /**
              * Business Status
              * @default auto
@@ -9357,6 +9363,11 @@ export interface components {
              * @default false
              */
             is_partner: boolean;
+            /**
+             * Is Sole Proprietor
+             * @default false
+             */
+            is_sole_proprietor: boolean;
             /**
              * Is Supplier
              * @default false
@@ -9680,6 +9691,8 @@ export interface components {
          *     one" is both clearer and the only thing that keeps the history honest.
          */
         PartyWrite: {
+            /** Business Name */
+            business_name?: string | null;
             /** Business Status */
             business_status?: ("auto" | "business" | "private") | null;
             /** Default Currency */
@@ -9696,6 +9709,8 @@ export interface components {
             is_customer?: boolean | null;
             /** Is Partner */
             is_partner?: boolean | null;
+            /** Is Sole Proprietor */
+            is_sole_proprietor?: boolean | null;
             /** Is Supplier */
             is_supplier?: boolean | null;
             /** Language */
@@ -10188,6 +10203,11 @@ export interface components {
                 [key: string]: unknown;
             };
             invoice_name: components["schemas"]["ResolvedFieldResponse"];
+            /**
+             * Is Sole Proprietor
+             * @default false
+             */
+            is_sole_proprietor: boolean;
             language: components["schemas"]["ResolvedFieldResponse"];
             /**
              * Names
@@ -10198,6 +10218,7 @@ export interface components {
             };
             /** Own Level */
             own_level: string;
+            owner_name: components["schemas"]["ResolvedFieldResponse"];
             payment_terms_days: components["schemas"]["ResolvedFieldResponse"];
             payment_terms_text: components["schemas"]["ResolvedFieldResponse"];
             phone: components["schemas"]["ResolvedFieldResponse"];

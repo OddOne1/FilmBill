@@ -75,6 +75,7 @@ function makeParty(overrides: Partial<Party> = {}): Party {
     tax_country: null,
     tax_status_note: null,
     name_not_split: false,
+    is_sole_proprietor: false,
     needs_attention_reasons: [],
     recheck_interval_days: null,
     tax_override: null,
@@ -139,6 +140,8 @@ function makeResolved(overrides: Partial<ResolvedRecipient> = {}): ResolvedRecip
     einvoice_routing: field(null, null),
     buyer_type: 'business',
     buyer_type_reason: 'organisation',
+    is_sole_proprietor: false,
+    owner_name: { value: null, source: null },
     ...overrides,
   }
 }
@@ -629,5 +632,63 @@ describe('a person’s name in parts (P1b-4)', () => {
     const body = vi.mocked(api.patch).mock.calls[0][1] as Record<string, unknown>
     expect(body).toMatchObject({ name: 'ORF', name_addition: 'c/o Küniglberg' })
     expect(body).not.toHaveProperty('first_name')
+  })
+})
+
+describe('a sole proprietor (P1b-4 part 2)', () => {
+  it('ticking the box reveals the business fields and saves them on the person', async () => {
+    mockApi({ party: makeParty({ first_name: 'Sam', last_name: 'Licht', name: 'Sam Licht' }) })
+    render(<PartyDetailPage />)
+    await ready()
+    expect(screen.queryByTestId('party-sole-proprietor-fields')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('party-sole-proprietor'))
+    expect(screen.getByTestId('party-sole-proprietor-fields')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Business name'), { target: { value: 'Studio Licht' } })
+    fireEvent.change(screen.getByLabelText('Legal form'), { target: { value: 'Einzelunternehmen' } })
+    fireEvent.click(screen.getByTestId('party-basics-save'))
+    await waitFor(() => expect(vi.mocked(api.patch)).toHaveBeenCalled())
+    expect(vi.mocked(api.patch).mock.calls[0][1]).toMatchObject({
+      is_sole_proprietor: true,
+      business_name: 'Studio Licht',
+      legal_form: 'Einzelunternehmen',
+    })
+  })
+
+  it('unticking sends no business name, so none is left behind unseen', async () => {
+    mockApi({
+      party: makeParty({
+        first_name: 'Sam',
+        last_name: 'Licht',
+        name: 'Sam Licht',
+        is_sole_proprietor: true,
+        business_name: 'Studio Licht',
+      }),
+    })
+    render(<PartyDetailPage />)
+    await ready()
+    fireEvent.click(screen.getByTestId('party-sole-proprietor'))
+    fireEvent.click(screen.getByTestId('party-basics-save'))
+    await waitFor(() => expect(vi.mocked(api.patch)).toHaveBeenCalled())
+    expect(vi.mocked(api.patch).mock.calls[0][1]).toMatchObject({
+      is_sole_proprietor: false,
+      business_name: null,
+    })
+  })
+
+  it('the resolved panel shows the business name and the owner the server resolved', async () => {
+    mockApi({
+      party: makeParty({ is_sole_proprietor: true, business_name: 'Studio Licht' }),
+      resolved: {
+        ...makeResolved(),
+        is_sole_proprietor: true,
+        invoice_name: { value: 'Studio Licht', source: 'person' },
+        owner_name: { value: 'Maria Huber', source: 'person' },
+      },
+    })
+    render(<PartyDetailPage />)
+    const panel = await ready()
+    expect(panel).toHaveTextContent('Studio Licht')
+    expect(panel).toHaveTextContent('Owner')
+    expect(panel).toHaveTextContent('Maria Huber')
   })
 })

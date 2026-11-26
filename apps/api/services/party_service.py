@@ -173,7 +173,7 @@ def _depth_of(db: Session, company_id: uuid.UUID, party: Party) -> int:
 # ─── Names (P1b-4) ──────────────────────────────────────────────────────────
 
 NAME_PART_FIELDS = ("first_name", "middle_name", "last_name")
-NAME_FIELDS = NAME_PART_FIELDS + ("name_addition",)
+NAME_FIELDS = NAME_PART_FIELDS + ("name_addition", "business_name")
 
 
 def clean_name_changes(changes: dict) -> dict:
@@ -212,6 +212,25 @@ def validate_names(party_type: str, current: Optional[Party], changes: dict) -> 
         raise PartyError(
             "The additional line is for organisations and departments. For a "
             "person, put it in the position instead."
+        )
+
+    # P1b-4 part 2: the sole proprietor flag and its business name.
+    if party_type != PARTY_PERSON:
+        if after("is_sole_proprietor"):
+            raise PartyError(
+                "Only a person can be a sole proprietor. An organisation is "
+                "already a business; leave the box unticked."
+            )
+        if after("business_name"):
+            raise PartyError(
+                "A business name is for a person who works as a sole "
+                "proprietor. For an organisation, use the trading name."
+            )
+    elif after("business_name") and not after("is_sole_proprietor"):
+        raise PartyError(
+            "This person has a business name but is not marked as a sole "
+            "proprietor. Tick “Also works as a business”, or clear the "
+            "business name."
         )
 
     if party_type == PARTY_PERSON:
@@ -482,6 +501,10 @@ def _level_of(db: Session, party: Party) -> PartyLevel:
         id=party.id,
         name=party.name,
         trading_name=party.trading_name,
+        is_sole_proprietor=bool(
+            party.type == PARTY_PERSON and party.is_sole_proprietor
+        ),
+        business_name=party.business_name if party.type == PARTY_PERSON else None,
         billing_address=_address_value(billing),
         postal_address=_address_value(postal),
         # The primary VAT-like identifier, not a column. `vat_id` keeps its

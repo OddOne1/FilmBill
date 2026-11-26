@@ -129,6 +129,7 @@ function makeParty(overrides: Partial<Party> = {}): Party {
     tax_country: 'DE',
     tax_status_note: null,
     name_not_split: false,
+    is_sole_proprietor: false,
     needs_attention_reasons: [],
     recheck_interval_days: null,
     tax_override: null,
@@ -180,6 +181,8 @@ function makeResolved(overrides: Partial<ResolvedRecipient> = {}): ResolvedRecip
     einvoice_routing: field(null, null),
     buyer_type: 'business',
     buyer_type_reason: 'organisation',
+    is_sole_proprietor: false,
+    owner_name: { value: null, source: null },
     ...overrides,
   }
 }

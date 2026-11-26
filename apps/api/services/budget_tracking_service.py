@@ -1474,7 +1474,8 @@ def import_context(db: Session, budget: Budget) -> ActualImportContext:
         .filter(Party.company_id == budget.company_id, Party.is_active.is_(True))
         .all()
     ):
-        for candidate in (party.name, party.trading_name):
+        # P1b-4: a sole proprietor's business name is a name too.
+        for candidate in (party.name, party.trading_name, party.business_name):
             if not candidate:
                 continue
             name = candidate.strip().lower()

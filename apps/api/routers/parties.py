@@ -81,6 +81,10 @@ PARTY_AUDITED = (
     "middle_name",
     "last_name",
     "name_addition",
+    # P1b-4 part 2. Whether this person is also a business, and the name it
+    # trades under: both change what an invoice is made out to.
+    "is_sole_proprietor",
+    "business_name",
     "trading_name",
     # `vat_id` is gone from here with the column (D59). A change to an
     # identifier is audited on the identifier itself, under
@@ -220,7 +224,8 @@ def _party_response(
             name: getattr(party, name)
             for name in (
                 "id", "type", "parent_id", "name", "first_name", "middle_name",
-                "last_name", "name_addition", "trading_name", "legal_form",
+                "last_name", "name_addition", "is_sole_proprietor",
+                "business_name", "trading_name", "legal_form",
                 "register_number", "register_court", "title", "position",
                 "is_customer", "is_supplier", "is_partner", "is_crew",
                 "party_number", "language", "default_currency", "payment_terms_days",
@@ -916,10 +921,11 @@ def read_resolved(
         names=dict(resolved.names),
         buyer_type=inputs["buyer_type"],
         buyer_type_reason=inputs["buyer_type_reason"],
+        is_sole_proprietor=resolved.is_sole_proprietor,
         **{
             name: _field(name)
             for name in (
-                "contact_name", "invoice_name", "billing_address", "vat_id",
+                "contact_name", "invoice_name", "owner_name", "billing_address", "vat_id",
                 "vat_verified", "tax_id_kind", "tax_status_note",
                 "tax_id_evidence", "tax_country", "business_status",
                 "tax_override", "language", "default_currency",
