@@ -30,7 +30,7 @@ from ..billing.resources.device_csv import (
 )
 from ..database import get_db
 from ..middleware.company import Membership, require
-from ..models.catalog import Item
+from ..models.catalog import Item, RentalFactorGroup
 from ..models.device import UNIT_REMOVED, Device, DeviceUnit
 from ..models.party import Party
 from ..schemas.device import (
@@ -41,6 +41,9 @@ from ..schemas.device import (
     DeviceImportPreviewResponse,
     DeviceImportRowResponse,
     DevicePage,
+    DeviceRentalPrices,
+    DeviceRentalWrite,
+    CatalogItemRef,
     DeviceResponse,
     DeviceUnitChangeResponse,
     DeviceUnitReactivate,
@@ -147,6 +150,65 @@ def _units(db: Session, membership: Membership, units: list[DeviceUnit]) -> list
     ]
 
 
+#: Rates are written into the price list, so they need its edit key too.
+RATES_EDIT_PERMISSION = "catalog.edit"
+
+
+def _rental(db: Session, membership: Membership, device: Device) -> DeviceRentalPrices:
+    """The Rental prices section: the linked catalog item's day rates."""
+    from ..services.catalog_service import rate_of
+
+    visible = _can_see_price(membership)
+    can_devices = membership.can("devices.edit")
+    can_catalog = membership.can(RATES_EDIT_PERMISSION)
+    reason = None
+    if not can_devices:
+        reason = (
+            "You can see the rental prices but not change them: that needs the "
+            "gear edit permission. An owner or administrator can grant it under "
+            "Settings → Company → Members."
+        )
+    elif not can_catalog:
+        reason = (
+            "Your role can change gear but not the price list. These prices are "
+            "the catalog's, so changing them needs the catalog edit permission. "
+            "An owner or administrator can grant it under Settings → Company → Members."
+        )
+    item = device_service.linked_item(db, device)
+    if item is None:
+        existing = device_service.existing_item_for(db, device)
+        return DeviceRentalPrices(
+            linked=False,
+            rates_visible=visible,
+            can_edit=can_devices and can_catalog,
+            edit_blocked_reason=reason,
+            existing_item=CatalogItemRef(id=existing.id, name=existing.name_de) if existing else None,
+        )
+    group_name = None
+    if item.rental_factor_group_id is not None:
+        group_name = (
+            db.query(RentalFactorGroup.name)
+            .filter(
+                RentalFactorGroup.id == item.rental_factor_group_id,
+                RentalFactorGroup.company_id == device.company_id,
+            )
+            .scalar()
+        )
+    return DeviceRentalPrices(
+        linked=True,
+        item_id=item.id,
+        item_name=item.name_de,
+        item_is_active=item.is_active,
+        rates_visible=visible,
+        price_per_day=rate_of(item, rate_type="bill", period_unit="day") if visible else None,
+        cost_per_day=rate_of(item, rate_type="cost", period_unit="day") if visible else None,
+        rental_factor_group_id=item.rental_factor_group_id,
+        rental_factor_group_name=group_name,
+        can_edit=can_devices and can_catalog,
+        edit_blocked_reason=reason,
+    )
+
+
 def _detail(db: Session, membership: Membership, device: Device) -> DeviceDetail:
     base = _responses(db, membership, [device])[0]
     units = (
@@ -161,6 +223,7 @@ def _detail(db: Session, membership: Membership, device: Device) -> DeviceDetail
     return DeviceDetail(
         **base.model_dump(),
         units=_units(db, membership, units),
+        rental=_rental(db, membership, device),
     )
 
 
@@ -413,8 +476,6 @@ def create_device(
             actor=audit.actor_from(request, membership=membership),
             **fields,
         )
-    except LookupError:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Catalog item not found") from None
     except device_service.DeviceConflict as error:
         _refuse(error, status.HTTP_409_CONFLICT)
     except device_service.DeviceError as error:
@@ -450,8 +511,6 @@ def update_device(
         device_service.update_device(
             db, device, actor=audit.actor_from(request, membership=membership), changes=changes
         )
-    except LookupError:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Catalog item not found") from None
     except device_service.DeviceConflict as error:
         _refuse(error, status.HTTP_409_CONFLICT)
     except device_service.DeviceError as error:
@@ -487,6 +546,77 @@ def reactivate_device(
         device_service.reactivate_device(db, device, actor=audit.actor_from(request, membership=membership))
     except device_service.DeviceConflict as error:
         _refuse(error, status.HTTP_409_CONFLICT)
+    db.commit()
+    db.refresh(device)
+    return _detail(db, membership, device)
+
+
+# ─── Rental prices (B2b-2) ──────────────────────────────────────────────────
+
+
+def _rates_editor(membership: Membership) -> None:
+    """`devices.edit` came with the route; the price list's own key is the
+    second check. Missing, it answers like any missing permission: 404."""
+    if not membership.can(RATES_EDIT_PERMISSION):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+
+
+@router.post("/devices/{device_id}/rental/setup", response_model=DeviceDetail)
+def set_up_rental(
+    device_id: uuid.UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    membership: Membership = Depends(require("devices.edit")),
+):
+    """Give the device its catalog item: the unlinked equipment item of
+    exactly its name when there is one ("Use the existing ..."), otherwise a
+    new one (kind equipment rental, unit day, the default equipment
+    category). Never a second item of the same name."""
+    _rates_editor(membership)
+    device = _device_or_404(db, membership, device_id)
+    try:
+        device_service.set_up_rental(db, device, actor=audit.actor_from(request, membership=membership))
+    except device_service.DeviceConflict as error:
+        _refuse(error, status.HTTP_409_CONFLICT)
+    db.commit()
+    db.refresh(device)
+    return _detail(db, membership, device)
+
+
+@router.put("/devices/{device_id}/rental", response_model=DeviceDetail)
+def update_rental(
+    device_id: uuid.UUID,
+    body: DeviceRentalWrite,
+    request: Request,
+    db: Session = Depends(get_db),
+    membership: Membership = Depends(require("devices.edit")),
+):
+    """Price per day, cost per day and rental factor table — written to the
+    linked catalog item through the catalog service and audited by the
+    catalog's own events. Only the fields sent change."""
+    _rates_editor(membership)
+    device = _device_or_404(db, membership, device_id)
+    changes = body.model_dump(exclude_unset=True)
+    if not _can_see_price(membership) and changes.get("cost_per_day") not in (None, ""):
+        _refuse(
+            ValueError(
+                "You cannot enter a cost per day: costs are only for people who "
+                "can see budgets. Leave that field empty."
+            ),
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+        )
+    try:
+        device_service.update_rental(
+            db,
+            device,
+            actor=audit.actor_from(request, membership=membership),
+            currency=getattr(membership.company, "default_currency", None) or "EUR",
+            changes=changes,
+        )
+    except LookupError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Rental factor table not found") from None
+    except device_service.DeviceError as error:
+        _refuse(error, status.HTTP_422_UNPROCESSABLE_ENTITY)
     db.commit()
     db.refresh(device)
     return _detail(db, membership, device)

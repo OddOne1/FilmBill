@@ -8,6 +8,7 @@ vi.mock('@/lib/api', () => ({
     get: vi.fn(),
     post: vi.fn(),
     patch: vi.fn(),
+    put: vi.fn(),
     upload: vi.fn(),
     download: vi.fn(),
   },
@@ -95,12 +96,42 @@ function device(overrides: Record<string, unknown> = {}) {
     counts,
     created_at: '2026-11-26T10:00:00Z',
     updated_at: '2026-11-26T10:00:00Z',
+    rental: rental(),
     units: [
       unit({ id: 'u1', serial_number: 'AX-1' }),
       unit({ id: 'u2', serial_number: 'AX-2' }),
     ],
     ...overrides,
   }
+}
+
+function rental(overrides: Record<string, unknown> = {}) {
+  return {
+    linked: false,
+    item_id: null,
+    item_name: null,
+    item_is_active: null,
+    rates_visible: true,
+    price_per_day: null,
+    cost_per_day: null,
+    rental_factor_group_id: null,
+    rental_factor_group_name: null,
+    can_edit: true,
+    edit_blocked_reason: null,
+    existing_item: null,
+    ...overrides,
+  }
+}
+
+const LINKED = {
+  linked: true,
+  item_id: 'i1',
+  item_name: 'Alexa 35',
+  item_is_active: true,
+  price_per_day: '1200.00',
+  cost_per_day: '300.00',
+  rental_factor_group_id: 'g1',
+  rental_factor_group_name: 'Standard',
 }
 
 function unit(overrides: Record<string, unknown> = {}) {
@@ -133,6 +164,12 @@ function routeGets(detail = device()) {
       return { devices: [row], total: 1, categories: ['Camera', 'Light'] }
     }
     if (path.startsWith('/catalog/items')) return { items: [], total: 0, limit: 200, offset: 0 }
+    if (path.startsWith('/catalog/rental-factor-groups')) {
+      return [
+        { id: 'g1', name: 'Standard', notes: null, is_active: true, factors: [] },
+        { id: 'g2', name: 'Langzeit', notes: null, is_active: true, factors: [] },
+      ]
+    }
     if (path.startsWith('/parties')) {
       return { parties: [{ id: 's1', name: 'ARRI Rental Wien' }], total: 1, limit: 200, offset: 0 }
     }
@@ -381,5 +418,87 @@ describe('one device', () => {
     expect(screen.queryByTestId('unit-remove')).not.toBeInTheDocument()
     expect(screen.queryByTestId('add-serials')).not.toBeInTheDocument()
     expect(screen.getByTestId('gear-read-only')).toBeInTheDocument()
+  })
+})
+
+describe('rental prices on the device', () => {
+  it('has no "Rented out as" picker; without an item it offers Set up rental price', async () => {
+    vi.mocked(api.post).mockResolvedValue(device({ rental: rental(LINKED) }))
+    render(<DevicePage />)
+    const setup = await screen.findByTestId('rental-setup')
+    expect(setup).toHaveTextContent('Set up rental price')
+    expect(screen.queryByText(/Rented out as/)).not.toBeInTheDocument()
+    expect(screen.queryByTestId('device-catalog-item')).not.toBeInTheDocument()
+    fireEvent.click(setup)
+    await waitFor(() => expect(vi.mocked(api.post)).toHaveBeenCalledWith('/devices/d1/rental/setup', {}))
+    expect(await screen.findByTestId('rental-catalog-name')).toHaveTextContent('Priced in the catalog as ‘Alexa 35’')
+    expect(screen.getByRole('link', { name: /Alexa 35/ })).toHaveAttribute('href', '/catalog/i1')
+  })
+
+  it('offers the unlinked catalog item of the same name instead of a duplicate', async () => {
+    routeGets(device({ rental: rental({ existing_item: { id: 'i9', name: 'Alexa 35' } }) }))
+    render(<DevicePage />)
+    expect(await screen.findByTestId('rental-setup')).toHaveTextContent("Use the existing 'Alexa 35'")
+  })
+
+  it('saving sends only what changed, a German price as the API wants it', async () => {
+    routeGets(device({ rental: rental(LINKED) }))
+    vi.mocked(api.put).mockResolvedValue(device({ rental: rental({ ...LINKED, price_per_day: '1450.00' }) }))
+    render(<DevicePage />)
+    const price = await screen.findByTestId('rental-price')
+    expect(price).toHaveValue('1200,00')
+    expect(screen.getByTestId('rental-cost')).toHaveValue('300,00')
+    expect(screen.getByTestId('rental-save')).toBeDisabled()
+    expect(screen.getByTestId('rental-save-why')).toHaveTextContent('Nothing changed yet.')
+    fireEvent.change(price, { target: { value: '1.450,00' } })
+    await waitFor(() => expect(within(screen.getByTestId('rental-group')).getByText('Langzeit')).toBeInTheDocument())
+    fireEvent.change(screen.getByTestId('rental-group'), { target: { value: 'g2' } })
+    fireEvent.click(screen.getByTestId('rental-save'))
+    await waitFor(() =>
+      expect(vi.mocked(api.put)).toHaveBeenCalledWith('/devices/d1/rental', {
+        price_per_day: '1450.00',
+        rental_factor_group_id: 'g2',
+      }),
+    )
+    expect(await screen.findByTestId('device-notice')).toHaveTextContent('the catalog item has the same numbers')
+  })
+
+  it('without the catalog edit permission the prices are read-only and the page says why', async () => {
+    routeGets(
+      device({
+        rental: rental({
+          ...LINKED,
+          can_edit: false,
+          edit_blocked_reason: 'Your role can change gear but not the price list.',
+        }),
+      }),
+    )
+    render(<DevicePage />)
+    expect(await screen.findByTestId('rental-price-read')).toHaveTextContent('1,200.00')
+    expect(screen.queryByTestId('rental-form')).not.toBeInTheDocument()
+    expect(screen.getByTestId('rental-why')).toHaveTextContent('not the price list')
+  })
+
+  it('staff see the catalog name and no price or cost', async () => {
+    seed(STAFF)
+    routeGets(
+      device({
+        purchase_price: null,
+        price_visible: false,
+        rental: rental({
+          ...LINKED,
+          price_per_day: null,
+          cost_per_day: null,
+          rates_visible: false,
+          can_edit: false,
+          edit_blocked_reason: 'You can see the rental prices but not change them.',
+        }),
+      }),
+    )
+    render(<DevicePage />)
+    expect(await screen.findByTestId('rental-catalog-name')).toHaveTextContent('Alexa 35')
+    expect(screen.queryByText('Price per day (net)')).not.toBeInTheDocument()
+    expect(screen.queryByText('Cost per day (net)')).not.toBeInTheDocument()
+    expect(screen.getByTestId('rental-why')).toHaveTextContent('only shown to people who can see budgets')
   })
 })

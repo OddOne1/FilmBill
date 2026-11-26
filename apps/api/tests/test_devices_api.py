@@ -486,22 +486,22 @@ def test_one_active_device_of_a_name_and_an_archived_one_does_not_count(pg_clien
     assert len(every["devices"]) == 2
 
 
-def test_a_device_links_only_to_an_equipment_item_of_this_company(pg_client, pg_db, world):
+def test_a_device_is_not_linked_to_a_catalog_item_by_id_any_more(pg_client, pg_db, world):
+    """B2b-2: no "Rented out as" picker. A device gets its catalog item only
+    through Set up rental price (`test_device_rental.py`), so the create and
+    update bodies no longer take an item id at all."""
     camera = make_item(pg_db, world["company"], sku="CAM-1", name_de="Alexa 35 Paket", kind="equipment_rental")
-    labor = make_item(pg_db, world["company"], sku="L-1", name_de="Kameramann", kind="labor")
-    other_company = make_company(pg_db, "Else GmbH")
-    theirs = make_item(pg_db, other_company, sku="CAM-9", name_de="Their camera")
-
-    linked = _create(pg_client, world, catalog_item_id=str(camera.id))
-    assert linked["catalog_item_name"] == "Alexa 35 Paket"
-    refused = pg_client.post(
-        "/devices", headers=_h(world), json={"name": "X", "catalog_item_id": str(labor.id)}
+    made = pg_client.post(
+        "/devices", headers=_h(world), json={"name": "X", "catalog_item_id": str(camera.id)}
     )
-    assert refused.status_code == 422 and "not equipment" in refused.json()["detail"]
-    hidden = pg_client.post(
-        "/devices", headers=_h(world), json={"name": "Y", "catalog_item_id": str(theirs.id)}
+    assert made.status_code == 422
+    device = _create(pg_client, world)
+    changed = pg_client.patch(
+        f"/devices/{device['id']}", headers=_h(world), json={"catalog_item_id": str(camera.id)}
     )
-    assert hidden.status_code == 404
+    assert changed.status_code == 422
+    pg_db.expire_all()
+    assert pg_db.get(Device, device["id"]).catalog_item_id is None
 
 
 def test_search_category_filter_and_suggestions(pg_client, pg_db, world):
@@ -657,6 +657,8 @@ def _every_device_request(device_id, unit_id):
         ("patch", base, {"notes": "staff"}, None),
         ("post", f"{base}/archive", None, None),
         ("post", f"{base}/reactivate", None, None),
+        ("post", f"{base}/rental/setup", None, None),
+        ("put", f"{base}/rental", {"price_per_day": "1.00"}, None),
         ("post", f"{base}/units", {"serial_numbers": ["STAFF-1"]}, None),
         ("patch", unit, {"notes": "staff"}, None),
         ("post", f"{unit}/remove", {"status": "retired", "reason": "staff"}, None),

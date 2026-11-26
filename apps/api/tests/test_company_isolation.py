@@ -558,6 +558,10 @@ CASES: dict[str, object] = {
         "body": {"status": "lost", "reason": "Stolen"}
     },
     "POST /devices/{device_id}/units/{device_unit_id}/reactivate": {"body": {}},
+    # B2b-2 part 1. B's device: a set-up or a rate write found by id alone
+    # would link B's device to a new item, or change B's price list.
+    "POST /devices/{device_id}/rental/setup": {"body": None},
+    "PUT /devices/{device_id}/rental": {"body": {"price_per_day": "1.00"}},
     # Pure arithmetic, no stored row — and still a company endpoint.
     "POST /calc/preview": {
         "body": {

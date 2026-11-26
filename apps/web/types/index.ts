@@ -288,6 +288,8 @@ export type DeviceUnitChangeResult = Schemas['DeviceUnitChangeResponse']
 export type DeviceImportRow = Schemas['DeviceImportRowResponse']
 export type DeviceImportPreview = Schemas['DeviceImportPreviewResponse']
 export type DeviceImportResult = Schemas['DeviceImportApplyResponse']
+/** B2b-2: the device's rental prices — its catalog item's day rates. */
+export type DeviceRentalPrices = Schemas['DeviceRentalPrices']
 /** `active` · `needs_check` · `in_repair` · `lost` · `retired` · `sold`. */
 export type UnitStatus = DeviceUnit['status']
 

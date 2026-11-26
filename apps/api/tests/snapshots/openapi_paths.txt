@@ -181,6 +181,7 @@ POST /devices/import
 POST /devices/import/preview
 POST /devices/{device_id}/archive
 POST /devices/{device_id}/reactivate
+POST /devices/{device_id}/rental/setup
 POST /devices/{device_id}/units
 POST /devices/{device_id}/units/{device_unit_id}/reactivate
 POST /devices/{device_id}/units/{device_unit_id}/remove
@@ -223,4 +224,5 @@ PUT /budgets/{budget_id}/production-fee
 PUT /catalog/items/{item_id}/rates
 PUT /catalog/rental-factor-groups/{group_id}/factors
 PUT /company/production-fee
+PUT /devices/{device_id}/rental
 PUT /projects/{project_id}/blocks/{block_id}/days

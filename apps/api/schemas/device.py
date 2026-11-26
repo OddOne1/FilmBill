@@ -86,8 +86,54 @@ class DeviceResponse(BaseModel):
     updated_at: datetime
 
 
+class CatalogItemRef(BaseModel):
+    id: uuid.UUID
+    name: str
+
+
+class DeviceRentalPrices(BaseModel):
+    """The device's prices — which ARE its catalog item's rates (B2b-2).
+
+    `linked: false` means the device has no catalog item yet; the page
+    offers "Set up rental price", or "Use the existing 'X'" when
+    `existing_item` names an unlinked equipment item of the same name.
+
+    **Rates are cost and price information**: `price_per_day` and
+    `cost_per_day` are served only with `budgets.view`, and
+    `rates_visible` says which of the two a `null` is.
+
+    `can_edit` needs `devices.edit` AND `catalog.edit`, because writing
+    them changes the price list; `edit_blocked_reason` is the sentence the
+    page shows when it is false (rule 17c).
+    """
+
+    linked: bool
+    item_id: Optional[uuid.UUID] = None
+    item_name: Optional[str] = None
+    item_is_active: Optional[bool] = None
+    rates_visible: bool
+    price_per_day: Optional[Money] = None
+    cost_per_day: Optional[Money] = None
+    rental_factor_group_id: Optional[uuid.UUID] = None
+    rental_factor_group_name: Optional[str] = None
+    can_edit: bool
+    edit_blocked_reason: Optional[str] = None
+    existing_item: Optional[CatalogItemRef] = None
+
+
 class DeviceDetail(DeviceResponse):
     units: list[DeviceUnitResponse] = []
+    rental: DeviceRentalPrices
+
+
+class DeviceRentalWrite(BaseModel):
+    """Only what changes; `null` removes the rate (or the factor table)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    price_per_day: Optional[Money] = None
+    cost_per_day: Optional[Money] = None
+    rental_factor_group_id: Optional[uuid.UUID] = None
 
 
 class DevicePage(BaseModel):
@@ -106,7 +152,6 @@ class DeviceCreate(BaseModel):
     quantity_owned: int = Field(default=0, ge=0, le=100_000)
     purchase_price: Optional[Money] = None
     purchase_date: Optional[date] = None
-    catalog_item_id: Optional[uuid.UUID] = None
     notes: Optional[str] = None
 
 
@@ -120,7 +165,6 @@ class DeviceUpdate(BaseModel):
     quantity_owned: Optional[int] = Field(default=None, ge=0, le=100_000)
     purchase_price: Optional[Money] = None
     purchase_date: Optional[date] = None
-    catalog_item_id: Optional[uuid.UUID] = None
     notes: Optional[str] = None
 
 

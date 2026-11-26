@@ -412,6 +412,137 @@ def rate_of(
     return None
 
 
+#: The value that means "leave this alone" in `update_day_pricing`, because
+#: `None` already means "remove the rate".
+UNCHANGED = object()
+
+
+def default_equipment_category(db: Session, company_id: uuid.UUID) -> Optional[ItemCategory]:
+    """The category `seed_catalog` made for equipment rental: the first
+    active top-level category of that kind."""
+    return (
+        db.query(ItemCategory)
+        .filter(
+            ItemCategory.company_id == company_id,
+            ItemCategory.kind == "equipment_rental",
+            ItemCategory.parent_id.is_(None),
+            ItemCategory.is_active.is_(True),
+        )
+        .order_by(ItemCategory.position, ItemCategory.created_at)
+        .first()
+    )
+
+
+def create_equipment_item(
+    db: Session, *, company_id: uuid.UUID, name: str, actor: audit.Actor, reason: Optional[str] = None
+) -> Item:
+    """A day-priced equipment rental item with this name, in the default
+    equipment category, without rates yet. Audited as the catalog's own
+    `item.created`. No commit.
+
+    Used by a device's "Set up rental price" (B2b-2): the device's prices ARE
+    this item's rates, so there is one place a price lives.
+    """
+    day = (
+        db.query(Unit)
+        .filter(Unit.company_id == company_id, Unit.key == "day", Unit.is_active.is_(True))
+        .first()
+    )
+    category = default_equipment_category(db, company_id)
+    item = Item(
+        company_id=company_id,
+        name_de=" ".join(name.split()),
+        kind="equipment_rental",
+        category_id=category.id if category else None,
+        unit_id=day.id if day else None,
+        is_active=True,
+    )
+    db.add(item)
+    db.flush()
+    audit.record(
+        db,
+        actor,
+        item,
+        ITEM_CREATED,
+        after=audit.snapshot(item, ITEM_AUDITED),
+        reason=reason,
+    )
+    return item
+
+
+def update_day_pricing(
+    db: Session,
+    *,
+    item: Item,
+    actor: audit.Actor,
+    currency: str,
+    bill_day=UNCHANGED,
+    cost_day=UNCHANGED,
+    rental_factor_group_id=UNCHANGED,
+    reason: Optional[str] = None,
+) -> None:
+    """Set an item's bill rate per day, cost rate per day and factor table,
+    leaving every other rate it has alone. No commit.
+
+    `UNCHANGED` leaves a value as it is; `None` removes the rate (or the
+    factor table). Audited with the catalog's own events — `item.rates_changed`
+    and, for the factor table, `item.updated` — so a price changed from the
+    device page reads exactly like one changed in the catalog.
+    """
+    if rental_factor_group_id is not UNCHANGED and rental_factor_group_id is not None:
+        group = (
+            db.query(RentalFactorGroup)
+            .filter(
+                RentalFactorGroup.id == rental_factor_group_id,
+                RentalFactorGroup.company_id == item.company_id,
+            )
+            .first()
+        )
+        if group is None:
+            raise LookupError("Rental factor table not found")
+        if not group.is_active:
+            raise CatalogError(
+                f"The factor table {group.name} is retired. Pick another one, "
+                f"or reactivate it in the catalog."
+            )
+
+    merged = {(row.rate_type, row.period_unit): row.amount for row in item.rates}
+    for rate_type, value in ((RATE_BILL, bill_day), (RATE_COST, cost_day)):
+        if value is UNCHANGED:
+            continue
+        if value is None:
+            merged.pop((rate_type, "day"), None)
+        else:
+            merged[(rate_type, "day")] = value
+    rate_before, rate_after = replace_rates(
+        db,
+        item=item,
+        rates=[
+            {"rate_type": key[0], "period_unit": key[1], "amount": amount}
+            for key, amount in merged.items()
+        ],
+        currency=currency,
+    )
+    if rate_before != rate_after:
+        audit.record(db, actor, item, ITEM_RATES_CHANGED, rate_before, rate_after, reason=reason)
+
+    if rental_factor_group_id is not UNCHANGED and rental_factor_group_id != item.rental_factor_group_id:
+        before = audit.snapshot(item, ITEM_AUDITED)
+        item.rental_factor_group_id = rental_factor_group_id
+        db.flush()
+        audit.record(
+            db,
+            actor,
+            item,
+            ITEM_UPDATED,
+            before,
+            audit.snapshot(item, ITEM_AUDITED),
+            fields=ITEM_AUDITED,
+            reason=reason,
+        )
+    db.refresh(item)
+
+
 # ─── Factor tables ──────────────────────────────────────────────────────────
 
 

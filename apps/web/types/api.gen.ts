@@ -3182,6 +3182,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/devices/{device_id}/rental": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Update Rental
+         * @description Price per day, cost per day and rental factor table — written to the
+         *     linked catalog item through the catalog service and audited by the
+         *     catalog's own events. Only the fields sent change.
+         */
+        put: operations["update_rental_devices__device_id__rental_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/devices/{device_id}/rental/setup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set Up Rental
+         * @description Give the device its catalog item: the unlinked equipment item of
+         *     exactly its name when there is one ("Use the existing ..."), otherwise a
+         *     new one (kind equipment rental, unit day, the default equipment
+         *     category). Never a second item of the same name.
+         */
+        post: operations["set_up_rental_devices__device_id__rental_setup_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/devices/{device_id}/units": {
         parameters: {
             query?: never;
@@ -6922,6 +6967,16 @@ export interface components {
             /** Item Name */
             item_name: string;
         };
+        /** CatalogItemRef */
+        CatalogItemRef: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+        };
         /**
          * CloseCheckEntry
          * @description An order or invoice the close check lists.
@@ -7757,8 +7812,6 @@ export interface components {
         };
         /** DeviceCreate */
         DeviceCreate: {
-            /** Catalog Item Id */
-            catalog_item_id?: string | null;
             /** Category */
             category?: string | null;
             /** Name */
@@ -7808,6 +7861,7 @@ export interface components {
             purchase_price?: string | null;
             /** Quantity Owned */
             quantity_owned: number;
+            rental: components["schemas"]["DeviceRentalPrices"];
             /**
              * Units
              * @default []
@@ -7898,6 +7952,59 @@ export interface components {
             devices: components["schemas"]["DeviceResponse"][];
             /** Total */
             total: number;
+        };
+        /**
+         * DeviceRentalPrices
+         * @description The device's prices — which ARE its catalog item's rates (B2b-2).
+         *
+         *     `linked: false` means the device has no catalog item yet; the page
+         *     offers "Set up rental price", or "Use the existing 'X'" when
+         *     `existing_item` names an unlinked equipment item of the same name.
+         *
+         *     **Rates are cost and price information**: `price_per_day` and
+         *     `cost_per_day` are served only with `budgets.view`, and
+         *     `rates_visible` says which of the two a `null` is.
+         *
+         *     `can_edit` needs `devices.edit` AND `catalog.edit`, because writing
+         *     them changes the price list; `edit_blocked_reason` is the sentence the
+         *     page shows when it is false (rule 17c).
+         */
+        DeviceRentalPrices: {
+            /** Can Edit */
+            can_edit: boolean;
+            /** Cost Per Day */
+            cost_per_day?: string | null;
+            /** Edit Blocked Reason */
+            edit_blocked_reason?: string | null;
+            existing_item?: components["schemas"]["CatalogItemRef"] | null;
+            /** Item Id */
+            item_id?: string | null;
+            /** Item Is Active */
+            item_is_active?: boolean | null;
+            /** Item Name */
+            item_name?: string | null;
+            /** Linked */
+            linked: boolean;
+            /** Price Per Day */
+            price_per_day?: string | null;
+            /** Rates Visible */
+            rates_visible: boolean;
+            /** Rental Factor Group Id */
+            rental_factor_group_id?: string | null;
+            /** Rental Factor Group Name */
+            rental_factor_group_name?: string | null;
+        };
+        /**
+         * DeviceRentalWrite
+         * @description Only what changes; `null` removes the rate (or the factor table).
+         */
+        DeviceRentalWrite: {
+            /** Cost Per Day */
+            cost_per_day?: string | null;
+            /** Price Per Day */
+            price_per_day?: string | null;
+            /** Rental Factor Group Id */
+            rental_factor_group_id?: string | null;
         };
         /** DeviceResponse */
         DeviceResponse: {
@@ -8084,8 +8191,6 @@ export interface components {
          * @description Only what changes. `quantity_owned` may always be set by hand.
          */
         DeviceUpdate: {
-            /** Catalog Item Id */
-            catalog_item_id?: string | null;
             /** Category */
             category?: string | null;
             /** Name */
@@ -16674,6 +16779,76 @@ export interface operations {
         };
     };
     reactivate_device_devices__device_id__reactivate_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_rental_devices__device_id__rental_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceRentalWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_up_rental_devices__device_id__rental_setup_post: {
         parameters: {
             query?: never;
             header?: {

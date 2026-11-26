@@ -161,29 +161,6 @@ def category_suggestions(db: Session, company_id: uuid.UUID) -> list[str]:
     return used + [name for name in catalog if name.casefold() not in keys]
 
 
-def check_catalog_item(db: Session, company_id: uuid.UUID, item_id: Optional[uuid.UUID]) -> Optional[Item]:
-    """The catalog item a device points at: this company's, and equipment.
-
-    Another company's id is "not found" — the caller answers 404 — and an
-    item of another kind is refused with a sentence.
-    """
-    if item_id is None:
-        return None
-    item = (
-        db.query(Item)
-        .filter(Item.id == item_id, Item.company_id == company_id)
-        .first()
-    )
-    if item is None:
-        raise LookupError("Catalog item not found")
-    if item.kind != EQUIPMENT_KIND:
-        raise DeviceError(
-            f"The catalog item {item.name_de} is not equipment. A device can "
-            f"only be linked to an equipment rental item."
-        )
-    return item
-
-
 def check_seller(db: Session, company_id: uuid.UUID, party_id: Optional[uuid.UUID]) -> Optional[Party]:
     """The seller party: this company's, or "not found" (the caller's 404)."""
     if party_id is None:
@@ -234,7 +211,6 @@ def create_device(
     quantity_owned: int = 0,
     purchase_price: Optional[Decimal] = None,
     purchase_date: Optional[date] = None,
-    catalog_item_id: Optional[uuid.UUID] = None,
     notes: Optional[str] = None,
     source: Optional[str] = None,
 ) -> Device:
@@ -243,7 +219,6 @@ def create_device(
         raise DeviceError("This device has no name. Type one in, such as Alexa 35.")
     _refuse_name_in_use(db, company_id, clean)
     _refuse_negative_price(purchase_price)
-    check_catalog_item(db, company_id, catalog_item_id)
     device = Device(
         company_id=company_id,
         name=clean,
@@ -252,7 +227,6 @@ def create_device(
         quantity_owned=quantity_owned,
         purchase_price=purchase_price,
         purchase_date=purchase_date,
-        catalog_item_id=catalog_item_id,
         notes=(notes or "").strip() or None,
         is_active=True,
     )
@@ -287,9 +261,6 @@ def update_device(db: Session, device: Device, *, actor: audit.Actor, changes: d
         device.name_key = name_key(clean)
     if "category" in changes:
         device.category = " ".join((changes["category"] or "").split()) or None
-    if "catalog_item_id" in changes:
-        check_catalog_item(db, device.company_id, changes["catalog_item_id"])
-        device.catalog_item_id = changes["catalog_item_id"]
     if "purchase_price" in changes:
         _refuse_negative_price(changes["purchase_price"])
     for field in ("purchase_price", "purchase_date"):
@@ -340,6 +311,129 @@ def reactivate_device(db: Session, device: Device, *, actor: audit.Actor) -> Non
     audit.record(
         db, actor, device, "device.updated", {"is_active": False}, {"is_active": True}, fields=("is_active",)
     )
+
+
+# ─── Rental prices: the linked catalog item's rates (B2b-2) ─────────────────
+#
+# A device has no prices of its own. Its price per day, cost per day and
+# rental factor table ARE the rates of the equipment item it is linked to,
+# read and written through `catalog_service`, so a budget line made from the
+# item and the device page can never disagree. There is no picker of other
+# items: a device either gets a new item of its own name ("Set up rental
+# price") or, when an unlinked equipment item of exactly that name exists,
+# that one ("Use the existing ...") — never a second item of the same name.
+
+
+def linked_item(db: Session, device: Device) -> Optional[Item]:
+    if device.catalog_item_id is None:
+        return None
+    return (
+        db.query(Item)
+        .filter(Item.id == device.catalog_item_id, Item.company_id == device.company_id)
+        .first()
+    )
+
+
+def existing_item_for(db: Session, device: Device) -> Optional[Item]:
+    """An active equipment item named exactly like the device (case and
+    spacing aside) that no device of this company is linked to yet."""
+    taken = db.query(Device.catalog_item_id).filter(
+        Device.company_id == device.company_id,
+        Device.catalog_item_id.isnot(None),
+        Device.id != device.id,
+    )
+    wanted = name_key(device.name)
+    candidates = (
+        db.query(Item)
+        .filter(
+            Item.company_id == device.company_id,
+            Item.kind == EQUIPMENT_KIND,
+            Item.is_active.is_(True),
+            Item.id.notin_(taken),
+        )
+        .order_by(Item.created_at, Item.id)
+        .all()
+    )
+    return next((item for item in candidates if name_key(item.name_de) == wanted), None)
+
+
+def set_up_rental(db: Session, device: Device, *, actor: audit.Actor) -> tuple[Item, bool]:
+    """Link the device to its catalog item. `(item, created)`.
+
+    The unlinked equipment item of the same name when there is one, else a
+    new one (the catalog's `item.created`). Either way `device.catalog_linked`.
+    """
+    from . import catalog_service
+
+    if device.catalog_item_id is not None:
+        item = linked_item(db, device)
+        raise DeviceConflict(
+            f"{device.name} already has its rental price in the catalog"
+            + (f" as {item.name_de}." if item else ".")
+            + " Change the prices on this page."
+        )
+    item = existing_item_for(db, device)
+    created = item is None
+    if item is None:
+        item = catalog_service.create_equipment_item(
+            db,
+            company_id=device.company_id,
+            name=device.name,
+            actor=actor,
+            reason=f"Set up as the rental price of the device {device.name}",
+        )
+    device.catalog_item_id = item.id
+    db.flush()
+    audit.record(
+        db,
+        actor,
+        device,
+        "device.catalog_linked",
+        {"catalog_item_id": None},
+        {"catalog_item_id": item.id, "item_name": item.name_de, "item_created": created},
+        fields=("catalog_item_id", "item_name", "item_created"),
+    )
+    return item, created
+
+
+def update_rental(
+    db: Session,
+    device: Device,
+    *,
+    actor: audit.Actor,
+    currency: str,
+    changes: dict,
+) -> Item:
+    """Write the device's rates — that is, its catalog item's. `changes`
+    holds only what was sent: `price_per_day`, `cost_per_day`,
+    `rental_factor_group_id`; `None` removes."""
+    from . import catalog_service
+
+    item = linked_item(db, device)
+    if item is None:
+        raise DeviceError(
+            f"{device.name} has no rental price yet. Click Set up rental price first."
+        )
+    for field in ("price_per_day", "cost_per_day"):
+        value = changes.get(field)
+        if value is not None and value < 0:
+            raise DeviceError(
+                "A rental price cannot be negative. Enter the net amount per day."
+            )
+    try:
+        catalog_service.update_day_pricing(
+            db,
+            item=item,
+            actor=actor,
+            currency=currency,
+            bill_day=changes.get("price_per_day", catalog_service.UNCHANGED),
+            cost_day=changes.get("cost_per_day", catalog_service.UNCHANGED),
+            rental_factor_group_id=changes.get("rental_factor_group_id", catalog_service.UNCHANGED),
+            reason=f"Changed on the device page of {device.name}",
+        )
+    except catalog_service.CatalogError as error:
+        raise DeviceError(str(error)) from None
+    return item
 
 
 # ─── Units ──────────────────────────────────────────────────────────────────

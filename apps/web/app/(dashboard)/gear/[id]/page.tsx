@@ -13,9 +13,9 @@ import type {
   DeviceUnit,
   DeviceUnitChangeResult,
   DeviceUnitsAddResult,
-  ItemPage,
   PartyPage,
 } from '@/types'
+import { RentalPrices } from './rental-prices'
 import {
   AMBIGUOUS_AMOUNT,
   amountForApi,
@@ -131,7 +131,6 @@ export default function DevicePage() {
           {canEdit ? (
             <DeviceForm
               device={device}
-              canPickItem={can('catalog.view')}
               onSaved={(next) => {
                 setDevice(next)
                 setNotice('Saved.')
@@ -153,6 +152,15 @@ export default function DevicePage() {
               <dd className="text-text-primary">{device.notes ?? '—'}</dd>
             </dl>
           )}
+
+          <RentalPrices
+            device={device}
+            currency={currency}
+            onChanged={(next, message) => {
+              setDevice(next)
+              setNotice(message)
+            }}
+          />
 
           <h2 className="mt-8 text-sm font-semibold text-text-primary">Units and serial numbers</h2>
           {canEdit && device.is_active && (
@@ -187,11 +195,9 @@ export default function DevicePage() {
 
 function DeviceForm({
   device,
-  canPickItem,
   onSaved,
 }: {
   device: DeviceDetail
-  canPickItem: boolean
   onSaved: (next: DeviceDetail) => void
 }) {
   const initial = React.useMemo(
@@ -201,25 +207,15 @@ function DeviceForm({
       quantity: String(device.quantity_owned),
       price: device.purchase_price ? device.purchase_price.replace('.', ',') : '',
       purchaseDate: device.purchase_date ?? '',
-      catalogItemId: device.catalog_item_id ?? '',
       notes: device.notes ?? '',
     }),
     [device],
   )
   const [draft, setDraft] = React.useState(initial)
-  const [items, setItems] = React.useState<{ id: string; name: string }[]>([])
   const [busy, setBusy] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
 
   React.useEffect(() => setDraft(initial), [initial])
-
-  React.useEffect(() => {
-    if (!canPickItem) return
-    api
-      .get<ItemPage>('/catalog/items?kind=equipment_rental&limit=200')
-      .then((page) => setItems(page.items.map((item) => ({ id: item.id, name: item.name_de }))))
-      .catch(() => setItems([]))
-  }, [canPickItem])
 
   const quantityValid = /^\d+$/.test(draft.quantity.trim())
   const why = !draft.name.trim()
@@ -239,7 +235,6 @@ function DeviceForm({
     if (draft.quantity.trim() !== initial.quantity) changes.quantity_owned = Number.parseInt(draft.quantity.trim(), 10)
     if (device.price_visible && draft.price !== initial.price) changes.purchase_price = amountForApi(draft.price)
     if (draft.purchaseDate !== initial.purchaseDate) changes.purchase_date = draft.purchaseDate || null
-    if (draft.catalogItemId !== initial.catalogItemId) changes.catalog_item_id = draft.catalogItemId || null
     if (draft.notes !== initial.notes) changes.notes = draft.notes || null
     if (Object.keys(changes).length === 0) return
     setBusy(true)
@@ -299,27 +294,6 @@ function DeviceForm({
             className={field}
           />
         </label>
-        {canPickItem && (
-          <label className="text-xs text-text-secondary sm:col-span-2">
-            Rented out as (catalog item)
-            <select
-              data-testid="device-catalog-item"
-              value={draft.catalogItemId}
-              onChange={(e) => setDraft({ ...draft, catalogItemId: e.target.value })}
-              className={field}
-            >
-              <option value="">No catalog item</option>
-              {device.catalog_item_id && !items.some((item) => item.id === device.catalog_item_id) && (
-                <option value={device.catalog_item_id}>{device.catalog_item_name ?? 'The linked item'}</option>
-              )}
-              {items.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
         <label className="text-xs text-text-secondary sm:col-span-3">
           Notes
           <input data-testid="device-notes" value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} className={field} />
