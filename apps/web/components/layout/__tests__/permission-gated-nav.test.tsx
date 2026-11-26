@@ -7,6 +7,16 @@ vi.mock('@/lib/api', () => ({
   ApiError: class extends Error {},
 }))
 vi.mock('next/navigation', () => ({ usePathname: () => '/' }))
+// The Archive switch (UI-1 part 5). The module that DEFINES it is replaced,
+// with a getter so each test can flip it: the gate tests below are about
+// the permission check that comes back with P5, so they run with it on, and
+// 'Archive hidden until P5' runs with it off and proves the shipped value.
+let archiveNav = true
+vi.mock('@/lib/nav-flags', () => ({
+  get ARCHIVE_NAV_ENABLED() {
+    return archiveNav
+  },
+}))
 vi.mock('@/hooks/use-site-settings', () => ({
   useSiteSettings: () => ({ orgName: 'FilmBill', logoDarkUrl: null, logoLightUrl: null }),
 }))
@@ -46,6 +56,7 @@ function seed(permissions: string[], role: CompanySummary['role']) {
 
 describe('sidebar navigation gating', () => {
   beforeEach(() => {
+    archiveNav = true
     vi.clearAllMocks()
     useNotificationStore.setState({ unreadCount: 0, fetchNotifications: vi.fn() } as never)
     useCompanyStore.setState({ companies: [], activeCompanyId: null, loaded: false, error: null })
@@ -159,5 +170,40 @@ describe('no Crew entry (UI-1)', () => {
     expect(screen.getByText('Contacts').closest('a')).toHaveAttribute('href', '/contacts')
     expect(screen.queryByText('Crew')).toBeNull()
     expect(document.querySelector('a[href="/crew"]')).toBeNull()
+  })
+})
+
+describe('Archive hidden until P5 (UI-1)', () => {
+  beforeEach(() => {
+    useNotificationStore.setState({ unreadCount: 0, fetchNotifications: vi.fn() } as never)
+  })
+
+  it('ships switched off', async () => {
+    const actual = await vi.importActual<typeof import('@/lib/nav-flags')>('@/lib/nav-flags')
+    expect(actual.ARCHIVE_NAV_ENABLED).toBe(false)
+  })
+
+  it('is absent while the switch is off, even for a tax advisor', () => {
+    archiveNav = false
+    seed(['company.view', 'archive.view', 'archive.download'], 'tax_advisor')
+    render(<Sidebar collapsed={false} onToggle={() => {}} />)
+
+    // Positive marker: the sidebar drew its ungated entry.
+    expect(screen.getByText('Dashboard')).toBeInTheDocument()
+    expect(screen.queryByText('Archive')).toBeNull()
+    expect(document.querySelector('a[href="/archive"]')).toBeNull()
+  })
+
+  it('comes back when the switch is flipped, still behind archive.view', () => {
+    archiveNav = true
+    seed(['company.view', 'archive.view'], 'tax_advisor')
+    const { unmount } = render(<Sidebar collapsed={false} onToggle={() => {}} />)
+    expect(screen.getByText('Archive').closest('a')).toHaveAttribute('href', '/archive')
+    unmount()
+
+    seed(['company.view'], 'staff')
+    render(<Sidebar collapsed={false} onToggle={() => {}} />)
+    expect(screen.getByText('Dashboard')).toBeInTheDocument()
+    expect(screen.queryByText('Archive')).toBeNull()
   })
 })

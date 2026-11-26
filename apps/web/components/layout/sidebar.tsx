@@ -18,6 +18,7 @@ import { useSiteSettings } from '@/hooks/use-site-settings'
 import { usePermissions } from '@/hooks/use-permissions'
 import { useThemeStore } from '@/stores/theme-store'
 import { Avatar } from '@/components/shared/avatar'
+import { ARCHIVE_NAV_ENABLED } from '@/lib/nav-flags'
 
 interface NavItem {
   href: string
@@ -31,15 +32,17 @@ interface NavItem {
    *  so a wrong answer here shows a menu item that 404s rather than opening
    *  anything. */
   permission?: string
+  /** A switch an entry is drawn behind, read on every render. */
+  shown?: () => boolean
 }
 
 // Parties, Catalog, Projects and Documents land with the phases that build
 // them (SCOPE §13); each one is a line here.
 //
-// Archive is present from P0b-1 even though P5 fills it in, because
-// `archive.view` is a tax advisor's ONLY permission — without this entry
-// their sidebar is empty and a correctly restricted account is
-// indistinguishable from a broken one.
+// Archive was present from P0b-1 even though P5 fills it in, because
+// `archive.view` is a tax advisor's ONLY permission. UI-1 hides it until P5
+// gives it content (ARCHIVE_NAV_ENABLED, lib/nav-flags.ts): an entry that
+// opens an empty page was worse than none (Mathias, 2026-11-26).
 const navItems: NavItem[] = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
   // P1b. Customers, suppliers, partners and the people in them. A top-level
@@ -61,7 +64,14 @@ const navItems: NavItem[] = [
   // crew needs to know what exists — but a purchase price is shown only with
   // `budgets.view`.
   { href: '/gear', label: 'Gear', icon: Package, permission: 'devices.view' },
-  { href: '/archive', label: 'Archive', icon: Archive, permission: 'archive.view' },
+  // Hidden until P5, the bookkeeping document archive; see lib/nav-flags.ts.
+  {
+    href: '/archive',
+    label: 'Archive',
+    icon: Archive,
+    permission: 'archive.view',
+    shown: () => ARCHIVE_NAV_ENABLED,
+  },
 ]
 
 interface SidebarProps {
@@ -143,6 +153,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           // and then removed: an entry that appears for a moment and
           // vanishes reads as a bug, and for a tax advisor the flicker would
           // be the whole sidebar.
+          .filter((item) => !item.shown || item.shown())
           .filter((item) => !item.permission || (companiesLoaded && can(item.permission)))
           .map((item) => {
           const isActive =
