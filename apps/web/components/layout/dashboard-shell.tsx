@@ -14,6 +14,10 @@ import {
   accountSetupOutstanding,
 } from "@/components/auth/account-setup-gate";
 import { cn } from "@/lib/utils";
+import {
+  loadSidebarCollapsed,
+  saveSidebarCollapsed,
+} from "@/lib/sidebar-preference";
 
 /**
  * Everything the dashboard chrome does that needs a browser.
@@ -27,7 +31,16 @@ export function DashboardShell({
 }: {
   children: React.ReactNode;
 }) {
-  const [sidebarCollapsed, setSidebarCollapsed] = React.useState(true);
+  // Expanded unless this browser chose otherwise (UI-1). Read after mount:
+  // `localStorage` does not exist during the server render, and starting
+  // expanded there means the common case paints once, without a jump.
+  const [sidebarCollapsed, setSidebarCollapsed] = React.useState(false);
+  React.useEffect(() => setSidebarCollapsed(loadSidebarCollapsed()), []);
+  const toggleSidebar = () =>
+    setSidebarCollapsed((current) => {
+      saveSidebarCollapsed(!current);
+      return !current;
+    });
   const [commandOpen, setCommandOpen] = React.useState(false);
   const { fetchUser, user } = useAuthStore();
   const loadCompanies = useCompanyStore((state) => state.load);
@@ -89,7 +102,7 @@ export function DashboardShell({
     <div className="flex h-screen overflow-hidden bg-bg-primary">
       <Sidebar
         collapsed={sidebarCollapsed}
-        onToggle={() => setSidebarCollapsed((c) => !c)}
+        onToggle={toggleSidebar}
       />
 
       {/* Main content area */}
