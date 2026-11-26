@@ -29,7 +29,7 @@ from them. `docs/SCOPE.md` is where the product is decided.
 | B1.1 | Plain labels, mark finished, closing a budget, extras | [`28-filmbill-B1.1-finish-close-extras.md`](28-filmbill-B1.1-finish-close-extras.md) | `598a1bc`…closing commit | done — see notes |
 | B1.2 | Adjustments by kind and section, production fee preset, country dropdown, clearer messages | [`29-filmbill-B1.2-adjustments-fee-country-messages.md`](29-filmbill-B1.2-adjustments-fee-country-messages.md) | `30ac390`…closing commit | done — see notes |
 | B2a | The project calendar: strips instead of a day table | [`30-filmbill-B2a-project-calendar.md`](30-filmbill-B2a-project-calendar.md) | `ecc1491`…closing commit | done — see notes |
-| B2b | Crew and gear records: crew as flagged parties, devices with serial numbers | [`31-filmbill-B2b-crew-and-gear-records.md`](31-filmbill-B2b-crew-and-gear-records.md) | — | in progress |
+| B2b | Crew and gear records: crew as flagged parties, devices with serial numbers | [`31-filmbill-B2b-crew-and-gear-records.md`](31-filmbill-B2b-crew-and-gear-records.md) | `b9110e3`…closing commit | done — see notes |
 | P0b | Foundations: companies, roles, number series, audit, money, codegen | [`03-filmbill-P0b-foundations.md`](03-filmbill-P0b-foundations.md) | — | superseded — split into P0b-0, P0b-1, P0b-2 |
 
 ---
@@ -1497,4 +1497,38 @@ environment as B1.2. CI floors raised to **2790** and **1415**.
 - The preview found Chrome's Tab-inside-a-time-field losing unsaved times;
   time fields now also save on a complete entry.
 - Not checked: Safari/Firefox, touch dragging, the server migration.
+
+## B2b — crew and gear records
+
+Full report: [`docs/reports/B2b-report.md`](../reports/B2b-report.md).
+
+**What.** Crew are parties with a third flag (`is_crew`, migration 0022),
+with no number when crew is their only hat, roles as tags, a Crew page with
+quick add, CSV import/export (D105). Devices hold the planning quantity, and
+units hold serial numbers, independently (migration 0023, D106). Units are
+removed with the quantity question, ticked by default (D107), and carry
+device and unit prices, seller and invoice number (D108). New keys
+`devices.view` / `devices.edit` **[Guessing]**; purchase details only with
+`budgets.view` (D109). Not built: D110.
+
+**Changed by Mathias during the run** (asked because SCOPE §4.4 differed
+from the prompt): a unit can have its own price, a seller and an invoice
+number; six statuses (active, needs check, in repair, lost, retired, sold);
+removing always records what happened in words. Built as part 2b. Crew
+visibility levels are open (D111). Until then Crew needs `parties.view`,
+so staff do not see crew (prompt acceptance step 5 does not hold).
+
+**Counts.** API **2984 passed, 30 skipped** (2868 before), `-m realdb`
+**1568** (1455); web **811 / 73 files** (780 / 70). Same declared
+environment as B2a. CI floors raised to **2900** and **1525**.
+
+**Flagged.**
+- SCOPE §4.4 amended by D106–D108 (see the note at the top of §4.4).
+- Seller, unit price and invoice number are optional (my default).
+- Device category is free text, not a catalog category (my default).
+- The full run of the first 2b commit found `btrim` in a CHECK breaking the
+  one SQLite-built test file; fixed with `trim` and folded into 2b.
+- The first real-DB run of part 1 collided with the full run on one
+  scratch database (same PID in both containers); re-run alone, green.
+- Not checked: the pages in a real browser, the server migrations.
 
