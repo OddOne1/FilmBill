@@ -414,12 +414,37 @@ class PartyWrite(BaseModel):
         return normalise_country(value)
 
 
+class PartyPersonCreate(BaseModel):
+    """One person created together with an organisation (P1b-4 part 5)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    title: Optional[str] = Field(default=None, max_length=64)
+    first_name: Optional[str] = Field(default=None, max_length=255)
+    middle_name: Optional[str] = Field(default=None, max_length=255)
+    last_name: Optional[str] = Field(default=None, max_length=255)
+    position: Optional[str] = Field(default=None, max_length=255)
+    email: Optional[str] = Field(default=None, max_length=255)
+    phone: Optional[str] = Field(default=None, max_length=255)
+    is_crew: bool = False
+    #: Crew roles, as on crew quick add.
+    tags: list[str] = []
+
+
 class PartyCreate(PartyWrite):
     """`name` is required unless this is a person with a first or last name,
     in which case it is derived from them (P1b-4). The router says which."""
 
     type: PartyType
     name: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    #: P1b-4 part 5. A primary email and phone, created with the party in the
+    #: same transaction — what the Hierarchy tab's Add person asks for.
+    email: Optional[str] = Field(default=None, max_length=255)
+    phone: Optional[str] = Field(default=None, max_length=255)
+    #: P1b-4 part 5. People created INSIDE a new organisation, in the same
+    #: transaction: one bad row and nothing at all is created. Organisation
+    #: only — anything else is refused with a sentence.
+    people: list[PartyPersonCreate] = Field(default_factory=list, max_length=100)
 
 
 class PartyPage(BaseModel):

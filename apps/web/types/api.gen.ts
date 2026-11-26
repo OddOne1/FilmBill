@@ -9231,6 +9231,8 @@ export interface components {
             einvoice_routing?: {
                 [key: string]: unknown;
             } | null;
+            /** Email */
+            email?: string | null;
             /** First Name */
             first_name?: string | null;
             /** Is Crew */
@@ -9265,6 +9267,10 @@ export interface components {
             payment_terms_days?: number | null;
             /** Payment Terms Text */
             payment_terms_text?: string | null;
+            /** People */
+            people?: components["schemas"]["PartyPersonCreate"][];
+            /** Phone */
+            phone?: string | null;
             /** Po Reference */
             po_reference?: string | null;
             /** Position */
@@ -9308,6 +9314,36 @@ export interface components {
             parties: components["schemas"]["PartyResponse"][];
             /** Total */
             total: number;
+        };
+        /**
+         * PartyPersonCreate
+         * @description One person created together with an organisation (P1b-4 part 5).
+         */
+        PartyPersonCreate: {
+            /** Email */
+            email?: string | null;
+            /** First Name */
+            first_name?: string | null;
+            /**
+             * Is Crew
+             * @default false
+             */
+            is_crew: boolean;
+            /** Last Name */
+            last_name?: string | null;
+            /** Middle Name */
+            middle_name?: string | null;
+            /** Phone */
+            phone?: string | null;
+            /** Position */
+            position?: string | null;
+            /**
+             * Tags
+             * @default []
+             */
+            tags: string[];
+            /** Title */
+            title?: string | null;
         };
         /** PartyResponse */
         PartyResponse: {

@@ -31,6 +31,8 @@ from ..core.iban import normalise_iban
 from ..database import get_db
 from ..middleware.company import Membership, require
 from ..models.party import (
+    PARTY_ORGANISATION,
+    PARTY_PERSON,
     Party,
     PartyAddress,
     PartyBankAccount,
@@ -347,6 +349,85 @@ def _tax_id_example(resolved) -> Optional[str]:
     return example_for(resolved.tax_country.value)
 
 
+def _clean_email(value: Optional[str], *, subject: str) -> Optional[str]:
+    """A primary email as typed, or a 422 naming whose it is (17f)."""
+    from ..billing.resources.crew_csv import looks_like_email
+
+    cleaned = (value or "").strip() or None
+    if cleaned is not None and not looks_like_email(cleaned):
+        _refuse(
+            party_service.PartyError(
+                f"{subject} has {cleaned!r} as an email address, which is not "
+                "one. Correct it, or leave the email empty."
+            ),
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+        )
+    return cleaned
+
+
+def _add_primary_contacts(
+    db: Session,
+    membership: Membership,
+    party: Party,
+    *,
+    email: Optional[str],
+    phone: Optional[str],
+) -> None:
+    """A new party's primary email and phone. No commit."""
+    for kind, value in (("email", email), ("phone", phone)):
+        if value:
+            db.add(
+                PartyContactPoint(
+                    company_id=membership.company_id,
+                    party_id=party.id,
+                    kind=kind,
+                    value=value,
+                    purpose="general",
+                    is_primary=True,
+                )
+            )
+    db.flush()
+
+
+def _create_child_person(
+    db: Session, membership: Membership, organisation: Party, row: dict, index: int
+) -> Party:
+    """One person of a new organisation. No commit; any refusal is a 422
+    that names the row, and takes the whole create down with it."""
+    from ..billing.resources.crew_csv import normalise_roles
+
+    subject = f"Person {index}"
+    changes = {
+        key: row.get(key)
+        for key in ("title", "first_name", "middle_name", "last_name", "position")
+    }
+    party_service.clean_name_changes(changes)
+    try:
+        party_service.validate_names(PARTY_PERSON, None, changes)
+        tags = list(normalise_roles(row.get("tags") or []))
+    except (party_service.PartyError, ValueError) as error:
+        _refuse(
+            party_service.PartyError(f"{subject}: {error}"),
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+        )
+    email = _clean_email(row.get("email"), subject=subject)
+    phone = (row.get("phone") or "").strip() or None
+    person = Party(
+        company_id=membership.company_id,
+        type=PARTY_PERSON,
+        parent_id=organisation.id,
+        name="",
+        is_crew=bool(row.get("is_crew")),
+        tags=tags,
+        einvoice_routing={},
+        **{key: value for key, value in changes.items() if value is not None},
+    )
+    db.add(person)
+    db.flush()
+    _add_primary_contacts(db, membership, person, email=email, phone=phone)
+    return person
+
+
 def _attention_reasons(db: Session, party: Party) -> list[str]:
     """Why the party is in the Needs attention view. Same two conditions as
     the list's filter, so a row there always says why it is there."""
@@ -546,6 +627,20 @@ def create_party(
     changes = body.model_dump(exclude_unset=True)
     party_type = changes.pop("type")
     parent_id = changes.get("parent_id")
+    # P1b-4 part 5: not columns — contact points and child rows, written
+    # below in this same transaction.
+    email = _clean_email(changes.pop("email", None), subject="This contact")
+    phone = (changes.pop("phone", None) or "").strip() or None
+    people = changes.pop("people", None) or []
+    if people and party_type != PARTY_ORGANISATION:
+        _refuse(
+            party_service.PartyError(
+                "People can be added in the same step only when creating an "
+                "organisation. Add them from this contact's Hierarchy tab "
+                "instead."
+            ),
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+        )
     _check_names(party_type, None, changes)
 
     try:
@@ -575,6 +670,16 @@ def create_party(
     db.flush()
 
     party_service.allocate_party_number(db, party=party)
+    _add_primary_contacts(db, membership, party, email=email, phone=phone)
+
+    # P1b-4 part 5. The people of a new organisation, in THIS transaction:
+    # a refusal on any row raises before the commit below, and the request's
+    # session is discarded, so the organisation and every earlier row go
+    # with it. "Some of them were created" is not a state anybody can tidy.
+    created_people = [
+        _create_child_person(db, membership, party, row, index)
+        for index, row in enumerate(people, start=1)
+    ]
 
     duplicates = party_service.find_duplicates(
         db,
@@ -585,14 +690,23 @@ def create_party(
         exclude_id=party.id,
     )
 
+    after = audit.snapshot(party, PARTY_AUDITED + ("type",))
+    after.update({"email": email, "phone": phone})
+    fields = PARTY_AUDITED + ("type", "email", "phone")
+    if created_people:
+        # ONE event for the organisation and the people created with it,
+        # with the count and who they are — not one event per row.
+        after["people_created"] = len(created_people)
+        after["people"] = [person.name for person in created_people]
+        fields = fields + ("people_created", "people")
     audit.record(
         db,
         audit.actor_from(request, membership=membership),
         party,
         "party.created",
         None,
-        audit.snapshot(party, PARTY_AUDITED + ("type",)),
-        fields=PARTY_AUDITED + ("type",),
+        after,
+        fields=fields,
     )
     db.commit()
     db.refresh(party)

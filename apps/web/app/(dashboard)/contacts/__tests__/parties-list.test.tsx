@@ -276,7 +276,7 @@ describe('adding a party', () => {
     vi.mocked(api.post).mockRejectedValue(
       new ApiError(
         409,
-        'A department cannot belong to a person. Allowed: organisation.',
+        'A department cannot belong to a person — Maria Huber is a person. Choose an organisation instead.',
       ),
     )
     render(<PartiesPage />)
@@ -640,5 +640,53 @@ describe('the word on the screen is Contacts (P1b-4 part 4)', () => {
     seedCompany([])
     const none = render(<PartiesPage />)
     expect(findPartyWords(none.container)).toEqual([])
+  })
+})
+
+
+describe('Add people now (P1b-4 part 5)', () => {
+  it('sends the people with the organisation, in the one create', async () => {
+    mockApi()
+    render(<PartiesPage />)
+    await screen.findByText('ORF')
+    fireEvent.click(screen.getByTestId('parties-new'))
+    fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'Kino GmbH' } })
+    fireEvent.click(screen.getByTestId('parties-new-add-person'))
+    fireEvent.click(screen.getByTestId('parties-new-add-person'))
+    fireEvent.change(screen.getByLabelText('Person 1 first name'), { target: { value: 'Anna' } })
+    fireEvent.change(screen.getByLabelText('Person 1 last name'), { target: { value: 'Adler' } })
+    fireEvent.change(screen.getByLabelText('Person 1 email'), { target: { value: 'anna@kino.at' } })
+    fireEvent.change(screen.getByLabelText('Person 2 last name'), { target: { value: 'Ohr' } })
+    fireEvent.change(screen.getByLabelText('Person 2 position'), { target: { value: 'Ton' } })
+    fireEvent.click(screen.getByTestId('parties-new-submit'))
+    await waitFor(() =>
+      expect(vi.mocked(api.post)).toHaveBeenCalledWith('/parties', {
+        type: 'organisation',
+        name: 'Kino GmbH',
+        name_addition: null,
+        parent_id: null,
+        people: [
+          { first_name: 'Anna', last_name: 'Adler', email: 'anna@kino.at', phone: null, position: null },
+          { first_name: null, last_name: 'Ohr', email: null, phone: null, position: 'Ton' },
+        ],
+      }),
+    )
+  })
+
+  it('offers it only for an organisation, and a removed row is not sent', async () => {
+    mockApi()
+    render(<PartiesPage />)
+    await screen.findByText('ORF')
+    fireEvent.click(screen.getByTestId('parties-new'))
+    fireEvent.click(await screen.findByTestId('parties-new-add-person'))
+    fireEvent.click(screen.getByLabelText('Remove person 1'))
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Solo GmbH' } })
+    fireEvent.click(screen.getByTestId('parties-new-submit'))
+    await waitFor(() => expect(vi.mocked(api.post)).toHaveBeenCalled())
+    expect(vi.mocked(api.post).mock.calls[0][1]).not.toHaveProperty('people')
+
+    fireEvent.click(screen.getByTestId('parties-new'))
+    fireEvent.change(await screen.findByLabelText('What kind'), { target: { value: 'person' } })
+    expect(screen.queryByTestId('parties-new-add-person')).not.toBeInTheDocument()
   })
 })

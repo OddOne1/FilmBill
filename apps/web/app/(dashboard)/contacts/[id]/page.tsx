@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation'
 import { AlertTriangle, Loader2, ShieldQuestion } from 'lucide-react'
 import { api, ApiError } from '@/lib/api'
 import { RolePicker } from '@/components/shared/role-picker'
+import { HierarchyTab } from '../hierarchy'
 import {
   PersonNameFields,
   personNamePayload,
@@ -239,7 +240,9 @@ export default function PartyDetailPage() {
           {tab === 'contacts' && (
             <ContactsTab party={party} canEdit={canEdit} onSaved={refresh} />
           )}
-          {tab === 'hierarchy' && <HierarchyTab party={party} />}
+          {tab === 'hierarchy' && (
+            <HierarchyTab party={party} canEdit={canEdit} onSaved={refresh} />
+          )}
           {tab === 'tax' && (
             <TaxTab party={party} resolved={resolved} canEdit={canEdit} onSaved={refresh} />
           )}
@@ -913,54 +916,6 @@ function ContactsTab({
             {saving ? 'Adding…' : 'Add'}
           </button>
         </div>
-      )}
-    </div>
-  )
-}
-
-function HierarchyTab({ party }: { party: Party }) {
-  return (
-    <div className="space-y-3">
-      {party.parent_id && (
-        <p className="text-sm text-text-secondary">
-          Belongs to{' '}
-          <Link href={`/contacts/${party.parent_id}`} className="text-accent underline">
-            its parent
-          </Link>
-          .
-        </p>
-      )}
-      {party.children.length === 0 ? (
-        <p data-testid="party-no-children" className="text-sm text-text-tertiary">
-          Nothing below this one.
-          {party.type === 'organisation' &&
-            ' Add a department or a person from the Contacts list.'}
-        </p>
-      ) : (
-        <ul className="space-y-2">
-          {party.children.map((child) => (
-            <li key={child.id}>
-              <Link
-                href={`/contacts/${child.id}`}
-                data-testid={`party-child-${child.id}`}
-                className="flex items-center gap-3 rounded-md border border-border px-3 py-2 text-sm hover:bg-bg-hover/50"
-              >
-                <span className="w-24 text-xs text-text-tertiary">{child.type}</span>
-                <span className="flex-1 text-text-primary">
-                  {child.name}
-                  {child.name_addition && (
-                    <span className="ml-2 text-xs text-text-tertiary">
-                      {child.name_addition}
-                    </span>
-                  )}
-                </span>
-                {!child.is_active && (
-                  <span className="text-[11px] text-status-warning">archived</span>
-                )}
-              </Link>
-            </li>
-          ))}
-        </ul>
       )}
     </div>
   )

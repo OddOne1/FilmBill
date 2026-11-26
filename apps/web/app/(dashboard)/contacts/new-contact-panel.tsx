@@ -17,6 +17,18 @@ import type { Party, PartyPage, PartyType } from '@/types'
  * name in parts, an organisation's name and its additional line (P1b-4).
  */
 
+/** One row of "Add people now": created with the organisation, in the
+ *  same transaction — one bad row and nothing is created (P1b-4 part 5). */
+interface PersonRow {
+  first_name: string
+  last_name: string
+  email: string
+  phone: string
+  position: string
+}
+
+const EMPTY_ROW: PersonRow = { first_name: '', last_name: '', email: '', phone: '', position: '' }
+
 const TYPE_CHOICES: { value: PartyType; label: string; help: string }[] = [
   {
     value: 'organisation',
@@ -48,6 +60,7 @@ export function NewPartyPanel({
   const [personName, setPersonName] = React.useState<PersonName>(EMPTY_PERSON_NAME)
   const [title, setTitle] = React.useState('')
   const [position, setPosition] = React.useState('')
+  const [people, setPeople] = React.useState<PersonRow[]>([])
   const [parentId, setParentId] = React.useState('')
   const [organisations, setOrganisations] = React.useState<Party[]>([])
   const [saving, setSaving] = React.useState(false)
@@ -91,6 +104,17 @@ export function NewPartyPanel({
               name,
               name_addition: nameAddition.trim() || null,
               parent_id: parentId || null,
+              ...(type === 'organisation' && people.length > 0
+                ? {
+                    people: people.map((row) => ({
+                      first_name: row.first_name.trim() || null,
+                      last_name: row.last_name.trim() || null,
+                      email: row.email.trim() || null,
+                      phone: row.phone.trim() || null,
+                      position: row.position.trim() || null,
+                    })),
+                  }
+                : {}),
             },
       )
       await onCreated()
@@ -190,6 +214,64 @@ export function NewPartyPanel({
               />
             </label>
           </>
+        )}
+
+        {type === 'organisation' && (
+          <div data-testid="parties-new-people" className="space-y-2">
+            {people.map((row, index) => (
+              <div
+                key={index}
+                data-testid={`parties-new-person-${index}`}
+                className="grid gap-2 rounded-md border border-border p-2 sm:grid-cols-[repeat(5,minmax(0,1fr))_auto]"
+              >
+                {(
+                  [
+                    ['first_name', 'First name'],
+                    ['last_name', 'Last name'],
+                    ['email', 'Email'],
+                    ['phone', 'Phone'],
+                    ['position', 'Position'],
+                  ] as const
+                ).map(([key, label]) => (
+                  <Input
+                    key={key}
+                    aria-label={`Person ${index + 1} ${label.toLowerCase()}`}
+                    placeholder={label}
+                    value={row[key]}
+                    onChange={(event) =>
+                      setPeople(
+                        people.map((entry, at) =>
+                          at === index ? { ...entry, [key]: event.target.value } : entry,
+                        ),
+                      )
+                    }
+                  />
+                ))}
+                <button
+                  type="button"
+                  aria-label={`Remove person ${index + 1}`}
+                  onClick={() => setPeople(people.filter((_, at) => at !== index))}
+                  className="rounded-md border border-border px-2 text-xs text-text-secondary hover:bg-bg-hover"
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              data-testid="parties-new-add-person"
+              onClick={() => setPeople([...people, EMPTY_ROW])}
+              className="rounded-md border border-border px-2.5 py-1.5 text-xs text-text-primary hover:bg-bg-hover"
+            >
+              {people.length === 0 ? 'Add people now' : 'Add another person'}
+            </button>
+            {people.length > 0 && (
+              <p className="text-[11px] text-text-tertiary">
+                Created together with the organisation. If one of them cannot be
+                saved, nothing is — the message says which.
+              </p>
+            )}
+          </div>
         )}
 
         {type !== 'organisation' && (

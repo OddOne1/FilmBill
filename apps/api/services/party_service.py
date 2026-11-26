@@ -88,17 +88,16 @@ def validate_parent(
     if parent_id is None:
         if party_type == PARTY_DEPARTMENT:
             raise PartyError(
-                "A department belongs to an organisation, so it needs a "
-                "parent. A standalone department is not a thing that can be "
-                "invoiced."
+                "This department has no organisation, and a department "
+                "belongs to an organisation. Choose the one it is part of."
             )
         return None
 
     if not allowed:
         raise PartyError(
-            "An organisation is the top of the tree and cannot have a "
-            "parent. If this is a part of a larger body, make it a "
-            "department of that organisation instead."
+            "This organisation is at the top of the tree, so it cannot sit "
+            "inside another organisation. To put it under one, add it there "
+            "as a department instead."
         )
 
     parent = (
@@ -111,9 +110,14 @@ def validate_parent(
 
     if parent.type not in allowed:
         raise PartyError(
-            f"A {party_type} cannot belong to a {parent.type}. "
-            f"Allowed: {', '.join(allowed)}. "
-            f"({parent.name!r} is a {parent.type}.)"
+            f"A {party_type} cannot belong to a {parent.type} — "
+            f"{parent.name} is a {parent.type}. Choose "
+            + (
+                "an organisation or a department"
+                if len(allowed) > 1
+                else f"an {allowed[0]}"
+            )
+            + " instead."
         )
 
     if party_id is not None:
