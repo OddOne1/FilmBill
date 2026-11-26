@@ -31,7 +31,7 @@ from them. `docs/SCOPE.md` is where the product is decided.
 | B2a | The project calendar: strips instead of a day table | [`30-filmbill-B2a-project-calendar.md`](30-filmbill-B2a-project-calendar.md) | `ecc1491`…closing commit | done — see notes |
 | B2b | Crew and gear records: crew as flagged parties, devices with serial numbers | [`31-filmbill-B2b-crew-and-gear-records.md`](31-filmbill-B2b-crew-and-gear-records.md) | `b9110e3`…closing commit | done — see notes |
 | P1b-4 | Contacts rework: person names, sole proprietors, direct tax-ID entry, Contacts layout, people inside organisations | [`32-filmbill-P1b4-contacts-rework.md`](32-filmbill-P1b4-contacts-rework.md) | `ce142a0`…closing commit | done — see notes |
-| UI-1 | Sidebar expanded, notifications popup, no Crew menu item, calendar always six weeks | [`33-filmbill-UI1-nav-notifications-calendar-weeks.md`](33-filmbill-UI1-nav-notifications-calendar-weeks.md) | — | in progress |
+| UI-1 | Sidebar expanded, notifications popup, no Crew menu item, calendar always six weeks | [`33-filmbill-UI1-nav-notifications-calendar-weeks.md`](33-filmbill-UI1-nav-notifications-calendar-weeks.md) | `031da04`…closing commit | done — see notes |
 | P0b | Foundations: companies, roles, number series, audit, money, codegen | [`03-filmbill-P0b-foundations.md`](03-filmbill-P0b-foundations.md) | — | superseded — split into P0b-0, P0b-1, P0b-2 |
 
 ---
@@ -1564,3 +1564,25 @@ by the API (D117); people and departments created inside an organisation,
   Redis between my two runs; alone it is green. Run them one at a time.
 - Not checked: the layout in a real browser, the server migrations.
 
+## UI-1 — sidebar, notifications popup, no Crew menu item, six-week calendar
+
+Full report: [`docs/reports/UI1-report.md`](../reports/UI1-report.md).
+
+**Built.** Sidebar expanded by default, choice stored under a versioned key
+(D119); the bell beside Search with a badge and a compact popover instead of
+the drawer (D120); no Crew menu item, `/crew` → `/contacts?tab=crew`, the
+Crew tab carries quick add, CSV import/export, role filter and sort (D121);
+`monthGrid`: always six weeks, the extra-week rule, Booked days under the
+grid at its width (D122); Archive hidden behind `ARCHIVE_NAV_ENABLED = false`
+until P5 (D123). Web only: no migration, no API change.
+
+**Numbers.** API 3097 passed, 30 skipped (3097 / 30 before); `-m realdb` 1647
+(1647); web 933 / 80 files (858 / 76). CI floors unchanged at **3010** and
+**1600**, both already within 3 %.
+
+**Flagged.**
+- A tax advisor now sees only Dashboard in the sidebar until P5 (D123).
+- The calendar has no ranged request; it loads the whole project, so the
+  filler weeks draw from data already there.
+- Not checked: the popup's position and Booked days' width in a real
+  browser; the `/crew` redirect through a running server.
