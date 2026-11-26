@@ -1,7 +1,7 @@
 /**
  * Clicking a notification must not lose the read.
  *
- * FreeFrame's drawer fired markAsRead and then set window.location.href in
+ * FreeFrame's drawer (now the top-bar popup) fired markAsRead and then set window.location.href in
  * the same tick. That starts a full document unload, and a fetch still in
  * flight when that happens is not guaranteed to be delivered — so the read
  * could be lost for exactly the notifications that have somewhere to go,
@@ -23,7 +23,7 @@ vi.mock('@/stores/notification-store', () => ({
   useNotificationStore: () => storeValue,
 }))
 
-import { NotificationDrawer } from '../notification-drawer'
+import { NotificationPanel } from '../notification-popover'
 
 const notification = {
   id: 'n1',
@@ -88,7 +88,7 @@ afterEach(() => {
 
 describe('reading a notification', () => {
   it('marks it read on click', async () => {
-    render(<NotificationDrawer open onClose={vi.fn()} />)
+    render(<NotificationPanel onClose={vi.fn()} />)
     await userEvent.click(screen.getByText(notification.title))
     expect(markAsRead).toHaveBeenCalledWith('n1')
   })
@@ -97,7 +97,7 @@ describe('reading a notification', () => {
     const pending = deferred<void>()
     markAsRead.mockImplementation(() => pending.promise)
 
-    render(<NotificationDrawer open onClose={vi.fn()} />)
+    render(<NotificationPanel onClose={vi.fn()} />)
     await userEvent.click(screen.getByText(notification.title))
 
     await waitFor(() => expect(markAsRead).toHaveBeenCalled())
@@ -113,7 +113,7 @@ describe('reading a notification', () => {
     // user asked to go.
     markAsRead.mockImplementation(() => Promise.reject(new Error('offline')))
 
-    render(<NotificationDrawer open onClose={vi.fn()} />)
+    render(<NotificationPanel onClose={vi.fn()} />)
     await userEvent.click(screen.getByText(notification.title))
 
     await waitFor(() => expect(navigatedTo).toBe('/settings/profile'))
@@ -122,7 +122,7 @@ describe('reading a notification', () => {
   it('goes nowhere when the notification has no link', async () => {
     storeValue.notifications = [{ ...notification, link: null }]
 
-    render(<NotificationDrawer open onClose={vi.fn()} />)
+    render(<NotificationPanel onClose={vi.fn()} />)
     await userEvent.click(screen.getByText(notification.title))
 
     await waitFor(() => expect(markAsRead).toHaveBeenCalledWith('n1'))

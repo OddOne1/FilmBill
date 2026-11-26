@@ -5,7 +5,6 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   Archive,
-  Bell,
   ChevronsLeft,
   Clapperboard,
   Contact,
@@ -16,12 +15,10 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
-import { useNotificationStore } from '@/stores/notification-store'
 import { useSiteSettings } from '@/hooks/use-site-settings'
 import { usePermissions } from '@/hooks/use-permissions'
 import { useThemeStore } from '@/stores/theme-store'
 import { Avatar } from '@/components/shared/avatar'
-import { NotificationDrawer } from './notification-drawer'
 
 interface NavItem {
   href: string
@@ -77,7 +74,6 @@ interface SidebarProps {
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const pathname = usePathname()
   const { user } = useAuthStore()
-  const { unreadCount, fetchNotifications } = useNotificationStore()
   const { orgName, logoDarkUrl, logoLightUrl } = useSiteSettings()
   const { resolvedTheme } = useThemeStore()
   const { can, loaded: companiesLoaded } = usePermissions()
@@ -88,11 +84,6 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const customLogo = resolvedTheme === 'light'
     ? (logoLightUrl ?? logoDarkUrl)
     : (logoDarkUrl ?? logoLightUrl)
-  const [notifOpen, setNotifOpen] = React.useState(false)
-
-  // Fetch notifications on mount
-  React.useEffect(() => { fetchNotifications() }, [fetchNotifications])
-
   return (
     <>
     <aside
@@ -163,7 +154,6 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
             <Link
               key={item.href}
               href={item.href}
-              onClick={() => setNotifOpen(false)}
               className={cn(
                 'group relative flex items-center rounded-md transition-colors duration-100',
                 collapsed ? 'justify-center h-9 w-9 mx-auto' : 'gap-2.5 px-2.5 h-9',
@@ -183,33 +173,8 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           )
         })}
 
-        {/* Notifications button */}
-        <button
-          onClick={() => setNotifOpen((v) => !v)}
-          className={cn(
-            'group relative flex w-full items-center rounded-md transition-colors duration-100',
-            collapsed ? 'justify-center h-9 w-9 mx-auto' : 'gap-2.5 px-2.5 h-9',
-            notifOpen
-              ? 'bg-nav-text/15 text-nav-text'
-              : 'text-nav-text/60 hover:bg-nav-text/10 hover:text-nav-text',
-          )}
-          title={collapsed ? 'Notifications' : undefined}
-        >
-          <div className="relative shrink-0">
-            <Bell className="h-[18px] w-[18px]" strokeWidth={notifOpen ? 2 : 1.5} />
-            {unreadCount > 0 && (
-              <span className="absolute -top-1 -right-1.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-status-error px-0.5 text-[9px] font-bold text-white">
-                {unreadCount}
-              </span>
-            )}
-          </div>
-          {!collapsed && (
-            <span className={cn('text-[13px]', notifOpen && 'font-medium')}>
-              Notifications
-            </span>
-          )}
-        </button>
-
+        {/* No Notifications entry: the bell lives in the top bar beside
+            Search and opens a small popup there (UI-1). */}
       </nav>
 
       {/* Bottom section */}
@@ -253,9 +218,6 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         </button>
       </div>
     </aside>
-
-    {/* Notification Drawer */}
-    <NotificationDrawer open={notifOpen} onClose={() => setNotifOpen(false)} />
   </>
   )
 }

@@ -6,6 +6,7 @@ import { Search, ChevronRight } from 'lucide-react'
 import Link from 'next/link'
 import { useBreadcrumbStore } from '@/stores/breadcrumb-store'
 import { CompanySwitcher } from './company-switcher'
+import { NotificationBell } from './notification-popover'
 
 interface HeaderProps {
   onSearchOpen: () => void
@@ -105,6 +106,9 @@ export function Header({ onSearchOpen }: HeaderProps) {
             <span>⌘</span>K
           </kbd>
         </button>
+
+        {/* Notifications: beside Search, a small popup (UI-1). */}
+        <NotificationBell />
 
       </div>
     </header>
