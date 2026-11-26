@@ -261,7 +261,7 @@ def quick_add(
                     "party_id": row.id,
                     "name": row.name,
                     "reason": "name",
-                    "detail": f"There is already a party called {row.name}.",
+                    "detail": f"There is already a contact called {row.name}.",
                 }
             )
     db.commit()

@@ -49,7 +49,7 @@ const navItems: NavItem[] = [
   // P1b. Customers, suppliers, partners and the people in them. A top-level
   // entry rather than a company setting, because a customer list is not a
   // setting — it is one of the two things the application is about.
-  { href: '/parties', label: 'Parties', icon: Users, permission: 'parties.view' },
+  { href: '/contacts', label: 'Contacts', icon: Users, permission: 'parties.view' },
   // B2b. The people who can be booked on a production. They are parties
   // with the crew flag, so the entry needs what the parties list needs.
   { href: '/crew', label: 'Crew', icon: Contact, permission: 'parties.view' },

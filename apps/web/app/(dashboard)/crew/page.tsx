@@ -85,7 +85,7 @@ export default function CrewListPage() {
         <h1 className="text-lg font-semibold text-text-primary">Crew</h1>
         <p data-testid="crew-no-access" className="mt-2 text-sm text-text-secondary">
           You do not have access to this company&rsquo;s crew list. It is part of
-          the parties list, which needs the parties permission. An owner or
+          the contacts list, which needs permission to view contacts. An owner or
           administrator can change that under Settings → Company → Members.
         </p>
       </div>
@@ -116,7 +116,7 @@ export default function CrewListPage() {
           <h1 className="text-lg font-semibold text-text-primary">Crew</h1>
           <p className="mt-1 text-sm text-text-secondary">
             The people you can book on a production. Each one is a person in
-            your parties list — open a name for the full record.
+            your contacts — open a name for the full record.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -157,7 +157,7 @@ export default function CrewListPage() {
           className="mt-4 rounded-md border border-border bg-bg-secondary px-3 py-2 text-xs text-text-secondary"
         >
           You can read the crew list but not add to it — that needs the
-          permission to edit parties. An owner or administrator can grant it
+          permission to edit contacts. An owner or administrator can grant it
           under Settings → Company → Members.
         </p>
       )}
@@ -268,7 +268,7 @@ function CrewRow({ member }: { member: CrewMember }) {
   return (
     <tr data-testid="crew-row" className="border-b border-border/60 align-top">
       <td className="py-2 pr-3">
-        <Link href={`/parties/${member.id}`} className="font-medium text-text-primary hover:underline">
+        <Link href={`/contacts/${member.id}`} className="font-medium text-text-primary hover:underline">
           {member.name}
         </Link>
         {!member.is_active && (

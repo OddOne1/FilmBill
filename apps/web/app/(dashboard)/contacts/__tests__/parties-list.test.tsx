@@ -18,6 +18,8 @@ vi.mock('@/lib/api', () => ({
 
 import { api, ApiError } from '@/lib/api'
 import PartiesPage from '../page'
+import { CHIP_CLASS, DROP, MAX_CHIPS } from '../contacts-table'
+import { findPartyWords } from '@/test/user-words'
 import { useCompanyStore } from '@/stores/company-store'
 import type { Party, PartyPage } from '@/types'
 
@@ -59,6 +61,7 @@ function makeParty(overrides: Partial<Party> = {}): Party {
     name_not_split: false,
     is_sole_proprietor: false,
     needs_attention_reasons: [],
+    restricted_withheld: false,
     recheck_interval_days: null,
     tax_override: null,
     einvoice_routing: {},
@@ -150,7 +153,7 @@ describe('the list', () => {
 
     expect(await screen.findByTestId('party-row-p1')).toHaveAttribute(
       'href',
-      '/parties/p1',
+      '/contacts/p1',
     )
   })
 
@@ -159,7 +162,7 @@ describe('the list', () => {
     render(<PartiesPage />)
     await screen.findByText('ORF')
 
-    fireEvent.change(screen.getByLabelText('Search parties'), {
+    fireEvent.change(screen.getByLabelText('Search contacts'), {
       target: { value: 'rundfunk' },
     })
 
@@ -197,10 +200,10 @@ describe('the list', () => {
     render(<PartiesPage />)
 
     expect(await screen.findByTestId('parties-empty')).toHaveTextContent(
-      'No parties yet',
+      'No contacts yet',
     )
 
-    fireEvent.change(screen.getByLabelText('Search parties'), {
+    fireEvent.change(screen.getByLabelText('Search contacts'), {
       target: { value: 'nobody' },
     })
     await waitFor(() =>
@@ -453,5 +456,189 @@ describe('needs attention', () => {
         'Nothing needs attention',
       ),
     )
+  })
+})
+
+
+describe('the layout that uses the window (P1b-4 part 4)', () => {
+  const everyHat = makeParty({
+    id: 'p4',
+    name: 'Studio Licht',
+    is_customer: true,
+    is_supplier: true,
+    is_partner: true,
+    is_crew: true,
+  })
+
+  it('is full width: no narrow centred container', async () => {
+    mockApi()
+    const { container } = render(<PartiesPage />)
+    await screen.findByText('ORF')
+    const outer = container.firstElementChild as HTMLElement
+    expect(outer.className).not.toMatch(/max-w-/)
+    expect(outer.className).toContain('w-full')
+  })
+
+  it.each([480, 1024, 1920])(
+    'role chips are one fixed-height line at %ipx, with the rest as +N',
+    async (width) => {
+      window.innerWidth = width
+      window.dispatchEvent(new Event('resize'))
+      mockApi([everyHat])
+      render(<PartiesPage />)
+      const roles = await screen.findByTestId('party-roles-p4')
+      // The container never wraps; every chip has a fixed height, no wrap.
+      expect(roles.className).toContain('flex-nowrap')
+      const chips = Array.from(roles.children) as HTMLElement[]
+      expect(chips).toHaveLength(MAX_CHIPS + 1)
+      for (const chip of chips) {
+        for (const cls of ['h-5', 'whitespace-nowrap', 'shrink-0']) {
+          expect(chip.className.split(' ')).toContain(cls)
+        }
+      }
+      expect(CHIP_CLASS).toContain('whitespace-nowrap')
+    },
+  )
+
+  it('overflow becomes +N with every role in the tooltip', async () => {
+    mockApi([everyHat])
+    render(<PartiesPage />)
+    const more = await screen.findByTestId('party-roles-more-p4')
+    expect(more).toHaveTextContent('+2')
+    expect(more).toHaveAttribute('title', 'Customer, Supplier, Partner, Crew')
+  })
+
+  it('columns drop in order as the window narrows; name, type and roles never do', async () => {
+    mockApi()
+    render(<PartiesPage />)
+    await screen.findByText('ORF')
+    const cls = (key: string) => screen.getByTestId(`contacts-th-${key}`).className
+    for (const key of ['name', 'type', 'roles']) expect(cls(key)).not.toContain('hidden')
+    // Tags and city first (below 2xl), then phone (below xl), then email (below lg).
+    expect(cls('tags')).toContain('hidden 2xl:table-cell')
+    expect(cls('city')).toContain('hidden 2xl:table-cell')
+    expect(cls('phone')).toContain('hidden xl:table-cell')
+    expect(cls('email')).toContain('hidden lg:table-cell')
+    // The same class on the body cells, so a column drops as a whole.
+    expect(screen.getByTestId('contacts-td-phone-p1').className).toContain(DROP.phone)
+  })
+
+  it('shows the contact columns from the row the API served', async () => {
+    mockApi([
+      makeParty({
+        country: 'AT',
+        city: 'Wien',
+        primary_email: 'office@orf.at',
+        primary_phone: '+43 1 870',
+        tags: ['Broadcaster'],
+        name_addition: 'Küniglberg',
+      }),
+    ])
+    render(<PartiesPage />)
+    await screen.findByText('ORF')
+    expect(screen.getByTestId('contacts-td-country-p1')).toHaveTextContent('Austria (AUT)')
+    expect(screen.getByTestId('contacts-td-city-p1')).toHaveTextContent('Wien')
+    expect(screen.getByTestId('contacts-td-email-p1')).toHaveTextContent('office@orf.at')
+    expect(screen.getByTestId('contacts-td-phone-p1')).toHaveTextContent('+43 1 870')
+    expect(screen.getByTestId('contacts-td-tags-p1')).toHaveTextContent('Broadcaster')
+    expect(screen.getByTestId('contacts-td-name-p1')).toHaveTextContent('Küniglberg')
+  })
+
+  it('the picker hides a column and the browser remembers it', async () => {
+    window.localStorage.clear()
+    mockApi()
+    const first = render(<PartiesPage />)
+    await screen.findByText('ORF')
+    fireEvent.click(screen.getByTestId('contacts-columns'))
+    // Name, type and roles cannot be hidden.
+    expect(screen.queryByTestId('contacts-column-name')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('contacts-column-email'))
+    expect(screen.queryByTestId('contacts-th-email')).not.toBeInTheDocument()
+    first.unmount()
+
+    render(<PartiesPage />)
+    await screen.findByText('ORF')
+    expect(screen.queryByTestId('contacts-th-email')).not.toBeInTheDocument()
+    expect(screen.getByTestId('contacts-th-phone')).toBeInTheDocument()
+    window.localStorage.clear()
+  })
+
+  it('storage that refuses to work never breaks the list', async () => {
+    const getItem = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('SecurityError')
+    })
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('QuotaExceededError')
+    })
+    mockApi()
+    render(<PartiesPage />)
+    await screen.findByText('ORF')
+    fireEvent.click(screen.getByTestId('contacts-columns'))
+    fireEvent.click(screen.getByTestId('contacts-column-email'))
+    // Applied for this visit even though it could not be remembered.
+    expect(screen.queryByTestId('contacts-th-email')).not.toBeInTheDocument()
+    getItem.mockRestore()
+    setItem.mockRestore()
+  })
+
+  it('the internal columns are there for somebody who may edit', async () => {
+    mockApi([makeParty({ vat_verified: true, payment_terms_days: 30, last_check_at: '2026-11-20T10:00:00Z' })])
+    render(<PartiesPage />)
+    await screen.findByText('ORF')
+    for (const key of ['vat', 'payment', 'tax_status', 'last_check']) {
+      expect(screen.getByTestId(`contacts-th-${key}`)).toBeInTheDocument()
+    }
+    expect(screen.getByTestId('contacts-td-payment-p1')).toHaveTextContent('30 days')
+    expect(screen.getByTestId('contacts-td-tax_status-p1')).toHaveTextContent('Business')
+  })
+
+  it('the internal columns are absent, header, cells and picker, without parties.edit', async () => {
+    seedCompany(['parties.view'])
+    mockApi([makeParty({ restricted_withheld: true, buyer_type: null })])
+    render(<PartiesPage />)
+    await screen.findByText('ORF')
+    for (const key of ['vat', 'payment', 'tax_status', 'last_check']) {
+      expect(screen.queryByTestId(`contacts-th-${key}`)).not.toBeInTheDocument()
+      expect(screen.queryByTestId(`contacts-td-${key}-p1`)).not.toBeInTheDocument()
+    }
+    fireEvent.click(screen.getByTestId('contacts-columns'))
+    expect(screen.queryByTestId('contacts-column-vat')).not.toBeInTheDocument()
+    // The contact columns are still there.
+    expect(screen.getByTestId('contacts-th-email')).toBeInTheDocument()
+  })
+})
+
+describe('the word on the screen is Contacts (P1b-4 part 4)', () => {
+  it('no state of the list shows “party” or “parties” to a person', async () => {
+    mockApi([makeParty({ name_not_split: true, needs_attention_reasons: ['name_not_split'] })])
+    const { container, unmount } = render(<PartiesPage />)
+    await screen.findByText('ORF')
+    fireEvent.click(screen.getByTestId('contacts-columns'))
+    fireEvent.click(screen.getByTestId('parties-new'))
+    for (const kind of ['organisation', 'department', 'person']) {
+      fireEvent.change(screen.getByLabelText('What kind'), { target: { value: kind } })
+      expect(findPartyWords(container)).toEqual([])
+    }
+    unmount()
+
+    for (const tab of ['Needs attention', 'All']) {
+      mockApi([])
+      const empty = render(<PartiesPage />)
+      fireEvent.click(await screen.findByRole('tab', { name: tab }))
+      await screen.findByTestId('parties-empty')
+      expect(findPartyWords(empty.container)).toEqual([])
+      empty.unmount()
+    }
+
+    seedCompany(['parties.view'])
+    mockApi()
+    const reader = render(<PartiesPage />)
+    await screen.findByText('ORF')
+    expect(findPartyWords(reader.container)).toEqual([])
+    reader.unmount()
+
+    seedCompany([])
+    const none = render(<PartiesPage />)
+    expect(findPartyWords(none.container)).toEqual([])
   })
 })

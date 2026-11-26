@@ -140,7 +140,7 @@ def _party_or_404(db: Session, membership: Membership, party_id: uuid.UUID) -> P
     )
     if row is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Party not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found"
         )
     return row
 
@@ -256,6 +256,7 @@ def _party_response(
         buyer_type_reason=inputs["buyer_type_reason"],
         name_not_split=party_service.name_not_split(party),
         tax_id_example=_tax_id_example(resolved),
+        **_list_columns(db, party),
         needs_attention_reasons=_attention_reasons(db, party),
         addresses=[
             PartyAddressResponse.model_validate(row)
@@ -283,6 +284,61 @@ def _party_response(
         ],
         duplicates=[DuplicateWarning(**entry) for entry in (duplicates or [])],
     )
+
+
+def _list_columns(db: Session, party: Party) -> dict:
+    """Country, city, primary email and phone, last check date — the list's
+    columns (P1b-4 part 4). The party's OWN values, not inherited ones: a
+    column that showed the organisation's city on every person in it would
+    make the list look like a list of one place."""
+    address = party_service._default_address(db, party.id, "billing") or (
+        db.query(PartyAddress)
+        .filter(PartyAddress.party_id == party.id)
+        .order_by(PartyAddress.is_default.desc(), PartyAddress.created_at)
+        .first()
+    )
+    primary = party_service.primary_tax_id(db, party)
+    last = (
+        db.query(PartyVatCheck.checked_at)
+        .filter(PartyVatCheck.tax_id_id == primary.id)
+        .order_by(PartyVatCheck.checked_at.desc())
+        .first()
+        if primary is not None
+        else None
+    )
+    return {
+        "country": address.country if address else None,
+        "city": address.city if address else None,
+        "primary_email": party_service._primary_contact(db, party.id, "email"),
+        "primary_phone": party_service._primary_contact(db, party.id, "phone"),
+        "last_check_at": last[0] if last else None,
+    }
+
+
+#: What a list row withholds from somebody without `parties.edit` (P1b-4
+#: part 4, [Guessing]): the VAT check state, payment terms, tax status and
+#: the last check date. Contact columns need only `parties.view`.
+LIST_RESTRICTED = {
+    "vat_verified": False,
+    "latest_vat_check": None,
+    "tax_ids": [],
+    "payment_terms_days": None,
+    "payment_terms_text": None,
+    "buyer_type": None,
+    "buyer_type_reason": None,
+    "business_status": "auto",
+    "tax_status_note": None,
+    "tax_override": None,
+    "last_check_at": None,
+}
+
+
+def _list_row(db: Session, membership: Membership, party: Party) -> PartyResponse:
+    """One list row. Withholds `LIST_RESTRICTED` without `parties.edit`."""
+    row = _party_response(db, membership, party)
+    if membership.can("parties.edit"):
+        return row
+    return row.model_copy(update={**LIST_RESTRICTED, "restricted_withheld": True})
 
 
 def _tax_id_example(resolved) -> Optional[str]:
@@ -465,7 +521,7 @@ def list_parties(
         .all()
     )
     return PartyPage(
-        parties=[_party_response(db, membership, row) for row in rows],
+        parties=[_list_row(db, membership, row) for row in rows],
         total=total,
         limit=limit,
         offset=offset,

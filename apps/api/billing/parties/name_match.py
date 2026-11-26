@@ -191,7 +191,7 @@ def compare_names(party_name: str, registry_name: Optional[str]) -> NameComparis
         return NameComparison(
             result=UNKNOWN,
             score=0,
-            detail="This party has no name to compare.",
+            detail="This contact has no name to compare.",
         )
 
     left = normalise_name(party_name)
@@ -213,7 +213,7 @@ def compare_names(party_name: str, registry_name: Optional[str]) -> NameComparis
 
     if score >= thresholds["match"]:
         result = MATCH
-        detail = f"The register's name agrees with this party's ({score} / 100)."
+        detail = f"The register's name agrees with this contact's ({score} / 100)."
     elif score >= thresholds["partial"]:
         result = PARTIAL
         detail = (
@@ -224,7 +224,7 @@ def compare_names(party_name: str, registry_name: Optional[str]) -> NameComparis
     else:
         result = MISMATCH
         detail = (
-            f"The register's name does not look like this party's "
+            f"The register's name does not look like this contact's "
             f"({score} / 100). A valid number belonging to somebody else is "
             "exactly what this check is for."
         )

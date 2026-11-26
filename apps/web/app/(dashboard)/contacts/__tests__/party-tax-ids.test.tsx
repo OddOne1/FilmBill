@@ -17,7 +17,7 @@ vi.mock('@/lib/api', () => ({
 }))
 vi.mock('next/navigation', () => ({
   useParams: () => ({ id: 'p1' }),
-  usePathname: () => '/parties/p1',
+  usePathname: () => '/contacts/p1',
 }))
 
 import { pickCountry } from '@/test/pick-country'
@@ -131,6 +131,7 @@ function makeParty(overrides: Partial<Party> = {}): Party {
     name_not_split: false,
     is_sole_proprietor: false,
     needs_attention_reasons: [],
+    restricted_withheld: false,
     recheck_interval_days: null,
     tax_override: null,
     einvoice_routing: {},

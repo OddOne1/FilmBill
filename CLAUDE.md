@@ -22,6 +22,7 @@ Platform modules (auth incl. TOTP 2FA, users, notifications, email, settings she
 6. **Everything business-related is company-scoped** (`company_id` + scoped query helpers). Cross-company access must return 404, and every new router needs a test proving it.
 7. **Rules are data.** No `if country == "AT"` in code; tax codes, rules, units, charts of accounts live in region packs.
 8. **No code copied** from ERPNext, Odoo, Dolibarr (GPL), Akaunting (BSL), Invoice Ninja (Elastic) or proprietary products. Studying behaviour is fine.
+8b. **The UI says Contacts, the code says party.** Screens, routes (`/contacts`) and messages say contact; API paths (`/parties`), permission keys (`parties.view`/`parties.edit`), models, identifiers and test names keep party. Old `/parties` web addresses redirect.
 
 ## Hard rules — engineering (learned from FreeFrame incidents)
 9. **Migrations only.** Every schema change is an Alembic migration. Never instruct a DB reset.

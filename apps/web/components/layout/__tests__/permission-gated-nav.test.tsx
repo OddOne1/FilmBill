@@ -12,6 +12,7 @@ vi.mock('@/hooks/use-site-settings', () => ({
 }))
 
 import { Sidebar } from '../sidebar'
+import { findPartyWords } from '@/test/user-words'
 import { useCompanyStore } from '@/stores/company-store'
 import { useNotificationStore } from '@/stores/notification-store'
 import type { CompanySummary } from '@/types'
@@ -89,7 +90,10 @@ describe('the Parties entry (P1b)', () => {
     seed(['company.view', 'parties.view', 'documents.finalize'], 'producer')
     render(<Sidebar collapsed={false} onToggle={() => {}} />)
 
-    expect(screen.getByText('Parties')).toBeInTheDocument()
+    expect(screen.getByText('Contacts')).toBeInTheDocument()
+    // P1b-4: the entry is Contacts and goes to /contacts.
+    expect(screen.getByText('Contacts').closest('a')).toHaveAttribute('href', '/contacts')
+    expect(findPartyWords(document.body)).toEqual([])
   })
 
   it('is hidden from a tax advisor, whose access is the archive', () => {
@@ -99,7 +103,7 @@ describe('the Parties entry (P1b)', () => {
     seed(['company.view', 'archive.view'], 'tax_advisor')
     render(<Sidebar collapsed={false} onToggle={() => {}} />)
 
-    expect(screen.queryByText('Parties')).not.toBeInTheDocument()
+    expect(screen.queryByText('Contacts')).not.toBeInTheDocument()
     expect(screen.getByText('Archive')).toBeInTheDocument()
   })
 
@@ -107,7 +111,7 @@ describe('the Parties entry (P1b)', () => {
     seed(['company.view'], 'staff')
     render(<Sidebar collapsed={false} onToggle={() => {}} />)
 
-    expect(screen.queryByText('Parties')).not.toBeInTheDocument()
+    expect(screen.queryByText('Contacts')).not.toBeInTheDocument()
   })
 
   it('sits between the dashboard and the archive', () => {
@@ -118,8 +122,8 @@ describe('the Parties entry (P1b)', () => {
       .getAllByRole('link')
       .map((link) => link.textContent?.trim())
       .filter(Boolean) as string[]
-    expect(labels.indexOf('Parties')).toBeGreaterThan(labels.indexOf('Dashboard'))
-    expect(labels.indexOf('Parties')).toBeLessThan(labels.indexOf('Archive'))
+    expect(labels.indexOf('Contacts')).toBeGreaterThan(labels.indexOf('Dashboard'))
+    expect(labels.indexOf('Contacts')).toBeLessThan(labels.indexOf('Archive'))
   })
 })
 
@@ -133,7 +137,7 @@ describe('the Crew entry (B2b)', () => {
       .getAllByRole('link')
       .map((link) => link.textContent?.trim())
       .filter(Boolean) as string[]
-    expect(labels.indexOf('Crew')).toBe(labels.indexOf('Parties') + 1)
+    expect(labels.indexOf('Crew')).toBe(labels.indexOf('Contacts') + 1)
   })
 
   it('is hidden from staff, who do not hold parties.view', () => {

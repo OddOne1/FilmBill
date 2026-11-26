@@ -118,7 +118,10 @@ def validate_parent(
 
     if party_id is not None:
         if parent.id == party_id:
-            raise PartyError("A party cannot be its own parent.")
+            raise PartyError(
+                "A contact cannot belong to itself. Choose a different "
+                "organisation or department."
+            )
         # Walk up from the proposed parent: meeting ourselves means this
         # edit would close a loop, and a loop is a resolver that never
         # terminates.
@@ -128,7 +131,7 @@ def validate_parent(
             if walker.id in seen:
                 raise PartyError(
                     f"That would put {parent.name!r} inside its own "
-                    "hierarchy. A party cannot end up below itself."
+                    "hierarchy. A contact cannot end up below itself."
                 )
             seen.add(walker.id)
             walker = (

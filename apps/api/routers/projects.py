@@ -106,7 +106,7 @@ def _check_client(
     )
     if found is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Client party not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Client not found"
         )
 
 

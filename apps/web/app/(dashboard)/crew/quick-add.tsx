@@ -149,7 +149,7 @@ export function QuickAdd({
       {last && (
         <div role="status" data-testid="crew-add-done" className="mt-3 text-sm text-text-secondary">
           <span className="text-success">{last.member.name} was added.</span>{' '}
-          <Link href={`/parties/${last.member.id}`} className="underline">
+          <Link href={`/contacts/${last.member.id}`} className="underline">
             Open the full record
           </Link>
           {(last.duplicates ?? []).length > 0 && (
@@ -157,7 +157,7 @@ export function QuickAdd({
               {(last.duplicates ?? []).map((entry) => (
                 <li key={entry.party_id}>
                   {entry.detail}{' '}
-                  <Link href={`/parties/${entry.party_id}`} className="underline">
+                  <Link href={`/contacts/${entry.party_id}`} className="underline">
                     Check {entry.name}
                   </Link>{' '}
                   — if it is the same person, archive one of the two records.

@@ -17,12 +17,13 @@ vi.mock('@/lib/api', () => ({
 }))
 vi.mock('next/navigation', () => ({
   useParams: () => ({ id: 'p-person' }),
-  usePathname: () => '/parties/p-person',
+  usePathname: () => '/contacts/p-person',
 }))
 
 import { pickCountry } from '@/test/pick-country'
 import { api, ApiError } from '@/lib/api'
 import PartyDetailPage from '../[id]/page'
+import { findPartyWords } from '@/test/user-words'
 import { useCompanyStore } from '@/stores/company-store'
 import type { Party, ResolvedRecipient, TaxProposal } from '@/types'
 
@@ -77,6 +78,7 @@ function makeParty(overrides: Partial<Party> = {}): Party {
     name_not_split: false,
     is_sole_proprietor: false,
     needs_attention_reasons: [],
+    restricted_withheld: false,
     recheck_interval_days: null,
     tax_override: null,
     einvoice_routing: {},
@@ -441,7 +443,7 @@ describe('hierarchy and archiving', () => {
 
     const warning = await screen.findByTestId('party-duplicate-vat_id')
     expect(warning).toHaveTextContent('already has the VAT ID')
-    expect(warning.querySelector('a')).toHaveAttribute('href', '/parties/p-other')
+    expect(warning.querySelector('a')).toHaveAttribute('href', '/contacts/p-other')
   })
 })
 
@@ -453,7 +455,7 @@ describe('a member who may read but not edit', () => {
     await ready()
 
     expect(
-      screen.getByText(/read this party but not change it/),
+      screen.getByText(/read this contact but not change it/),
     ).toBeInTheDocument()
     expect(screen.queryByTestId('party-archive')).not.toBeInTheDocument()
     expect(screen.queryByTestId('party-basics-save')).not.toBeInTheDocument()
@@ -693,5 +695,34 @@ describe('a sole proprietor (P1b-4 part 2)', () => {
     expect(panel).toHaveTextContent('Studio Licht')
     expect(panel).toHaveTextContent('Owner')
     expect(panel).toHaveTextContent('Maria Huber')
+  })
+})
+
+
+describe('the word on the screen is Contacts (P1b-4 part 4)', () => {
+  it('the emails-and-phones tab is called Phone & email', async () => {
+    mockApi()
+    render(<PartyDetailPage />)
+    await ready()
+    expect(screen.getByRole('tab', { name: 'Phone & email' })).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Contacts' })).not.toBeInTheDocument()
+    expect(screen.getByText('← Contacts').closest('a')).toHaveAttribute('href', '/contacts')
+  })
+
+  it.each([
+    ['an editor', ['parties.view', 'parties.edit']],
+    ['a reader', ['parties.view']],
+  ])('no tab shows “party” or “parties” to %s', async (_who, permissions) => {
+    seedCompany(permissions)
+    mockApi({
+      party: makeParty({ name_not_split: true, needs_attention_reasons: ['name_not_split'] }),
+    })
+    const { container } = render(<PartyDetailPage />)
+    await ready()
+    for (const tab of ['Basics', 'Addresses', 'Phone & email', 'Hierarchy', 'Tax', 'Banking']) {
+      fireEvent.click(screen.getByRole('tab', { name: tab }))
+      await waitFor(() => expect(screen.getByRole('tab', { name: tab })).toHaveAttribute('aria-selected', 'true'))
+      expect(findPartyWords(container)).toEqual([])
+    }
   })
 })

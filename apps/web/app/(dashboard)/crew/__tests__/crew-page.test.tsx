@@ -28,6 +28,7 @@ vi.mock('next/navigation', () => ({
 
 import { api } from '@/lib/api'
 import CrewListPage from '../page'
+import { findPartyWords } from '@/test/user-words'
 import { useCompanyStore } from '@/stores/company-store'
 
 /**
@@ -90,12 +91,33 @@ describe('the crew page', () => {
     routeGets()
   })
 
+  it.each([
+    ['an editor', ['parties.view', 'parties.edit']],
+    ['a reader', ['parties.view']],
+    ['somebody with no access', []],
+  ])('never shows “party” or “parties” to %s (P1b-4)', async (_who, permissions) => {
+    seed(permissions)
+    routeGets([member()])
+    const { container } = render(<CrewListPage />)
+    if (permissions.length) {
+      await screen.findAllByTestId('crew-row')
+      if (permissions.includes('parties.edit')) {
+        fireEvent.click(screen.getByTestId('crew-add-open'))
+        expect(findPartyWords(container)).toEqual([])
+        fireEvent.click(screen.getByTestId('crew-import-open'))
+      }
+    } else {
+      await screen.findByTestId('crew-no-access')
+    }
+    expect(findPartyWords(container)).toEqual([])
+  })
+
   it('lists what the API returned, each name linking to the full party record', async () => {
     routeGets([member(), member({ id: 'p2', name: 'Ben Ohr', roles: ['Sound'], is_supplier: true })])
     render(<CrewListPage />)
     const rows = await screen.findAllByTestId('crew-row')
     expect(rows).toHaveLength(2)
-    expect(within(rows[0]).getByRole('link', { name: 'Anna Huber' })).toHaveAttribute('href', '/parties/p1')
+    expect(within(rows[0]).getByRole('link', { name: 'Anna Huber' })).toHaveAttribute('href', '/contacts/p1')
     expect(within(rows[1]).getByText('also a supplier')).toBeInTheDocument()
     expect(screen.getByTestId('crew-total')).toHaveTextContent('2 people')
   })
@@ -121,7 +143,7 @@ describe('the crew page', () => {
   it('quick add says why it cannot save without a name, then posts exactly the form', async () => {
     vi.mocked(api.post).mockResolvedValue({
       member: member({ id: 'new', name: 'Lea Ton', roles: ['Sound'] }),
-      duplicates: [{ party_id: 'old', name: 'Lea Ton', reason: 'name', detail: 'There is already a party called Lea Ton.' }],
+      duplicates: [{ party_id: 'old', name: 'Lea Ton', reason: 'name', detail: 'There is already a contact called Lea Ton.' }],
     })
     render(<CrewListPage />)
     fireEvent.click(await screen.findByTestId('crew-add-open'))
@@ -155,7 +177,7 @@ describe('the crew page', () => {
     )
     expect(await screen.findByTestId('crew-add-done')).toHaveTextContent('Lea Ton was added.')
     expect(screen.getByTestId('crew-add-duplicates')).toHaveTextContent(
-      'There is already a party called Lea Ton.',
+      'There is already a contact called Lea Ton.',
     )
     // Emptied for the next person.
     expect(screen.getByTestId('crew-add-first')).toHaveValue('')
@@ -173,7 +195,7 @@ describe('the crew page', () => {
               action: 'duplicate',
               name: 'Ben Ohr',
               roles: [],
-              message: 'There is already a party called Ben Ohr.',
+              message: 'There is already a contact called Ben Ohr.',
             },
             { line_number: 4, action: 'duplicate', name: 'Cleo', roles: [], message: 'Line 2 …' },
             { line_number: 5, action: 'error', name: null, roles: [], message: 'This line has no name.' },
@@ -238,7 +260,7 @@ describe('the crew page', () => {
     seed(['parties.view'])
     render(<CrewListPage />)
     await screen.findAllByTestId('crew-row')
-    expect(screen.getByTestId('crew-read-only')).toHaveTextContent('permission to edit parties')
+    expect(screen.getByTestId('crew-read-only')).toHaveTextContent('permission to edit contacts')
     expect(screen.queryByTestId('crew-add-open')).not.toBeInTheDocument()
     expect(screen.queryByTestId('crew-import-open')).not.toBeInTheDocument()
   })

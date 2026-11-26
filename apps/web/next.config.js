@@ -12,6 +12,16 @@ const nextConfig = {
     // which is why there is no MinIO/S3 host listed here.
     remotePatterns: [],
   },
+  // P1b-4: the screen is called Contacts now. The old addresses keep
+  // working so no bookmark breaks; the API and the code still say party.
+  // Not permanent (307): a browser caches a 308 for good, and the day the
+  // old path means something else again it should not be stuck.
+  async redirects() {
+    return [
+      { source: '/parties', destination: '/contacts', permanent: false },
+      { source: '/parties/:id', destination: '/contacts/:id', permanent: false },
+    ]
+  },
 }
 
 module.exports = nextConfig

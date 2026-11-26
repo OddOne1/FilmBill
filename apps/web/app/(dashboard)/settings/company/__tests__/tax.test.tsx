@@ -895,7 +895,7 @@ describe('the Test a case tab asks the server for everything', () => {
     render(<TaxPage />)
     await openTestTab()
 
-    fireEvent.change(screen.getByLabelText('Party override'), {
+    fireEvent.change(screen.getByLabelText('Contact override'), {
       target: { value: 'domestic_for_foreign_business' },
     })
 
@@ -905,7 +905,7 @@ describe('the Test a case tab asks the server for everything', () => {
       })
     })
     expect(
-      screen.queryByLabelText('Party override — tax code'),
+      screen.queryByLabelText('Contact override — tax code'),
     ).not.toBeInTheDocument()
   })
 
@@ -1044,10 +1044,10 @@ describe('the Test-a-case selectors offer only what can be proposed', () => {
     render(<TaxPage />)
     await openTestTab()
 
-    fireEvent.change(screen.getByLabelText('Party override'), {
+    fireEvent.change(screen.getByLabelText('Contact override'), {
       target: { value: 'code' },
     })
-    const picker = await screen.findByLabelText('Party override — tax code')
+    const picker = await screen.findByLabelText('Contact override — tax code')
     expect(picker).toHaveTextContent('AT-20')
     expect(picker).not.toHaveTextContent('AT-E')
   })
@@ -1067,7 +1067,7 @@ describe('taking the buyer from a party', () => {
     await openTestTab()
 
     expect(
-      screen.queryByLabelText('Take buyer from a party'),
+      screen.queryByLabelText('Take buyer from a contact'),
     ).not.toBeInTheDocument()
     expect(screen.getByLabelText(/Buyer country/)).toBeEnabled()
   })
@@ -1078,7 +1078,7 @@ describe('taking the buyer from a party', () => {
     await openTestTab()
 
     fireEvent.change(
-      await screen.findByLabelText('Take buyer from a party'),
+      await screen.findByLabelText('Take buyer from a contact'),
       { target: { value: 'p-dept' } },
     )
 
@@ -1102,7 +1102,7 @@ describe('taking the buyer from a party', () => {
     render(<TaxPage />)
     await openTestTab()
     fireEvent.change(
-      await screen.findByLabelText('Take buyer from a party'),
+      await screen.findByLabelText('Take buyer from a contact'),
       { target: { value: 'p-dept' } },
     )
 
@@ -1119,7 +1119,7 @@ describe('taking the buyer from a party', () => {
     render(<TaxPage />)
     await openTestTab()
     fireEvent.change(
-      await screen.findByLabelText('Take buyer from a party'),
+      await screen.findByLabelText('Take buyer from a contact'),
       { target: { value: 'p-dept' } },
     )
 
@@ -1134,7 +1134,7 @@ describe('taking the buyer from a party', () => {
     mockApi({ parties: PARTIES })
     render(<TaxPage />)
     await openTestTab()
-    const selector = await screen.findByLabelText('Take buyer from a party')
+    const selector = await screen.findByLabelText('Take buyer from a contact')
     fireEvent.change(selector, { target: { value: 'p-dept' } })
     await waitFor(() =>
       expect(screen.getByLabelText('Buyer country')).toBeDisabled(),
@@ -1155,7 +1155,7 @@ describe('taking the buyer from a party', () => {
     render(<TaxPage />)
     await openTestTab()
     fireEvent.change(
-      await screen.findByLabelText('Take buyer from a party'),
+      await screen.findByLabelText('Take buyer from a contact'),
       { target: { value: 'p-dept' } },
     )
 

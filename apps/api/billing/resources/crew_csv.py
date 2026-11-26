@@ -388,7 +388,7 @@ def plan_crew_import(
                 duplicate_of_party_id=party_id,
                 duplicate_of_name=party_name,
                 duplicate_reason="name",
-                message=f"There is already a party called {party_name}.",
+                message=f"There is already a contact called {party_name}.",
             )
         elif email_key and email_key in seen_email:
             earlier, earlier_name = seen_email[email_key]

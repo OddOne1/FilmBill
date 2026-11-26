@@ -280,6 +280,20 @@ class PartyResponse(BaseModel):
     #: were split, or imported from a single `name` column. Listed under
     #: Needs attention until somebody enters the parts.
     name_not_split: bool = False
+    #: P1b-4 part 4. The list's columns, served so the list needs no second
+    #: request per row: the default billing address's country and city
+    #: (or the first address's), the primary email and phone, and when the
+    #: primary identifier was last checked.
+    country: Optional[str] = None
+    city: Optional[str] = None
+    primary_email: Optional[str] = None
+    primary_phone: Optional[str] = None
+    last_check_at: Optional[datetime] = None
+    #: True on a LIST row served to somebody without `parties.edit`: the VAT
+    #: check state, payment terms, tax status and last check date are
+    #: withheld (null / empty) rather than shown [Guessing, SCOPE]. Lets the
+    #: screen tell "withheld" from "none on file".
+    restricted_withheld: bool = False
     #: P1b-4 part 3. A placeholder for the Tax tab's "VAT / tax ID" field,
     #: following the contact's country for tax and taken from examples the
     #: tax-ID data already has. Null when none is known.

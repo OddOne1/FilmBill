@@ -46,7 +46,8 @@ type Tab = 'basics' | 'addresses' | 'contacts' | 'hierarchy' | 'tax' | 'banking'
 const TABS: [Tab, string][] = [
   ['basics', 'Basics'],
   ['addresses', 'Addresses'],
-  ['contacts', 'Contacts'],
+  // P1b-4: "Contacts" is the whole screen now; this tab holds emails and phones.
+  ['contacts', 'Phone & email'],
   ['hierarchy', 'Hierarchy'],
   ['tax', 'Tax'],
   ['banking', 'Banking'],
@@ -69,7 +70,7 @@ const TAX_ID_LABELS: Record<string, string> = {
 const VAT_LIKE_KINDS = ['vat', 'uid_ch', 'abn']
 
 const BUYER_REASONS: Record<string, string> = {
-  explicit: 'set by hand on this party',
+  explicit: 'set by hand on this contact',
   organisation: 'an organisation, or somebody inside one',
   person_with_vat_id: 'a person with a VAT ID — a sole trader',
   sole_proprietor: 'a person who also works as a business (sole proprietor)',
@@ -104,7 +105,7 @@ export default function PartyDetailPage() {
         setError(null)
       } catch (err) {
         setError(
-          err instanceof ApiError ? err.detail : 'Could not load this party',
+          err instanceof ApiError ? err.detail : 'This contact could not be loaded. Try again.',
         )
       } finally {
         setLoading(false)
@@ -134,10 +135,10 @@ export default function PartyDetailPage() {
           role="alert"
           className="rounded-md border border-status-error/40 bg-status-error/10 px-3 py-2 text-sm text-status-error"
         >
-          {error ?? 'Could not load this party'}
+          {error ?? 'This contact could not be loaded. Try again.'}
         </p>
-        <Link href="/parties" className="mt-4 inline-block text-sm text-accent">
-          Back to parties
+        <Link href="/contacts" className="mt-4 inline-block text-sm text-accent">
+          Back to contacts
         </Link>
       </div>
     )
@@ -145,8 +146,8 @@ export default function PartyDetailPage() {
 
   return (
     <div className="max-w-5xl p-8">
-      <Link href="/parties" className="text-xs text-text-tertiary hover:text-text-primary">
-        ← Parties
+      <Link href="/contacts" className="text-xs text-text-tertiary hover:text-text-primary">
+        ← Contacts
       </Link>
       <div className="mt-2 flex items-start justify-between gap-4">
         <div>
@@ -171,8 +172,9 @@ export default function PartyDetailPage() {
 
       {!canEdit && (
         <p className="mt-4 rounded-md border border-border bg-bg-secondary px-3 py-2 text-xs text-text-secondary">
-          You can read this party but not change it — editing needs the
-          parties permission.
+          You can read this contact but not change it — editing needs
+          permission to edit contacts. An owner or administrator can grant it
+          under Settings → Company → Members.
         </p>
       )}
 
@@ -199,7 +201,7 @@ export default function PartyDetailPage() {
               className="rounded-md border border-status-warning/40 bg-status-warning/10 px-3 py-2 text-xs text-status-warning"
             >
               {entry.detail}{' '}
-              <Link href={`/parties/${entry.party_id}`} className="underline">
+              <Link href={`/contacts/${entry.party_id}`} className="underline">
                 Open it
               </Link>
             </li>
@@ -207,7 +209,7 @@ export default function PartyDetailPage() {
         </ul>
       )}
 
-      <div role="tablist" aria-label="Party" className="mt-5 flex gap-1 border-b border-border">
+      <div role="tablist" aria-label="Contact" className="mt-5 flex gap-1 border-b border-border">
         {TABS.map(([value, label]) => (
           <button
             key={value}
@@ -591,7 +593,7 @@ function BasicsTab({
       )}
       <fieldset className="space-y-1">
         <legend className="text-xs font-medium text-text-secondary">
-          Roles — a party can be several at once
+          Roles — a contact can be several at once
         </legend>
         {(
           [
@@ -846,7 +848,7 @@ function ContactsTab({
       setDraft({ ...draft, value: '' })
       await onSaved()
     } catch (err) {
-      setError(err instanceof ApiError ? err.detail : 'Could not add the contact')
+      setError(err instanceof ApiError ? err.detail : 'This could not be added. Try again.')
     } finally {
       setSaving(false)
     }
@@ -863,12 +865,12 @@ function ContactsTab({
         </Row>
       ))}
       {party.contact_points.length === 0 && (
-        <p className="text-sm text-text-tertiary">No contact details yet.</p>
+        <p className="text-sm text-text-tertiary">No phone number or email yet.</p>
       )}
 
       {canEdit && (
         <div className="space-y-2 rounded-md border border-border p-3">
-          <p className="text-xs font-medium text-text-secondary">Add a contact</p>
+          <p className="text-xs font-medium text-text-secondary">Add a phone number or email</p>
           <div className="flex gap-2">
             <select
               aria-label="Contact kind"
@@ -908,7 +910,7 @@ function ContactsTab({
             disabled={saving || !draft.value.trim()}
             className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white disabled:opacity-60"
           >
-            {saving ? 'Adding…' : 'Add contact'}
+            {saving ? 'Adding…' : 'Add'}
           </button>
         </div>
       )}
@@ -922,7 +924,7 @@ function HierarchyTab({ party }: { party: Party }) {
       {party.parent_id && (
         <p className="text-sm text-text-secondary">
           Belongs to{' '}
-          <Link href={`/parties/${party.parent_id}`} className="text-accent underline">
+          <Link href={`/contacts/${party.parent_id}`} className="text-accent underline">
             its parent
           </Link>
           .
@@ -932,14 +934,14 @@ function HierarchyTab({ party }: { party: Party }) {
         <p data-testid="party-no-children" className="text-sm text-text-tertiary">
           Nothing below this one.
           {party.type === 'organisation' &&
-            ' Add a department or a person from the Parties list.'}
+            ' Add a department or a person from the Contacts list.'}
         </p>
       ) : (
         <ul className="space-y-2">
           {party.children.map((child) => (
             <li key={child.id}>
               <Link
-                href={`/parties/${child.id}`}
+                href={`/contacts/${child.id}`}
                 data-testid={`party-child-${child.id}`}
                 className="flex items-center gap-3 rounded-md border border-border px-3 py-2 text-sm hover:bg-bg-hover/50"
               >
@@ -2137,7 +2139,7 @@ function ArchiveButton({
       setError(
         err instanceof ApiError
           ? err.detail
-          : 'Could not change whether this party is active',
+          : 'Whether this contact is active could not be changed. Try again.',
       )
     } finally {
       setBusy(false)

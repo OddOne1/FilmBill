@@ -9337,11 +9337,15 @@ export interface components {
              * @default []
              */
             children: components["schemas"]["PartyChild"][];
+            /** City */
+            city?: string | null;
             /**
              * Contact Points
              * @default []
              */
             contact_points: components["schemas"]["PartyContactPointResponse"][];
+            /** Country */
+            country?: string | null;
             /**
              * Created At
              * Format: date-time
@@ -9400,6 +9404,8 @@ export interface components {
             is_supplier: boolean;
             /** Language */
             language?: string | null;
+            /** Last Check At */
+            last_check_at?: string | null;
             /** Last Name */
             last_name?: string | null;
             latest_vat_check?: components["schemas"]["PartyVatCheckResponse"] | null;
@@ -9435,12 +9441,21 @@ export interface components {
             po_reference?: string | null;
             /** Position */
             position?: string | null;
+            /** Primary Email */
+            primary_email?: string | null;
+            /** Primary Phone */
+            primary_phone?: string | null;
             /** Recheck Interval Days */
             recheck_interval_days?: number | null;
             /** Register Court */
             register_court?: string | null;
             /** Register Number */
             register_number?: string | null;
+            /**
+             * Restricted Withheld
+             * @default false
+             */
+            restricted_withheld: boolean;
             /**
              * Tags
              * @default []

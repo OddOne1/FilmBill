@@ -261,7 +261,7 @@ function OverviewTab({
           <span className="mt-1 block text-sm text-text-primary">
             {project.client_name ?? '—'}{' '}
             <span className="text-xs text-text-tertiary">
-              (changing it needs access to Parties)
+              (changing it needs access to Contacts)
             </span>
           </span>
         )}

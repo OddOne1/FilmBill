@@ -1130,7 +1130,7 @@ function TestTab() {
         setError(
           err instanceof ApiError
             ? err.detail
-            : 'Could not read that party’s details',
+            : 'That contact’s details could not be read. Try again.',
         )
       }
     })()
@@ -1215,11 +1215,11 @@ function TestTab() {
 
         {parties.length > 0 && (
           <Field
-            label="Take buyer from a party"
-            hint="Fills the buyer fields from what a document to that party would actually use — inheritance included."
+            label="Take buyer from a contact"
+            hint="Fills the buyer fields from what a document to that contact would actually use — inheritance included."
           >
             <select
-              aria-label="Take buyer from a party"
+              aria-label="Take buyer from a contact"
               value={fromPartyId}
               onChange={(event) => setFromPartyId(event.target.value)}
               className="w-full rounded-md border border-border bg-bg-primary px-3 py-2 text-sm"
@@ -1262,7 +1262,7 @@ function TestTab() {
             {resolved.vat_id.source ?? 'nowhere'}),{' '}
             {resolved.vat_verified.value ? 'verified' : 'not verified'},
             treated as {resolved.buyer_type}. The fields are read-only while a
-            party is chosen.
+            contact is chosen.
           </p>
         )}
 
@@ -1343,7 +1343,7 @@ function TestTab() {
           onCode={(value) => set('item_override_code', value)}
         />
         <OverrideField
-          label="Party override"
+          label="Contact override"
           kind={draft.party_override}
           code={draft.party_override_code}
           codes={activeCodes}
@@ -1497,7 +1497,7 @@ function ProposalPanel({
             <>
               Decided by the{' '}
               <strong>
-                {proposal.applied_rule === 'override:item' ? 'item' : 'party'}
+                {proposal.applied_rule === 'override:item' ? 'item' : 'contact'}
               </strong>{' '}
               override.
             </>
