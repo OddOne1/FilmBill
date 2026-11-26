@@ -245,20 +245,23 @@ crew tick off; there is no gear yet).
 Merged by fast-forward: `origin/main` `515c367..aaa1bc9` (no merge commit;
 nothing had landed on `main` meanwhile).
 
-CI run **45828388612** on `aaa1bc9`: **four of five jobs green**, namely Web
-lint, typecheck, test, build · Docker build (no push) · Migrations match the
-models · API types match the schema. In **API tests**, "Run tests" and
-"Guard against a gutted suite" (floor 2900) passed, and **"Real-database
-tests ran, not skipped" failed** with exit code 1 and no `::error::`
-annotation. Neither the 1525 floor nor the zero-skip check fired, so
-pytest itself reported a failure in that second run. The job log is
-served only to repository admins, so which test failed is not known here.
+CI runs **45828388612** (`aaa1bc9`) and **45835018778** (`763b8d9`): four
+of five jobs green; in **API tests**, "Run tests" and the 2900 floor passed
+and **"Real-database tests ran, not skipped" failed** — `1 failed, 1567
+passed`. The failing test (from the log Mathias pasted) was
+`test_budget_production_fee.py::test_reset_to_preset`, a B1.2 test:
+`assert None == 'Reset to the company preset'`.
 
-**Not reproduced.** The same commit, run locally in CI's order (full suite,
-then `-m realdb`, one container, one base database): 2984 passed, then 1568
-passed, 0 failed. On the separate runs: 2984 and 1568. **[Guessing]** a
-test that depends on timing on the slower runner. Nothing in the record
-names one, and this step failed once before (`a1d65df`, 2026-11-23) for a
-reason not written down. This section is the commit after `aaa1bc9`; its CI
-run is the one reported back. If that run is red in the same step, the
-failing test's lines from the job log are needed to go further.
+**Cause [Likely for the trigger, certain for the defect]:** its helper read
+audit events with no `ORDER BY` and took `[-1]` as the newest. Postgres
+returns heap order, and after the fixture's `DELETE`s free space, a newer row
+can be stored before an older one — demonstrated on the real server (insert,
+delete, `VACUUM`, insert: the newest row comes back first). B2b's extra audit
+rows in the same session moved the free space; the runner's vacuum timing did
+the rest, which is why no local run reproduced it (CI's order on the dev
+image, and a from-scratch `python:3.11` + fresh Postgres copy of the job: all
+green). **Fixed** by ordering on `created_at` in that helper and the four of
+the same shape; trap 20 in `docs/engineering/test-harness-traps.md`. The
+fix cannot be shown failing locally (the bad order did not occur here), so
+the evidence is the server demonstration plus CI on the fix commit, reported
+back with this run.

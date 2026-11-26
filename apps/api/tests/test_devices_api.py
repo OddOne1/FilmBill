@@ -272,9 +272,9 @@ def test_a_serial_in_another_case_is_the_same_serial_everywhere(pg_client, pg_db
 def _events(pg_db, unit_id, action):
     return [
         event.changes
-        for event in pg_db.query(AuditEvent).filter(
-            AuditEvent.entity_id == unit_id, AuditEvent.action == action
-        )
+        for event in pg_db.query(AuditEvent)
+        .filter(AuditEvent.entity_id == unit_id, AuditEvent.action == action)
+        .order_by(AuditEvent.created_at)
     ]
 
 

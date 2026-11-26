@@ -53,7 +53,16 @@ def _reopen(pg_client, world, budget_id, line_id):
 
 def _events(pg_db, action):
     pg_db.expire_all()
-    return pg_db.query(AuditEvent).filter(AuditEvent.action == action).all()
+    # Oldest first, by when each was written. Without an ORDER BY Postgres
+    # returns heap order, which stops being insertion order once the
+    # fixture's DELETEs free space for later rows to reuse — `[-1]` then
+    # picks an older event (CI, 2026-11-26; test-harness-traps.md 20).
+    return (
+        pg_db.query(AuditEvent)
+        .filter(AuditEvent.action == action)
+        .order_by(AuditEvent.created_at)
+        .all()
+    )
 
 
 # ─── One line ───────────────────────────────────────────────────────────────

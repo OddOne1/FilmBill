@@ -384,3 +384,31 @@ this is the same demand made of the pipeline between the FAIL line and the
 build status. When a check and a count-floor disagree, the count floor is not
 a safety net — it is what you will be left with, so set it against the suite
 you have rather than the suite you had.
+
+## 20. `[-1]` of a query with no ORDER BY — the newest row came back first
+
+**B2b, 2026-11-26.** After B2b merged, CI's real-database step went red twice
+in a row on `test_budget_production_fee.py::test_reset_to_preset`, a B1.2
+test nothing in B2b touched: `assert None == 'Reset to the company preset'`.
+Every local run was green — on the dev image, in CI's step order, and in a
+from-scratch `python:3.11` + fresh Postgres copy of the job.
+
+The helper was `pg_db.query(AuditEvent).filter(action == …).all()`, and the
+test read `[-1]` as "the newest". Without an `ORDER BY`, Postgres returns rows
+in heap order. That is insertion order only while nothing has been deleted:
+the `pg_db` fixture clears every table with `DELETE` between tests, vacuum
+frees those slots, and a later row is written into an earlier page. Shown on
+the real server: insert, delete, `VACUUM`, insert — the newest row comes back
+first. B2b added many more audit rows to the same session, which moved where
+the free space was; the runner's vacuum timing did the rest. The test had
+always depended on it; B2b only changed the dice.
+
+**The fix** is the ordering the test meant: `.order_by(AuditEvent.created_at)`
+in this helper and in the four helpers of the same shape (`test_budget_close`,
+`test_budget_finish`, `test_budget_extras`, `test_devices_api`). Each request
+is its own transaction, so two events from two requests have distinct
+timestamps.
+
+The general form: **"last" is a property of an ORDER BY, not of a list.**
+Any `[0]` or `[-1]` on a query result asserts an order; if the query does not
+state one, the assertion is about the storage engine's mood.

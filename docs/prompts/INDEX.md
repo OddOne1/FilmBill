@@ -1530,5 +1530,8 @@ environment as B2a. CI floors raised to **2900** and **1525**.
   one SQLite-built test file; fixed with `trim` and folded into 2b.
 - The first real-DB run of part 1 collided with the full run on one
   scratch database (same PID in both containers); re-run alone, green.
+- CI on main went red twice in the real-database step on a B1.2 test that
+  read `[-1]` of an unordered audit query (heap reuse after the fixture's
+  DELETEs); fixed by ordering on `created_at` — trap 20.
 - Not checked: the pages in a real browser, the server migrations.
 
