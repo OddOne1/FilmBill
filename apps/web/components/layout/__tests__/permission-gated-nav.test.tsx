@@ -144,3 +144,19 @@ describe('the Crew entry (B2b)', () => {
     expect(screen.getByText('Projects')).toBeInTheDocument()
   })
 })
+
+describe('the Gear entry (B2b)', () => {
+  it('is shown to staff, who hold devices.view', () => {
+    seed(['company.view', 'projects.view', 'devices.view'], 'staff')
+    render(<Sidebar collapsed={false} onToggle={() => {}} />)
+
+    expect(screen.getByText('Gear')).toBeInTheDocument()
+  })
+
+  it('is hidden from a tax advisor', () => {
+    seed(['company.view', 'archive.view'], 'tax_advisor')
+    render(<Sidebar collapsed={false} onToggle={() => {}} />)
+
+    expect(screen.queryByText('Gear')).not.toBeInTheDocument()
+  })
+})

@@ -78,6 +78,11 @@ EXPECTED_TAGS = {
     #: derives its case list from exactly this tag, so an endpoint added here
     #: without an isolation case fails that file.
     "companies",
+    #: B2b. Gear: devices and the serial numbers of their units. Its own tag
+    #: because it is its own permission (`devices.*`), and because "what can
+    #: change how many cameras we own" should be answerable from one tag.
+    #: The crew list is under `parties`: a crew member is a party.
+    "devices",
     "email-settings",
     "events",
     "files",

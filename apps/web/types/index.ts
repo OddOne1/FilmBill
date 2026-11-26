@@ -269,6 +269,27 @@ export type CrewImportRow = Schemas['CrewImportRowResponse']
 export type CrewImportPreview = Schemas['CrewImportPreviewResponse']
 export type CrewImportResult = Schemas['CrewImportApplyResponse']
 
+// ─── Gear (B2b) ─────────────────────────────────────────────────────────────
+//
+// A device holds the quantity owned (what planning uses); its units hold the
+// serial numbers (records). The two are independent, and `counts` says how
+// they relate — the screen puts that into words, it never reconciles them.
+
+export type Device = Schemas['DeviceResponse']
+export type DeviceDetail = Schemas['DeviceDetail']
+export type DevicePage = Schemas['DevicePage']
+export type DeviceCounts = Schemas['DeviceCounts']
+export type DeviceCreate = Schemas['DeviceCreate']
+export type DeviceUpdate = Schemas['DeviceUpdate']
+export type DeviceUnit = Schemas['DeviceUnitResponse']
+export type DeviceUnitsAddResult = Schemas['DeviceUnitsAddResponse']
+export type DeviceUnitChangeResult = Schemas['DeviceUnitChangeResponse']
+export type DeviceImportRow = Schemas['DeviceImportRowResponse']
+export type DeviceImportPreview = Schemas['DeviceImportPreviewResponse']
+export type DeviceImportResult = Schemas['DeviceImportApplyResponse']
+/** `destroyed` · `lost` · `sold` · `kept`. */
+export type RetiredReason = NonNullable<DeviceUnit['retired_reason']>
+
 // ─── Catalog (A1) ───────────────────────────────────────────────────────────
 
 export type Item = Schemas['ItemResponse']

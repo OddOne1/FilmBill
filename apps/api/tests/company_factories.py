@@ -973,3 +973,62 @@ def make_budget_actual(
     db.add(row)
     db.flush()
     return row
+
+
+def make_device(
+    db,
+    company: Company,
+    *,
+    name: str = "Alexa 35",
+    quantity_owned: int = 3,
+    purchase_price: Optional[str] = "65000.00",
+    category: Optional[str] = "Camera",
+    is_active: bool = True,
+):
+    """One device, written directly (B2b)."""
+    from decimal import Decimal
+
+    from apps.api.models.device import Device
+
+    row = Device(
+        company_id=company.id,
+        name=name,
+        name_key=" ".join(name.split()).casefold(),
+        category=category,
+        quantity_owned=quantity_owned,
+        purchase_price=Decimal(purchase_price) if purchase_price is not None else None,
+        is_active=is_active,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def make_device_unit(
+    db,
+    company: Company,
+    device,
+    *,
+    serial_number: str = "AX35-0001",
+    status: str = "active",
+    retired_reason: Optional[str] = None,
+):
+    """One unit of a device, written directly (B2b)."""
+    from datetime import date
+
+    from apps.api.models.device import DeviceUnit
+
+    row = DeviceUnit(
+        company_id=company.id,
+        device_id=device.id,
+        serial_number=serial_number,
+        serial_key=serial_number.strip().casefold(),
+        status=status,
+        retired_reason=retired_reason if status == "retired" else None,
+        retired_on=date(2026, 11, 1) if status == "retired" else None,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row

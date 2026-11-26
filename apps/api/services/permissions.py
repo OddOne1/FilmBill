@@ -88,6 +88,11 @@ _PROJECT_VIEW: set[CompanyRole] = _PRODUCTION | {CompanyRole.staff}
 #: this one set and in no other.
 _CATALOG_VIEW: set[CompanyRole] = _PRODUCTION | {CompanyRole.staff}
 
+#: Who may READ the gear list: `_PRODUCTION` plus staff — everybody except
+#: the tax advisor. Its own name for the reason `_PROJECT_VIEW` and
+#: `_CATALOG_VIEW` have theirs: the same list today, a different decision.
+_DEVICE_VIEW: set[CompanyRole] = _PRODUCTION | {CompanyRole.staff}
+
 #: Every permission this system knows about, and which roles hold it.
 #:
 #: Keys are dotted and read noun-first (`company.settings.edit`, not
@@ -225,6 +230,21 @@ PERMISSIONS: dict[str, set[CompanyRole]] = {
     #: exactly bookkeeping work. Edit is `_PARTY_EDIT` again.
     #:
     #: [Guessing], recorded as SCOPE D77.
+    #: B2b. Gear: devices and the serial numbers of their units.
+    #:
+    #: **View includes staff** (`_DEVICE_VIEW`): the crew needs to know what
+    #: exists before anything is booked. **Edit is `_PARTY_EDIT`** — owner,
+    #: admin, producer — the people who buy and plan gear.
+    #:
+    #: **A purchase price is cost information**, so a device response carries
+    #: it only for a role that also holds `budgets.view` (staff do not);
+    #: everybody else gets `price_visible: false` and no price. The gate is
+    #: the existing key rather than a third one, because "may this person see
+    #: what things cost us" is already a decision this matrix has made.
+    #:
+    #: [Guessing] — the B2b prompt's proposal, not yet confirmed by Mathias.
+    "devices.view": _DEVICE_VIEW,
+    "devices.edit": _PARTY_EDIT,
     "budgets.view": _PRODUCTION,
     "budgets.edit": _PARTY_EDIT,
     #: P5. The archive of finalized documents. The tax advisor's entire

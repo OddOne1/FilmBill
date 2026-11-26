@@ -39,6 +39,9 @@ GET /company/tax/rules
 GET /crew
 GET /crew/export.csv
 GET /crew/roles
+GET /devices
+GET /devices/export.csv
+GET /devices/{device_id}
 GET /email-settings
 GET /events/me
 GET /files/object/{path}
@@ -87,6 +90,8 @@ PATCH /company/number-series/{series_id}
 PATCH /company/tax/classes/{tax_class_id}
 PATCH /company/tax/codes/{tax_code_id}
 PATCH /company/tax/id-check-policy
+PATCH /devices/{device_id}
+PATCH /devices/{device_id}/units/{device_unit_id}
 PATCH /email-settings
 PATCH /parties/{party_id}
 PATCH /parties/{party_id}/tax-ids/{tax_id_id}
@@ -171,6 +176,14 @@ POST /company/tax/rates
 POST /crew
 POST /crew/import
 POST /crew/import/preview
+POST /devices
+POST /devices/import
+POST /devices/import/preview
+POST /devices/{device_id}/archive
+POST /devices/{device_id}/reactivate
+POST /devices/{device_id}/units
+POST /devices/{device_id}/units/{device_unit_id}/reactivate
+POST /devices/{device_id}/units/{device_unit_id}/retire
 POST /email-settings/test
 POST /me/notifications/read-all
 POST /me/notifications/{notification_id}/read

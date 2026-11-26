@@ -43,6 +43,8 @@ from .company_factories import (
     make_budget_global,
     make_budget_line,
     make_budget_section,
+    make_device,
+    make_device_unit,
     make_company,
     make_item,
     make_item_category,
@@ -529,6 +531,28 @@ CASES: dict[str, object] = {
     "POST /crew/import": {
         "files": {"file": ("crew.csv", b"name;roles\nStolen Person;Gaffer\n", "text/csv")}
     },
+    # B2b part 2. Gear. `{device_id}` and `{device_unit_id}` are B's device
+    # and one of its units, so a handler that looked either up by id alone
+    # would FIND them — and a 200 on `/retire` would be A retiring B's
+    # camera. (`{device_unit_id}` and not `{unit_id}`: that placeholder is
+    # the catalog's unit of measure.)
+    "GET /devices": {"body": None},
+    "POST /devices": {"body": {"name": "Stolen device", "quantity_owned": 1}},
+    "GET /devices/export.csv": {"body": None},
+    "POST /devices/import/preview": {
+        "files": {"file": ("gear.csv", b"name;quantity\nStolen lamp;1\n", "text/csv")}
+    },
+    "POST /devices/import": {
+        "files": {"file": ("gear.csv", b"name;quantity\nStolen lamp;1\n", "text/csv")}
+    },
+    "GET /devices/{device_id}": {"body": None},
+    "PATCH /devices/{device_id}": {"body": {"name": "Stolen"}},
+    "POST /devices/{device_id}/archive": {"body": None},
+    "POST /devices/{device_id}/reactivate": {"body": None},
+    "POST /devices/{device_id}/units": {"body": {"serial_numbers": ["STOLEN-1"]}},
+    "PATCH /devices/{device_id}/units/{device_unit_id}": {"body": {"notes": "Stolen"}},
+    "POST /devices/{device_id}/units/{device_unit_id}/retire": {"body": {}},
+    "POST /devices/{device_id}/units/{device_unit_id}/reactivate": {"body": {}},
     # Pure arithmetic, no stored row — and still a company endpoint.
     "POST /calc/preview": {
         "body": {
@@ -564,6 +588,8 @@ OTHER_COMPANY_ROWS = {
     "{group_id}": "group_in_b",
     "{commitment_id}": "commitment_in_b",
     "{actual_id}": "actual_in_b",
+    "{device_id}": "device_in_b",
+    "{device_unit_id}": "device_unit_in_b",
 }
 
 
@@ -690,6 +716,9 @@ def two_companies(pg_db):
     actual_in_b = make_budget_actual(
         pg_db, company_b, budget_in_b, section_in_b, commitment=commitment_in_b
     )
+    # B2b: a device of B's and one of its units.
+    device_in_b = make_device(pg_db, company_b)
+    device_unit_in_b = make_device_unit(pg_db, company_b, device_in_b)
     check_in_b = PartyVatCheck(
         company_id=company_b.id,
         party_id=party_in_b.id,
@@ -730,6 +759,8 @@ def two_companies(pg_db):
         "adjustment_in_b": adjustment_in_b,
         "commitment_in_b": commitment_in_b,
         "actual_in_b": actual_in_b,
+        "device_in_b": device_in_b,
+        "device_unit_in_b": device_unit_in_b,
     }
 
 

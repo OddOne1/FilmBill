@@ -36,6 +36,7 @@ from .project import (
     ProjectBlock,
     ProjectDay,
 )
+from .device import Device, DeviceUnit
 from .party import (
     Party,
     PartyAddress,
@@ -46,6 +47,8 @@ from .party import (
 )
 
 __all__ = [
+    "Device",
+    "DeviceUnit",
     "User",
     "ActivityLog",
     "Notification",

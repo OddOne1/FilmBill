@@ -3047,6 +3047,224 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/devices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Devices */
+        get: operations["list_devices_devices_get"];
+        put?: never;
+        /** Create Device */
+        post: operations["create_device_devices_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/devices/export.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Devices
+         * @description `name;category;quantity;price;serials;notes`. The serials are the
+         *     units that are not retired; the price column is empty for a role that
+         *     may not see purchase prices.
+         */
+        get: operations["export_devices_devices_export_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/devices/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Apply Device Import
+         * @description Create the preview's new devices with their serial numbers. Never
+         *     edits, archives or retires anything that exists.
+         */
+        post: operations["apply_device_import_devices_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/devices/import/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview Device Import */
+        post: operations["preview_device_import_devices_import_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/devices/{device_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Device */
+        get: operations["read_device_devices__device_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Device
+         * @description Change a device. `quantity_owned` may always be set by hand; it is
+         *     recorded as its own event, `device.quantity_set`.
+         */
+        patch: operations["update_device_devices__device_id__patch"];
+        trace?: never;
+    };
+    "/devices/{device_id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Archive Device */
+        post: operations["archive_device_devices__device_id__archive_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/devices/{device_id}/reactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reactivate Device */
+        post: operations["reactivate_device_devices__device_id__reactivate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/devices/{device_id}/units": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Units
+         * @description Record one serial number or a pasted list. Serials already on this
+         *     device, or repeated in the list, are listed and skipped. The quantity
+         *     owned does not change.
+         */
+        post: operations["add_units_devices__device_id__units_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/devices/{device_id}/units/{device_unit_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Unit
+         * @description Correct a serial number, a date or a note; send a unit to repair or
+         *     bring it back from repair. Retiring is `/retire`.
+         */
+        patch: operations["update_unit_devices__device_id__units__device_unit_id__patch"];
+        trace?: never;
+    };
+    "/devices/{device_id}/units/{device_unit_id}/reactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reactivate Unit
+         * @description Bring a retired unit back. `raise_quantity` defaults to yes.
+         */
+        post: operations["reactivate_unit_devices__device_id__units__device_unit_id__reactivate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/devices/{device_id}/units/{device_unit_id}/retire": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retire Unit
+         * @description Retire a unit — destroyed, lost, sold, kept, or entered by mistake
+         *     (no reason, a note). `reduce_quantity` defaults to yes.
+         */
+        post: operations["retire_unit_devices__device_id__units__device_unit_id__retire_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/email-settings": {
         parameters: {
             query?: never;
@@ -4866,6 +5084,21 @@ export interface components {
              */
             include_lines?: string | null;
         };
+        /** Body_apply_device_import_devices_import_post */
+        Body_apply_device_import_devices_import_post: {
+            /** Digest */
+            digest?: string | null;
+            /**
+             * File
+             * Format: binary
+             */
+            file: string;
+            /**
+             * Include Lines
+             * @description Comma-separated line numbers of duplicates of ARCHIVED devices to create anyway.
+             */
+            include_lines?: string | null;
+        };
         /** Body_apply_import_budgets__budget_id__import_post */
         Body_apply_import_budgets__budget_id__import_post: {
             /**
@@ -4897,6 +5130,14 @@ export interface components {
         };
         /** Body_preview_crew_import_crew_import_preview_post */
         Body_preview_crew_import_crew_import_preview_post: {
+            /**
+             * File
+             * Format: binary
+             */
+            file: string;
+        };
+        /** Body_preview_device_import_devices_import_preview_post */
+        Body_preview_device_import_devices_import_preview_post: {
             /**
              * File
              * Format: binary
@@ -7430,6 +7671,340 @@ export interface components {
             used: string[];
         };
         /**
+         * DeviceCounts
+         * @description The two numbers and how they relate. Never an error, never corrected.
+         *
+         *     `recorded` is every serial number on file, retired ones included;
+         *     `not_yet_recorded` is how many of the owned quantity have no usable
+         *     (non-retired) serial yet; `beyond_quantity` is how many usable serials
+         *     there are above the quantity owned — allowed, and said in words.
+         */
+        DeviceCounts: {
+            /** Active */
+            active: number;
+            /** Beyond Quantity */
+            beyond_quantity: number;
+            /** In Repair */
+            in_repair: number;
+            /** Not Yet Recorded */
+            not_yet_recorded: number;
+            /** Owned */
+            owned: number;
+            /** Recorded */
+            recorded: number;
+            /** Retired */
+            retired: number;
+        };
+        /** DeviceCreate */
+        DeviceCreate: {
+            /** Catalog Item Id */
+            catalog_item_id?: string | null;
+            /** Category */
+            category?: string | null;
+            /** Name */
+            name: string;
+            /** Notes */
+            notes?: string | null;
+            /** Purchase Date */
+            purchase_date?: string | null;
+            /** Purchase Price */
+            purchase_price?: string | null;
+            /**
+             * Quantity Owned
+             * @default 0
+             */
+            quantity_owned: number;
+        };
+        /** DeviceDetail */
+        DeviceDetail: {
+            /** Catalog Item Id */
+            catalog_item_id?: string | null;
+            /** Catalog Item Name */
+            catalog_item_name?: string | null;
+            /** Category */
+            category?: string | null;
+            counts: components["schemas"]["DeviceCounts"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Name */
+            name: string;
+            /** Notes */
+            notes?: string | null;
+            /** Price Visible */
+            price_visible: boolean;
+            /** Purchase Date */
+            purchase_date?: string | null;
+            /** Purchase Price */
+            purchase_price?: string | null;
+            /** Quantity Owned */
+            quantity_owned: number;
+            /**
+             * Units
+             * @default []
+             */
+            units: components["schemas"]["DeviceUnitResponse"][];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** DeviceImportApplyResponse */
+        DeviceImportApplyResponse: {
+            /** Created */
+            created: number;
+            /** Digest */
+            digest: string;
+            /** Errors */
+            errors: number;
+            /** Rows */
+            rows: components["schemas"]["DeviceImportRowResponse"][];
+            /** Skipped */
+            skipped: number;
+            /** Units Created */
+            units_created: number;
+        };
+        /** DeviceImportPreviewResponse */
+        DeviceImportPreviewResponse: {
+            /** Created */
+            created: number;
+            /** Delimiter */
+            delimiter: string;
+            /** Digest */
+            digest: string;
+            /** Duplicates */
+            duplicates: number;
+            /** Errors */
+            errors: number;
+            /**
+             * Ignored Columns
+             * @default []
+             */
+            ignored_columns: string[];
+            /** Rows */
+            rows: components["schemas"]["DeviceImportRowResponse"][];
+        };
+        /** DeviceImportRowResponse */
+        DeviceImportRowResponse: {
+            /** Action */
+            action: string;
+            /**
+             * Can Include
+             * @default false
+             */
+            can_include: boolean;
+            /** Category */
+            category?: string | null;
+            /** Device Id */
+            device_id?: string | null;
+            /** Duplicate Of Device Id */
+            duplicate_of_device_id?: string | null;
+            /** Line Number */
+            line_number: number;
+            /** Message */
+            message?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Price */
+            price?: string | null;
+            /** Quantity */
+            quantity?: number | null;
+            /**
+             * Serials
+             * @default []
+             */
+            serials: string[];
+        };
+        /** DevicePage */
+        DevicePage: {
+            /**
+             * Categories
+             * @default []
+             */
+            categories: string[];
+            /** Devices */
+            devices: components["schemas"]["DeviceResponse"][];
+            /** Total */
+            total: number;
+        };
+        /** DeviceResponse */
+        DeviceResponse: {
+            /** Catalog Item Id */
+            catalog_item_id?: string | null;
+            /** Catalog Item Name */
+            catalog_item_name?: string | null;
+            /** Category */
+            category?: string | null;
+            counts: components["schemas"]["DeviceCounts"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Name */
+            name: string;
+            /** Notes */
+            notes?: string | null;
+            /** Price Visible */
+            price_visible: boolean;
+            /** Purchase Date */
+            purchase_date?: string | null;
+            /** Purchase Price */
+            purchase_price?: string | null;
+            /** Quantity Owned */
+            quantity_owned: number;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** DeviceUnitChangeResponse */
+        DeviceUnitChangeResponse: {
+            device: components["schemas"]["DeviceDetail"];
+            /** Quantity After */
+            quantity_after: number;
+            /** Quantity Before */
+            quantity_before: number;
+            unit: components["schemas"]["DeviceUnitResponse"];
+        };
+        /** DeviceUnitReactivate */
+        DeviceUnitReactivate: {
+            /**
+             * Raise Quantity
+             * @default true
+             */
+            raise_quantity: boolean;
+        };
+        /** DeviceUnitResponse */
+        DeviceUnitResponse: {
+            /** Acquired On */
+            acquired_on?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Device Id
+             * Format: uuid
+             */
+            device_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Notes */
+            notes?: string | null;
+            /** Retired On */
+            retired_on?: string | null;
+            /** Retired Reason */
+            retired_reason?: ("destroyed" | "lost" | "sold" | "kept") | null;
+            /** Serial Number */
+            serial_number: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "in_repair" | "retired";
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** DeviceUnitRetire */
+        DeviceUnitRetire: {
+            /** Notes */
+            notes?: string | null;
+            /** Reason */
+            reason?: ("destroyed" | "lost" | "sold" | "kept") | null;
+            /**
+             * Reduce Quantity
+             * @default true
+             */
+            reduce_quantity: boolean;
+            /** Retired On */
+            retired_on?: string | null;
+        };
+        /**
+         * DeviceUnitUpdate
+         * @description Corrections, and the in-repair round trip. Retiring is its own call.
+         */
+        DeviceUnitUpdate: {
+            /** Acquired On */
+            acquired_on?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Serial Number */
+            serial_number?: string | null;
+            /** Status */
+            status?: ("active" | "in_repair") | null;
+        };
+        /**
+         * DeviceUnitsAdd
+         * @description One serial number, or a pasted list. Never changes the quantity.
+         */
+        DeviceUnitsAdd: {
+            /** Acquired On */
+            acquired_on?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Serial Numbers */
+            serial_numbers: string[];
+        };
+        /** DeviceUnitsAddResponse */
+        DeviceUnitsAddResponse: {
+            /** Created */
+            created: components["schemas"]["DeviceUnitResponse"][];
+            device: components["schemas"]["DeviceDetail"];
+            /**
+             * Skipped
+             * @default []
+             */
+            skipped: components["schemas"]["SkippedSerial"][];
+        };
+        /**
+         * DeviceUpdate
+         * @description Only what changes. `quantity_owned` may always be set by hand.
+         */
+        DeviceUpdate: {
+            /** Catalog Item Id */
+            catalog_item_id?: string | null;
+            /** Category */
+            category?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Purchase Date */
+            purchase_date?: string | null;
+            /** Purchase Price */
+            purchase_price?: string | null;
+            /** Quantity Owned */
+            quantity_owned?: number | null;
+        };
+        /**
          * DuplicateWarning
          * @description "This might be one you already have." Never blocking.
          */
@@ -9833,6 +10408,15 @@ export interface components {
              * Format: uuid
              */
             line_id: string;
+        };
+        /** SkippedSerial */
+        SkippedSerial: {
+            /** Detail */
+            detail: string;
+            /** Reason */
+            reason: string;
+            /** Serial Number */
+            serial_number: string;
         };
         /**
          * TaxClassResponse
@@ -15545,6 +16129,470 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CrewRoleSuggestions"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_devices_devices_get: {
+        parameters: {
+            query?: {
+                /** @description Name, category or serial number. */
+                search?: string | null;
+                category?: string | null;
+                /** @description Archived devices too. */
+                include_inactive?: boolean;
+                limit?: number;
+                offset?: number;
+            };
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DevicePage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_device_devices_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_devices_devices_export_csv_get: {
+        parameters: {
+            query?: {
+                include_inactive?: boolean;
+            };
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    apply_device_import_devices_import_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_apply_device_import_devices_import_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceImportApplyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_device_import_devices_import_preview_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_preview_device_import_devices_import_preview_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceImportPreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_device_devices__device_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_device_devices__device_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    archive_device_devices__device_id__archive_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reactivate_device_devices__device_id__reactivate_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_units_devices__device_id__units_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceUnitsAdd"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceUnitsAddResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_unit_devices__device_id__units__device_unit_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                device_id: string;
+                device_unit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceUnitUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceUnitChangeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reactivate_unit_devices__device_id__units__device_unit_id__reactivate_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                device_id: string;
+                device_unit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceUnitReactivate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceUnitChangeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retire_unit_devices__device_id__units__device_unit_id__retire_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                device_id: string;
+                device_unit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceUnitRetire"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceUnitChangeResponse"];
                 };
             };
             /** @description Validation Error */

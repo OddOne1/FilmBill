@@ -10,6 +10,7 @@ import {
   Clapperboard,
   Contact,
   LayoutDashboard,
+  Package,
   Tags,
   Users,
 } from 'lucide-react'
@@ -61,6 +62,10 @@ const navItems: NavItem[] = [
   // includes staff — a crew member may see which days are shoot days — but
   // the budgets inside are closed to them (`budgets.view`, D77).
   { href: '/projects', label: 'Projects', icon: Clapperboard, permission: 'projects.view' },
+  // B2b. The devices the company owns. `devices.view` includes staff — the
+  // crew needs to know what exists — but a purchase price is shown only with
+  // `budgets.view`.
+  { href: '/gear', label: 'Gear', icon: Package, permission: 'devices.view' },
   { href: '/archive', label: 'Archive', icon: Archive, permission: 'archive.view' },
 ]
 
