@@ -6,8 +6,14 @@ independent by design (see `models/device.py`): planning uses the quantity,
 serial numbers are records.
 
 Both tables are company-scoped and soft-deleted only — `devices.is_active`,
-`device_units.status = 'retired'` — and both foreign keys are RESTRICT,
-because nothing here is ever deleted for a cascade to follow.
+and a unit's status `lost`, `retired` or `sold` with the date and a
+free-text reason (a CHECK makes the three go together) — and every foreign
+key is RESTRICT, because nothing here is ever deleted for a cascade to
+follow.
+
+A unit carries its own optional purchase price (when it differs from the
+device's), its seller (a party, or a typed name) and the seller's invoice
+number — Mathias, 2026-11-26: for repairs, returns and insurance claims.
 
 Case-insensitive uniqueness is carried by stored keys (`name_key`,
 `serial_key`) under plain unique indexes, not by expression indexes, which
@@ -90,8 +96,17 @@ def upgrade() -> None:
         sa.Column("serial_key", sa.String(128), nullable=False),
         sa.Column("status", sa.String(16), nullable=False, server_default="active"),
         sa.Column("acquired_on", sa.Date(), nullable=True),
-        sa.Column("retired_on", sa.Date(), nullable=True),
-        sa.Column("retired_reason", sa.String(16), nullable=True),
+        sa.Column("purchase_price", sa.Numeric(18, 2), nullable=True),
+        sa.Column(
+            "seller_party_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("parties.id", ondelete="RESTRICT"),
+            nullable=True,
+        ),
+        sa.Column("seller_name", sa.String(255), nullable=True),
+        sa.Column("purchase_reference", sa.String(255), nullable=True),
+        sa.Column("removed_on", sa.Date(), nullable=True),
+        sa.Column("removed_reason", sa.Text(), nullable=True),
         sa.Column("notes", sa.Text(), nullable=True),
         sa.Column(
             "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
@@ -100,15 +115,19 @@ def upgrade() -> None:
             "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
         ),
         sa.CheckConstraint(
-            "status IN ('active', 'in_repair', 'retired')", name="ck_device_units_status"
+            "status IN ('active', 'needs_check', 'in_repair', 'lost', 'retired', 'sold')",
+            name="ck_device_units_status",
         ),
         sa.CheckConstraint(
-            "retired_reason IS NULL OR retired_reason IN ('destroyed', 'lost', 'sold', 'kept')",
-            name="ck_device_units_retired_reason",
+            "(status IN ('lost', 'retired', 'sold') AND removed_on IS NOT NULL "
+            "AND removed_reason IS NOT NULL AND length(trim(removed_reason)) > 0) "
+            "OR (status NOT IN ('lost', 'retired', 'sold') AND removed_on IS NULL "
+            "AND removed_reason IS NULL)",
+            name="ck_device_units_removed_fields",
         ),
         sa.CheckConstraint(
-            "status = 'retired' OR (retired_reason IS NULL AND retired_on IS NULL)",
-            name="ck_device_units_retired_fields",
+            "purchase_price IS NULL OR purchase_price >= 0",
+            name="ck_device_units_purchase_price",
         ),
     )
     op.create_index("ix_device_units_company_id", "device_units", ["company_id"])
@@ -116,9 +135,11 @@ def upgrade() -> None:
         "uq_device_units_device_serial", "device_units", ["device_id", "serial_key"], unique=True
     )
     op.create_index("ix_device_units_device", "device_units", ["device_id"])
+    op.create_index("ix_device_units_seller", "device_units", ["seller_party_id"])
 
 
 def downgrade() -> None:
+    op.drop_index("ix_device_units_seller", table_name="device_units")
     op.drop_index("ix_device_units_device", table_name="device_units")
     op.drop_index("uq_device_units_device_serial", table_name="device_units")
     op.drop_index("ix_device_units_company_id", table_name="device_units")

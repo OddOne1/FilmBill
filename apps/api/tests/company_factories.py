@@ -1012,10 +1012,13 @@ def make_device_unit(
     *,
     serial_number: str = "AX35-0001",
     status: str = "active",
-    retired_reason: Optional[str] = None,
+    removed_reason: Optional[str] = None,
+    purchase_price: Optional[str] = None,
+    seller_name: Optional[str] = None,
 ):
     """One unit of a device, written directly (B2b)."""
     from datetime import date
+    from decimal import Decimal
 
     from apps.api.models.device import DeviceUnit
 
@@ -1025,8 +1028,12 @@ def make_device_unit(
         serial_number=serial_number,
         serial_key=serial_number.strip().casefold(),
         status=status,
-        retired_reason=retired_reason if status == "retired" else None,
-        retired_on=date(2026, 11, 1) if status == "retired" else None,
+        removed_reason=(removed_reason or "Written off in a test")
+        if status in ("lost", "retired", "sold")
+        else None,
+        removed_on=date(2026, 11, 1) if status in ("lost", "retired", "sold") else None,
+        purchase_price=Decimal(purchase_price) if purchase_price is not None else None,
+        seller_name=seller_name,
     )
     db.add(row)
     db.commit()

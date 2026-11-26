@@ -551,7 +551,9 @@ CASES: dict[str, object] = {
     "POST /devices/{device_id}/reactivate": {"body": None},
     "POST /devices/{device_id}/units": {"body": {"serial_numbers": ["STOLEN-1"]}},
     "PATCH /devices/{device_id}/units/{device_unit_id}": {"body": {"notes": "Stolen"}},
-    "POST /devices/{device_id}/units/{device_unit_id}/retire": {"body": {}},
+    "POST /devices/{device_id}/units/{device_unit_id}/remove": {
+        "body": {"status": "lost", "reason": "Stolen"}
+    },
     "POST /devices/{device_id}/units/{device_unit_id}/reactivate": {"body": {}},
     # Pure arithmetic, no stored row — and still a company endpoint.
     "POST /calc/preview": {

@@ -11,8 +11,13 @@ const zero = {
   owned: 0,
   recorded: 0,
   active: 0,
+  needs_check: 0,
   in_repair: 0,
+  in_hand: 0,
+  lost: 0,
   retired: 0,
+  sold: 0,
+  removed: 0,
   not_yet_recorded: 0,
   beyond_quantity: 0,
 }
@@ -34,10 +39,16 @@ describe('deviceCountsSentence', () => {
     expect(deviceCountsSentence(zero)).toBe('0 owned · no serial numbers recorded')
   })
 
-  it('more usable serials than owned is said, not flagged', () => {
+  it('more serials in hand than owned is said, not flagged', () => {
     expect(
       deviceCountsSentence({ ...zero, owned: 1, recorded: 3, active: 2, in_repair: 1, beyond_quantity: 2 }),
-    ).toBe('1 owned · 3 serial numbers recorded · 1 in repair · 2 more usable serial numbers than owned')
+    ).toBe('1 owned · 3 serial numbers recorded · 1 in repair · 2 more serial numbers than owned')
+  })
+
+  it('names every way a unit can be out of use', () => {
+    expect(
+      deviceCountsSentence({ ...zero, owned: 2, recorded: 6, active: 1, needs_check: 1, lost: 1, retired: 2, sold: 1 }),
+    ).toBe('2 owned · 6 serial numbers recorded · 1 to be checked · 1 lost · 2 retired · 1 sold')
   })
 
   it('one serial number reads in the singular', () => {

@@ -14,38 +14,54 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ..core.money import Money
 
-UnitStatus = Literal["active", "in_repair", "retired"]
-RetiredReason = Literal["destroyed", "lost", "sold", "kept"]
+UnitStatus = Literal["active", "needs_check", "in_repair", "lost", "retired", "sold"]
+#: The three ways a unit leaves; each needs a reason in words.
+RemovedStatus = Literal["lost", "retired", "sold"]
+#: The statuses a unit in hand moves between without leaving.
+InHandStatus = Literal["active", "needs_check", "in_repair"]
 
 
 class DeviceCounts(BaseModel):
     """The two numbers and how they relate. Never an error, never corrected.
 
-    `recorded` is every serial number on file, retired ones included;
-    `not_yet_recorded` is how many of the owned quantity have no usable
-    (non-retired) serial yet; `beyond_quantity` is how many usable serials
-    there are above the quantity owned — allowed, and said in words.
+    `recorded` is every serial number on file, removed ones included.
+    `in_hand` is active + needs check + in repair; `removed` is lost +
+    retired + sold. `not_yet_recorded` is how many of the owned quantity
+    have no serial in hand yet; `beyond_quantity` is how many serials in
+    hand there are above the quantity owned — allowed, and said in words.
     """
 
     owned: int
     recorded: int
     active: int
+    needs_check: int
     in_repair: int
+    in_hand: int
+    lost: int
     retired: int
+    sold: int
+    removed: int
     not_yet_recorded: int
     beyond_quantity: int
 
 
 class DeviceUnitResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
     id: uuid.UUID
     device_id: uuid.UUID
     serial_number: str
     status: UnitStatus
     acquired_on: Optional[date] = None
-    retired_on: Optional[date] = None
-    retired_reason: Optional[RetiredReason] = None
+    #: What was paid for this unit and to whom — the same gate as the
+    #: device's price (`budgets.view`). All four are `null` without it, and
+    #: `purchase_visible` says which of the two that is.
+    purchase_visible: bool
+    purchase_price: Optional[Money] = None
+    seller_party_id: Optional[uuid.UUID] = None
+    seller_party_name: Optional[str] = None
+    seller_name: Optional[str] = None
+    purchase_reference: Optional[str] = None
+    removed_on: Optional[date] = None
+    removed_reason: Optional[str] = None
     notes: Optional[str] = None
     created_at: datetime
     updated_at: datetime
@@ -116,6 +132,13 @@ class DeviceUnitsAdd(BaseModel):
     serial_numbers: list[str] = Field(min_length=1, max_length=1000)
     acquired_on: Optional[date] = None
     notes: Optional[str] = None
+    #: Applied to every serial in the list: they were usually bought
+    #: together. All optional — a unit bought on a production may have no
+    #: seller on file yet.
+    purchase_price: Optional[Money] = None
+    seller_party_id: Optional[uuid.UUID] = None
+    seller_name: Optional[str] = Field(default=None, max_length=255)
+    purchase_reference: Optional[str] = Field(default=None, max_length=255)
 
 
 class SkippedSerial(BaseModel):
@@ -132,24 +155,31 @@ class DeviceUnitsAddResponse(BaseModel):
 
 
 class DeviceUnitUpdate(BaseModel):
-    """Corrections, and the in-repair round trip. Retiring is its own call."""
+    """Corrections, the purchase details, and moving between the statuses
+    of a unit in hand. Removing is `/remove`, coming back is `/reactivate`."""
 
     model_config = ConfigDict(extra="forbid")
 
     serial_number: Optional[str] = Field(default=None, min_length=1, max_length=128)
     acquired_on: Optional[date] = None
     notes: Optional[str] = None
-    status: Optional[Literal["active", "in_repair"]] = None
+    status: Optional[InHandStatus] = None
+    purchase_price: Optional[Money] = None
+    seller_party_id: Optional[uuid.UUID] = None
+    seller_name: Optional[str] = Field(default=None, max_length=255)
+    purchase_reference: Optional[str] = Field(default=None, max_length=255)
 
 
-class DeviceUnitRetire(BaseModel):
+class DeviceUnitRemove(BaseModel):
+    """Retired, lost or sold — and exactly what happened, in words."""
+
     model_config = ConfigDict(extra="forbid")
 
-    reason: Optional[RetiredReason] = None
-    retired_on: Optional[date] = None
-    notes: Optional[str] = None
-    #: "Also reduce the quantity owned by 1?" — ticked by default: a retired
-    #: unit cannot be booked.
+    status: RemovedStatus
+    reason: str = Field(min_length=1, max_length=2000)
+    removed_on: Optional[date] = None
+    #: "Also reduce the quantity owned by 1?" — ticked by default: a unit
+    #: that is gone cannot be booked.
     reduce_quantity: bool = True
 
 

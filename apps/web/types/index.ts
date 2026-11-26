@@ -287,8 +287,8 @@ export type DeviceUnitChangeResult = Schemas['DeviceUnitChangeResponse']
 export type DeviceImportRow = Schemas['DeviceImportRowResponse']
 export type DeviceImportPreview = Schemas['DeviceImportPreviewResponse']
 export type DeviceImportResult = Schemas['DeviceImportApplyResponse']
-/** `destroyed` · `lost` · `sold` · `kept`. */
-export type RetiredReason = NonNullable<DeviceUnit['retired_reason']>
+/** `active` · `needs_check` · `in_repair` · `lost` · `retired` · `sold`. */
+export type UnitStatus = DeviceUnit['status']
 
 // ─── Catalog (A1) ───────────────────────────────────────────────────────────
 

@@ -9,7 +9,8 @@ one carries it only when the caller also holds `budgets.view`, and says so
 with `price_visible`. That covers the list, the detail, the export and the
 import preview.
 
-**No DELETE route.** Devices are archived; units are retired.
+**No DELETE route.** Devices are archived; units are removed (retired,
+lost or sold) with a reason in words, and can come back.
 """
 
 import uuid
@@ -30,7 +31,8 @@ from ..billing.resources.device_csv import (
 from ..database import get_db
 from ..middleware.company import Membership, require
 from ..models.catalog import Item
-from ..models.device import UNIT_RETIRED, Device, DeviceUnit
+from ..models.device import UNIT_REMOVED, Device, DeviceUnit
+from ..models.party import Party
 from ..schemas.device import (
     DeviceCounts,
     DeviceCreate,
@@ -43,7 +45,7 @@ from ..schemas.device import (
     DeviceUnitChangeResponse,
     DeviceUnitReactivate,
     DeviceUnitResponse,
-    DeviceUnitRetire,
+    DeviceUnitRemove,
     DeviceUnitsAdd,
     DeviceUnitsAddResponse,
     DeviceUnitUpdate,
@@ -113,20 +115,52 @@ def _responses(db: Session, membership: Membership, rows: list[Device]) -> list[
     ]
 
 
+def _units(db: Session, membership: Membership, units: list[DeviceUnit]) -> list[DeviceUnitResponse]:
+    """Units, with what was paid and to whom only for `budgets.view`."""
+    visible = _can_see_price(membership)
+    seller_ids = {unit.seller_party_id for unit in units if unit.seller_party_id}
+    sellers = (
+        dict(db.query(Party.id, Party.name).filter(Party.id.in_(seller_ids)).all())
+        if visible and seller_ids
+        else {}
+    )
+    return [
+        DeviceUnitResponse(
+            id=unit.id,
+            device_id=unit.device_id,
+            serial_number=unit.serial_number,
+            status=unit.status,
+            acquired_on=unit.acquired_on,
+            purchase_visible=visible,
+            purchase_price=unit.purchase_price if visible else None,
+            seller_party_id=unit.seller_party_id if visible else None,
+            seller_party_name=sellers.get(unit.seller_party_id) if visible else None,
+            seller_name=unit.seller_name if visible else None,
+            purchase_reference=unit.purchase_reference if visible else None,
+            removed_on=unit.removed_on,
+            removed_reason=unit.removed_reason,
+            notes=unit.notes,
+            created_at=unit.created_at,
+            updated_at=unit.updated_at,
+        )
+        for unit in units
+    ]
+
+
 def _detail(db: Session, membership: Membership, device: Device) -> DeviceDetail:
     base = _responses(db, membership, [device])[0]
     units = (
         db.query(DeviceUnit)
         .filter(DeviceUnit.device_id == device.id)
         .order_by(
-            (DeviceUnit.status == UNIT_RETIRED).asc(),
+            DeviceUnit.status.in_(UNIT_REMOVED).asc(),
             func.lower(DeviceUnit.serial_number),
         )
         .all()
     )
     return DeviceDetail(
         **base.model_dump(),
-        units=[DeviceUnitResponse.model_validate(unit) for unit in units],
+        units=_units(db, membership, units),
     )
 
 
@@ -187,7 +221,7 @@ def export_devices(
     membership: Membership = Depends(require("devices.view")),
 ):
     """`name;category;quantity;price;serials;notes`. The serials are the
-    units that are not retired; the price column is empty for a role that
+    units still in hand (not lost, retired or sold); the price column is empty for a role that
     may not see purchase prices."""
     rows = _devices_query(db, membership, search=None, category=None, include_inactive=include_inactive).all()
     visible = _can_see_price(membership)
@@ -197,7 +231,7 @@ def export_devices(
             db.query(DeviceUnit.device_id, DeviceUnit.serial_number)
             .filter(
                 DeviceUnit.device_id.in_(list(serials)),
-                DeviceUnit.status != UNIT_RETIRED,
+                DeviceUnit.status.notin_(UNIT_REMOVED),
             )
             .order_by(func.lower(DeviceUnit.serial_number))
             .all()
@@ -295,7 +329,7 @@ async def apply_device_import(
     membership: Membership = Depends(require("devices.edit")),
 ):
     """Create the preview's new devices with their serial numbers. Never
-    edits, archives or retires anything that exists."""
+    edits, archives or removes anything that exists."""
     payload = await _read_upload(file)
     try:
         ticked = [int(part) for part in (include_lines or "").split(",") if part.strip()]
@@ -345,12 +379,19 @@ async def apply_device_import(
 # ─── One device ─────────────────────────────────────────────────────────────
 
 
+#: What a unit was bought for and from whom: written, like it is read, only
+#: with `budgets.view`.
+PURCHASE_FIELDS = ("purchase_price", "seller_party_id", "seller_name", "purchase_reference")
+
+
 def _writes_price(membership: Membership, fields: dict) -> None:
-    if "purchase_price" in fields and fields["purchase_price"] is not None and not _can_see_price(membership):
+    if _can_see_price(membership):
+        return
+    if any(fields.get(name) not in (None, "") for name in PURCHASE_FIELDS):
         _refuse(
             ValueError(
-                "You cannot set a purchase price: prices are only for people who "
-                "can see budgets. Leave the price empty."
+                "You cannot enter purchase details: prices and sellers are only "
+                "for people who can see budgets. Leave those fields empty."
             ),
             status.HTTP_422_UNPROCESSABLE_ENTITY,
         )
@@ -470,6 +511,7 @@ def add_units(
     device, or repeated in the list, are listed and skipped. The quantity
     owned does not change."""
     device = _device_or_404(db, membership, device_id)
+    _writes_price(membership, body.model_dump())
     try:
         created, skipped = device_service.add_units(
             db,
@@ -478,7 +520,13 @@ def add_units(
             serial_numbers=body.serial_numbers,
             acquired_on=body.acquired_on,
             notes=body.notes,
+            purchase_price=body.purchase_price,
+            seller_party_id=body.seller_party_id,
+            seller_name=body.seller_name,
+            purchase_reference=body.purchase_reference,
         )
+    except LookupError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Seller not found") from None
     except device_service.DeviceError as error:
         _refuse(error, status.HTTP_422_UNPROCESSABLE_ENTITY)
     db.commit()
@@ -487,7 +535,7 @@ def add_units(
     db.refresh(device)
     return DeviceUnitsAddResponse(
         device=_detail(db, membership, device),
-        created=[DeviceUnitResponse.model_validate(unit) for unit in created],
+        created=_units(db, membership, created),
         skipped=[SkippedSerial(**entry) for entry in skipped],
     )
 
@@ -501,17 +549,22 @@ def update_unit(
     db: Session = Depends(get_db),
     membership: Membership = Depends(require("devices.edit")),
 ):
-    """Correct a serial number, a date or a note; send a unit to repair or
-    bring it back from repair. Retiring is `/retire`."""
+    """Correct a serial number, a date, a note or the purchase details;
+    move a unit between active, needs check and in repair. Removing is
+    `/remove`, coming back from it `/reactivate`."""
     device = _device_or_404(db, membership, device_id)
     unit = _unit_or_404(db, membership, device, device_unit_id)
+    changes = body.model_dump(exclude_unset=True)
+    _writes_price(membership, changes)
     try:
         device_service.update_unit(
             db,
             unit,
             actor=audit.actor_from(request, membership=membership),
-            changes=body.model_dump(exclude_unset=True),
+            changes=changes,
         )
+    except LookupError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Seller not found") from None
     except device_service.DeviceConflict as error:
         _refuse(error, status.HTTP_409_CONFLICT)
     except device_service.DeviceError as error:
@@ -521,34 +574,35 @@ def update_unit(
     db.refresh(device)
     return DeviceUnitChangeResponse(
         device=_detail(db, membership, device),
-        unit=DeviceUnitResponse.model_validate(unit),
+        unit=_units(db, membership, [unit])[0],
         quantity_before=device.quantity_owned,
         quantity_after=device.quantity_owned,
     )
 
 
-@router.post("/devices/{device_id}/units/{device_unit_id}/retire", response_model=DeviceUnitChangeResponse)
-def retire_unit(
+@router.post("/devices/{device_id}/units/{device_unit_id}/remove", response_model=DeviceUnitChangeResponse)
+def remove_unit(
     device_id: uuid.UUID,
     device_unit_id: uuid.UUID,
-    body: DeviceUnitRetire,
+    body: DeviceUnitRemove,
     request: Request,
     db: Session = Depends(get_db),
     membership: Membership = Depends(require("devices.edit")),
 ):
-    """Retire a unit — destroyed, lost, sold, kept, or entered by mistake
-    (no reason, a note). `reduce_quantity` defaults to yes."""
+    """Retired, lost or sold — with exactly what happened, in words (a unit
+    entered by mistake is retired and says so). `reduce_quantity` defaults
+    to yes."""
     device = _device_or_404(db, membership, device_id)
     unit = _unit_or_404(db, membership, device, device_unit_id)
     try:
-        before, after = device_service.retire_unit(
+        before, after = device_service.remove_unit(
             db,
             device,
             unit,
             actor=audit.actor_from(request, membership=membership),
+            status=body.status,
             reason=body.reason,
-            retired_on=body.retired_on,
-            notes=body.notes,
+            removed_on=body.removed_on,
             reduce_quantity=body.reduce_quantity,
         )
     except device_service.DeviceError as error:
@@ -558,7 +612,7 @@ def retire_unit(
     db.refresh(device)
     return DeviceUnitChangeResponse(
         device=_detail(db, membership, device),
-        unit=DeviceUnitResponse.model_validate(unit),
+        unit=_units(db, membership, [unit])[0],
         quantity_before=before,
         quantity_after=after,
     )
@@ -576,7 +630,7 @@ def reactivate_unit(
     db: Session = Depends(get_db),
     membership: Membership = Depends(require("devices.edit")),
 ):
-    """Bring a retired unit back. `raise_quantity` defaults to yes."""
+    """Bring a lost, retired or sold unit back. `raise_quantity` defaults to yes."""
     device = _device_or_404(db, membership, device_id)
     unit = _unit_or_404(db, membership, device, device_unit_id)
     try:
@@ -594,7 +648,7 @@ def reactivate_unit(
     db.refresh(device)
     return DeviceUnitChangeResponse(
         device=_detail(db, membership, device),
-        unit=DeviceUnitResponse.model_validate(unit),
+        unit=_units(db, membership, [unit])[0],
         quantity_before=before,
         quantity_after=after,
     )

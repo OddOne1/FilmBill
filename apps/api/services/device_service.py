@@ -1,7 +1,7 @@
 """Gear: devices and their units (B2b part 2). No commit anywhere here.
 
 **The quantity and the serial numbers are independent.** The only functions
-that write `quantity_owned` are `set_quantity` (by hand), `retire_unit` with
+that write `quantity_owned` are `set_quantity` (by hand), `remove_unit` with
 `reduce_quantity`, and `reactivate_unit` with `raise_quantity` — and each of
 those records the before and after. Adding a serial number does not touch it.
 
@@ -28,11 +28,13 @@ from ..billing.resources.device_csv import (
 from ..models.catalog import Item, ItemCategory
 from ..models.device import (
     UNIT_ACTIVE,
-    UNIT_IN_REPAIR,
-    UNIT_RETIRED,
+    UNIT_IN_HAND,
+    UNIT_REMOVED,
+    UNIT_STATUSES,
     Device,
     DeviceUnit,
 )
+from ..models.party import Party
 from . import audit
 
 DEVICE_AUDITED = (
@@ -48,8 +50,12 @@ UNIT_AUDITED = (
     "serial_number",
     "status",
     "acquired_on",
-    "retired_on",
-    "retired_reason",
+    "purchase_price",
+    "seller_party_id",
+    "seller_name",
+    "purchase_reference",
+    "removed_on",
+    "removed_reason",
     "notes",
 )
 
@@ -74,30 +80,38 @@ class DigestMismatch(DeviceError):
 @dataclass(frozen=True)
 class Counts:
     owned: int
-    recorded: int
-    active: int
-    in_repair: int
-    retired: int
+    by_status: dict
+
+    def of(self, status: str) -> int:
+        return self.by_status.get(status, 0)
 
     @property
-    def usable(self) -> int:
-        return self.active + self.in_repair
+    def recorded(self) -> int:
+        return sum(self.by_status.values())
+
+    @property
+    def in_hand(self) -> int:
+        return sum(self.of(status) for status in UNIT_IN_HAND)
+
+    @property
+    def removed(self) -> int:
+        return sum(self.of(status) for status in UNIT_REMOVED)
 
     @property
     def not_yet_recorded(self) -> int:
-        return max(0, self.owned - self.usable)
+        return max(0, self.owned - self.in_hand)
 
     @property
     def beyond_quantity(self) -> int:
-        return max(0, self.usable - self.owned)
+        return max(0, self.in_hand - self.owned)
 
     def as_dict(self) -> dict:
         return {
             "owned": self.owned,
             "recorded": self.recorded,
-            "active": self.active,
-            "in_repair": self.in_repair,
-            "retired": self.retired,
+            **{status: self.of(status) for status in UNIT_STATUSES},
+            "in_hand": self.in_hand,
+            "removed": self.removed,
             "not_yet_recorded": self.not_yet_recorded,
             "beyond_quantity": self.beyond_quantity,
         }
@@ -115,17 +129,7 @@ def counts_for(db: Session, devices: Iterable[Device]) -> dict[uuid.UUID, Counts
             .all()
         ):
             by_status[device_id][status] = number
-    out = {}
-    for row in rows:
-        seen = by_status[row.id]
-        out[row.id] = Counts(
-            owned=row.quantity_owned,
-            recorded=sum(seen.values()),
-            active=seen.get(UNIT_ACTIVE, 0),
-            in_repair=seen.get(UNIT_IN_REPAIR, 0),
-            retired=seen.get(UNIT_RETIRED, 0),
-        )
-    return out
+    return {row.id: Counts(owned=row.quantity_owned, by_status=dict(by_status[row.id])) for row in rows}
 
 
 # ─── Lookups and suggestions ────────────────────────────────────────────────
@@ -178,6 +182,20 @@ def check_catalog_item(db: Session, company_id: uuid.UUID, item_id: Optional[uui
             f"only be linked to an equipment rental item."
         )
     return item
+
+
+def check_seller(db: Session, company_id: uuid.UUID, party_id: Optional[uuid.UUID]) -> Optional[Party]:
+    """The seller party: this company's, or "not found" (the caller's 404)."""
+    if party_id is None:
+        return None
+    party = db.query(Party).filter(Party.id == party_id, Party.company_id == company_id).first()
+    if party is None:
+        raise LookupError("Seller not found")
+    return party
+
+
+def _clean_text(value: Optional[str]) -> Optional[str]:
+    return " ".join((value or "").split()) or None
 
 
 def _refuse_name_in_use(
@@ -335,10 +353,20 @@ def add_units(
     serial_numbers: Iterable[str],
     acquired_on: Optional[date] = None,
     notes: Optional[str] = None,
+    purchase_price: Optional[Decimal] = None,
+    seller_party_id: Optional[uuid.UUID] = None,
+    seller_name: Optional[str] = None,
+    purchase_reference: Optional[str] = None,
 ) -> tuple[list[DeviceUnit], list[dict]]:
     """Record serial numbers. Repeats and serials already on this device
     are listed and skipped, never an error. `quantity_owned` is not read or
-    written here — that is the whole point of the separation."""
+    written here — that is the whole point of the separation.
+
+    The purchase details, when given, apply to every serial of the list:
+    a pasted list is one purchase.
+    """
+    _refuse_negative_price(purchase_price)
+    check_seller(db, device.company_id, seller_party_id)
     existing = {
         key: serial
         for key, serial in db.query(DeviceUnit.serial_key, DeviceUnit.serial_number).filter(
@@ -383,6 +411,10 @@ def add_units(
             serial_key=key,
             status=UNIT_ACTIVE,
             acquired_on=acquired_on,
+            purchase_price=purchase_price,
+            seller_party_id=seller_party_id,
+            seller_name=_clean_text(seller_name),
+            purchase_reference=_clean_text(purchase_reference),
             notes=(notes or "").strip() or None,
         )
         db.add(unit)
@@ -401,14 +433,15 @@ def add_units(
 
 
 def update_unit(db: Session, unit: DeviceUnit, *, actor: audit.Actor, changes: dict) -> None:
-    """Corrections and the in-repair round trip. A retired unit comes back
-    only through `reactivate_unit`, which asks about the quantity."""
+    """Corrections, purchase details, and moving between the statuses of a
+    unit in hand. A removed unit comes back only through `reactivate_unit`,
+    which asks about the quantity."""
     before = audit.snapshot(unit, UNIT_AUDITED)
     if "status" in changes and changes["status"] is not None:
-        if unit.status == UNIT_RETIRED:
+        if unit.status in UNIT_REMOVED:
             raise DeviceError(
-                f"Unit {unit.serial_number} is retired. Use Back to active, "
-                f"which also asks whether to raise the quantity owned."
+                f"Unit {unit.serial_number} is {unit.status.replace('_', ' ')}. Use "
+                f"Back to active, which also asks whether to raise the quantity owned."
             )
         unit.status = changes["status"]
     if "serial_number" in changes and changes["serial_number"] is not None:
@@ -431,6 +464,15 @@ def update_unit(db: Session, unit: DeviceUnit, *, actor: audit.Actor, changes: d
             )
         unit.serial_number = serial
         unit.serial_key = key
+    if "purchase_price" in changes:
+        _refuse_negative_price(changes["purchase_price"])
+        unit.purchase_price = changes["purchase_price"]
+    if "seller_party_id" in changes:
+        check_seller(db, unit.company_id, changes["seller_party_id"])
+        unit.seller_party_id = changes["seller_party_id"]
+    for field in ("seller_name", "purchase_reference"):
+        if field in changes:
+            setattr(unit, field, _clean_text(changes[field]))
     if "acquired_on" in changes:
         unit.acquired_on = changes["acquired_on"]
     if "notes" in changes:
@@ -440,27 +482,37 @@ def update_unit(db: Session, unit: DeviceUnit, *, actor: audit.Actor, changes: d
         audit.record(db, actor, unit, "device_unit.updated", before, after, fields=UNIT_AUDITED)
 
 
-def retire_unit(
+def remove_unit(
     db: Session,
     device: Device,
     unit: DeviceUnit,
     *,
     actor: audit.Actor,
-    reason: Optional[str],
-    retired_on: Optional[date],
-    notes: Optional[str],
+    status: str,
+    reason: str,
+    removed_on: Optional[date],
     reduce_quantity: bool,
 ) -> tuple[int, int]:
-    """`(quantity before, quantity after)`. The quantity moves only when the
+    """Retired, lost or sold, with exactly what happened in words.
+    `(quantity before, quantity after)`: the quantity moves only when the
     person ticked the box, and never below 0; the answer is in the event."""
-    if unit.status == UNIT_RETIRED:
-        raise DeviceError(f"Unit {unit.serial_number} is already retired.")
+    if status not in UNIT_REMOVED:
+        raise DeviceError("A unit is removed as retired, lost or sold.")
+    if unit.status in UNIT_REMOVED:
+        raise DeviceError(
+            f"Unit {unit.serial_number} is already {unit.status}. Bring it back "
+            f"to active first if this was a mistake."
+        )
+    text = (reason or "").strip()
+    if not text:
+        raise DeviceError(
+            "Say what happened to this unit — for example \"Fell off the crane "
+            "on the 1000m shoot, insurance claim 2026-118\"."
+        )
     before = audit.snapshot(unit, UNIT_AUDITED)
-    unit.status = UNIT_RETIRED
-    unit.retired_reason = reason
-    unit.retired_on = retired_on or date.today()
-    if notes is not None and notes.strip():
-        unit.notes = notes.strip()
+    unit.status = status
+    unit.removed_reason = text
+    unit.removed_on = removed_on or date.today()
     quantity_before = device.quantity_owned
     if reduce_quantity and device.quantity_owned > 0:
         device.quantity_owned -= 1
@@ -473,7 +525,7 @@ def retire_unit(
         db,
         actor,
         unit,
-        "device_unit.retired",
+        "device_unit.removed",
         before,
         after,
         fields=UNIT_AUDITED + ("quantity_owned", "quantity_adjusted"),
@@ -489,12 +541,14 @@ def reactivate_unit(
     actor: audit.Actor,
     raise_quantity: bool,
 ) -> tuple[int, int]:
-    if unit.status != UNIT_RETIRED:
-        raise DeviceError(f"Unit {unit.serial_number} is not retired.")
+    """A removed unit back in hand (found, bought back, removed by mistake).
+    The reason it was removed stays in the audit log."""
+    if unit.status not in UNIT_REMOVED:
+        raise DeviceError(f"Unit {unit.serial_number} was not removed.")
     before = audit.snapshot(unit, UNIT_AUDITED)
     unit.status = UNIT_ACTIVE
-    unit.retired_on = None
-    unit.retired_reason = None
+    unit.removed_on = None
+    unit.removed_reason = None
     quantity_before = device.quantity_owned
     if raise_quantity:
         device.quantity_owned += 1

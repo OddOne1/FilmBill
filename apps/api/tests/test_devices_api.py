@@ -168,8 +168,13 @@ def test_three_owned_two_serials_reads_one_not_yet_recorded(pg_client, pg_db, wo
         "owned": 3,
         "recorded": 2,
         "active": 2,
+        "needs_check": 0,
         "in_repair": 0,
+        "in_hand": 2,
+        "lost": 0,
         "retired": 0,
+        "sold": 0,
+        "removed": 0,
         "not_yet_recorded": 1,
         "beyond_quantity": 0,
     }
@@ -180,9 +185,11 @@ def test_two_owned_three_serials_one_retired(pg_client, pg_db, world):
     device = make_device(pg_db, world["company"], quantity_owned=2)
     make_device_unit(pg_db, world["company"], device, serial_number="A")
     make_device_unit(pg_db, world["company"], device, serial_number="B")
-    make_device_unit(pg_db, world["company"], device, serial_number="C", status="retired", retired_reason="destroyed")
+    make_device_unit(
+        pg_db, world["company"], device, serial_number="C", status="retired", removed_reason="Destroyed on set"
+    )
     counts = pg_client.get(f"/devices/{device.id}", headers=_h(world)).json()["counts"]
-    assert (counts["owned"], counts["recorded"], counts["retired"]) == (2, 3, 1)
+    assert (counts["owned"], counts["recorded"], counts["retired"], counts["removed"]) == (2, 3, 1, 1)
     assert (counts["not_yet_recorded"], counts["beyond_quantity"]) == (0, 0)
     # And the list says the same as the detail.
     listed = pg_client.get("/devices", headers=_h(world)).json()["devices"][0]["counts"]
@@ -198,15 +205,8 @@ def test_more_usable_serials_than_owned_is_allowed_and_counted(pg_client, pg_db,
 
 def test_nothing_owned_nothing_recorded(pg_client, world):
     device = _create(pg_client, world, name="Spare", quantity_owned=0, purchase_price=None)
-    assert device["counts"] == {
-        "owned": 0,
-        "recorded": 0,
-        "active": 0,
-        "in_repair": 0,
-        "retired": 0,
-        "not_yet_recorded": 0,
-        "beyond_quantity": 0,
-    }
+    assert set(device["counts"].values()) == {0}
+    assert len(device["counts"]) == 12
 
 
 def test_adding_serial_numbers_never_changes_the_quantity_owned(pg_client, pg_db, world):
@@ -266,7 +266,7 @@ def test_a_serial_in_another_case_is_the_same_serial_everywhere(pg_client, pg_db
     pg_db.rollback()
 
 
-# ─── Retiring and reactivating ──────────────────────────────────────────────
+# ─── Removing and reactivating ──────────────────────────────────────────────
 
 
 def _events(pg_db, unit_id, action):
@@ -278,74 +278,97 @@ def _events(pg_db, unit_id, action):
     ]
 
 
-def test_retiring_reduces_the_quantity_by_default_and_the_event_says_so(pg_client, pg_db, world):
+def _remove(pg_client, world, device_id, unit_id, **body):
+    return pg_client.post(
+        f"/devices/{device_id}/units/{unit_id}/remove", headers=_h(world), json=body
+    )
+
+
+def test_removing_reduces_the_quantity_by_default_and_the_event_says_so(pg_client, pg_db, world):
     device = _create(pg_client, world, quantity_owned=3)
     detail = _add_serials(pg_client, world, device["id"], "A", "B")["device"]
     unit = _unit_id(detail, "A")
-    response = pg_client.post(
-        f"/devices/{device['id']}/units/{unit}/retire",
-        headers=_h(world),
-        json={"reason": "destroyed", "notes": "Fell off the crane"},
+    response = _remove(
+        pg_client, world, device["id"], unit, status="retired", reason="Destroyed: fell off the crane on the 1000m shoot"
     )
     assert response.status_code == 200, response.text
     body = response.json()
     assert (body["quantity_before"], body["quantity_after"]) == (3, 2)
-    assert body["unit"]["status"] == "retired" and body["unit"]["retired_reason"] == "destroyed"
-    assert body["unit"]["retired_on"] == date.today().isoformat()
+    assert body["unit"]["status"] == "retired"
+    assert body["unit"]["removed_reason"] == "Destroyed: fell off the crane on the 1000m shoot"
+    assert body["unit"]["removed_on"] == date.today().isoformat()
     assert body["device"]["counts"]["not_yet_recorded"] == 1
     assert _quantity(pg_db, device["id"]) == 2
-    changes = _events(pg_db, unit, "device_unit.retired")[0]
+    changes = _events(pg_db, unit, "device_unit.removed")[0]
     assert changes["quantity_owned"] == [3, 2]
     assert changes["quantity_adjusted"] == [None, True]
     assert changes["status"] == ["active", "retired"]
 
 
-def test_retiring_with_the_box_unticked_keeps_the_quantity(pg_client, pg_db, world):
+def test_removing_with_the_box_unticked_keeps_the_quantity(pg_client, pg_db, world):
     device = _create(pg_client, world, quantity_owned=3)
     detail = _add_serials(pg_client, world, device["id"], "A", "B")["device"]
     unit = _unit_id(detail, "B")
-    response = pg_client.post(
-        f"/devices/{device['id']}/units/{unit}/retire",
-        headers=_h(world),
-        json={"reason": "kept", "reduce_quantity": False},
+    response = _remove(
+        pg_client, world, device["id"], unit, status="retired", reason="Kept on the shelf as a museum piece", reduce_quantity=False
     )
     assert response.status_code == 200, response.text
     assert (response.json()["quantity_before"], response.json()["quantity_after"]) == (3, 3)
     assert _quantity(pg_db, device["id"]) == 3
-    changes = _events(pg_db, unit, "device_unit.retired")[0]
+    changes = _events(pg_db, unit, "device_unit.removed")[0]
     assert changes["quantity_adjusted"] == [None, False]
     assert "quantity_owned" not in changes
 
 
-def test_retiring_a_mistake_needs_no_reason_and_never_goes_below_zero(pg_client, pg_db, world):
+def test_lost_and_sold_are_removals_too_and_counted_apart(pg_client, pg_db, world):
+    device = _create(pg_client, world, quantity_owned=4)
+    detail = _add_serials(pg_client, world, device["id"], "A", "B", "C", "D")["device"]
+    _remove(pg_client, world, device["id"], _unit_id(detail, "A"), status="lost", reason="Not returned from the Kaprun set")
+    _remove(pg_client, world, device["id"], _unit_id(detail, "B"), status="sold", reason="Sold to Studio X, invoice 2026-77")
+    counts = pg_client.get(f"/devices/{device['id']}", headers=_h(world)).json()["counts"]
+    assert (counts["lost"], counts["sold"], counts["removed"], counts["in_hand"]) == (1, 1, 2, 2)
+    assert counts["owned"] == 2
+
+
+def test_removing_needs_a_reason_in_words_and_never_goes_below_zero(pg_client, pg_db, world):
     device = _create(pg_client, world, quantity_owned=0)
     detail = _add_serials(pg_client, world, device["id"], "TYPO")["device"]
-    response = pg_client.post(
-        f"/devices/{device['id']}/units/{_unit_id(detail, 'TYPO')}/retire",
-        headers=_h(world),
-        json={"notes": "Entered by mistake"},
-    )
-    assert response.status_code == 200, response.text
-    assert response.json()["unit"]["retired_reason"] is None
+    unit = _unit_id(detail, "TYPO")
+    blank = _remove(pg_client, world, device["id"], unit, status="retired", reason="   ")
+    assert blank.status_code == 409
+    assert "Say what happened to this unit" in blank.json()["detail"]
+    missing = _remove(pg_client, world, device["id"], unit, status="retired")
+    assert missing.status_code == 422
+    ok = _remove(pg_client, world, device["id"], unit, status="retired", reason="Entered by mistake")
+    assert ok.status_code == 200, ok.text
     assert _quantity(pg_db, device["id"]) == 0
+    # The database refuses a removal without a reason, whoever writes it.
+    row = pg_db.get(DeviceUnit, unit)
+    row.removed_reason = None
+    with pytest.raises(IntegrityError):
+        pg_db.commit()
+    pg_db.rollback()
 
 
 def test_reactivating_offers_to_raise_the_quantity_and_does_by_default(pg_client, pg_db, world):
     device = make_device(pg_db, world["company"], quantity_owned=1)
-    unit = make_device_unit(pg_db, world["company"], device, serial_number="X", status="retired", retired_reason="lost")
+    unit = make_device_unit(pg_db, world["company"], device, serial_number="X", status="lost", removed_reason="Left in a taxi")
     response = pg_client.post(
         f"/devices/{device.id}/units/{unit.id}/reactivate", headers=_h(world), json={}
     )
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["unit"]["status"] == "active" and body["unit"]["retired_reason"] is None
+    assert body["unit"]["status"] == "active" and body["unit"]["removed_reason"] is None
     assert (body["quantity_before"], body["quantity_after"]) == (1, 2)
-    assert _events(pg_db, unit.id, "device_unit.reactivated")[0]["quantity_owned"] == [1, 2]
+    changes = _events(pg_db, unit.id, "device_unit.reactivated")[0]
+    assert changes["quantity_owned"] == [1, 2]
+    # Why it had been removed stays in the history.
+    assert changes["removed_reason"] == ["Left in a taxi", None]
 
 
 def test_reactivating_without_raising_keeps_the_quantity(pg_client, pg_db, world):
     device = make_device(pg_db, world["company"], quantity_owned=1)
-    unit = make_device_unit(pg_db, world["company"], device, serial_number="X", status="retired", retired_reason="kept")
+    unit = make_device_unit(pg_db, world["company"], device, serial_number="X", status="retired", removed_reason="Kept")
     response = pg_client.post(
         f"/devices/{device.id}/units/{unit.id}/reactivate",
         headers=_h(world),
@@ -355,21 +378,76 @@ def test_reactivating_without_raising_keeps_the_quantity(pg_client, pg_db, world
     assert _quantity(pg_db, device.id) == 1
 
 
-def test_in_repair_and_back_never_touch_the_quantity(pg_client, pg_db, world):
+def test_needs_check_in_repair_and_back_never_touch_the_quantity(pg_client, pg_db, world):
     device = _create(pg_client, world, quantity_owned=2)
     detail = _add_serials(pg_client, world, device["id"], "A")["device"]
     unit = _unit_id(detail, "A")
     path = f"/devices/{device['id']}/units/{unit}"
+    check = pg_client.patch(path, headers=_h(world), json={"status": "needs_check"})
+    assert check.json()["device"]["counts"]["needs_check"] == 1
     repair = pg_client.patch(path, headers=_h(world), json={"status": "in_repair"})
     assert repair.json()["device"]["counts"]["in_repair"] == 1
     back = pg_client.patch(path, headers=_h(world), json={"status": "active"})
     assert back.json()["unit"]["status"] == "active"
     assert _quantity(pg_db, device["id"]) == 2
-    # A retired unit cannot be PATCHed back: that path asks about quantity.
-    pg_client.post(f"{path}/retire", headers=_h(world), json={})
+    # Removal is never a PATCH, and neither is coming back from it.
+    assert pg_client.patch(path, headers=_h(world), json={"status": "sold"}).status_code == 422
+    _remove(pg_client, world, device["id"], unit, status="sold", reason="Sold")
     refused = pg_client.patch(path, headers=_h(world), json={"status": "active"})
     assert refused.status_code == 422
     assert "Back to active" in refused.json()["detail"]
+
+
+# ─── What a unit cost, and from whom ────────────────────────────────────────
+
+
+def test_a_unit_carries_its_own_price_seller_and_invoice_number(pg_client, pg_db, world):
+    from .company_factories import make_party
+
+    seller = make_party(pg_db, world["company"], name="ARRI Rental Wien", is_supplier=True)
+    device = _create(pg_client, world, quantity_owned=2, purchase_price="65000.00")
+    response = pg_client.post(
+        f"/devices/{device['id']}/units",
+        headers=_h(world),
+        json={
+            "serial_numbers": ["AX-1", "AX-2"],
+            "acquired_on": "2026-03-02",
+            "purchase_price": "61750.00",
+            "seller_party_id": str(seller.id),
+            "purchase_reference": "RE-2026-0311",
+        },
+    )
+    assert response.status_code == 201, response.text
+    units = response.json()["created"]
+    assert {(u["purchase_price"], u["seller_party_name"], u["purchase_reference"]) for u in units} == {
+        ("61750.00", "ARRI Rental Wien", "RE-2026-0311")
+    }
+    # The device's own price is untouched: the two prices are separate.
+    assert response.json()["device"]["purchase_price"] == "65000.00"
+    # A seller who is not on file is typed in.
+    one = units[0]["id"]
+    typed = pg_client.patch(
+        f"/devices/{device['id']}/units/{one}",
+        headers=_h(world),
+        json={"seller_party_id": None, "seller_name": "Ebay, user cam_shop_graz"},
+    )
+    assert typed.json()["unit"]["seller_name"] == "Ebay, user cam_shop_graz"
+    changes = _events(pg_db, one, "device_unit.updated")[0]
+    assert changes["seller_party_id"] == [str(seller.id), None]
+
+
+def test_a_seller_from_another_company_is_not_found(pg_client, pg_db, world):
+    from .company_factories import make_party
+
+    theirs = make_party(pg_db, make_company(pg_db, "Else GmbH"), name="Their shop")
+    device = _create(pg_client, world)
+    response = pg_client.post(
+        f"/devices/{device['id']}/units",
+        headers=_h(world),
+        json={"serial_numbers": ["AX-1"], "seller_party_id": str(theirs.id)},
+    )
+    assert response.status_code == 404
+    assert pg_db.query(DeviceUnit).count() == 0
 
 
 def test_the_quantity_may_always_be_set_by_hand_and_is_its_own_event(pg_client, pg_db, world):
@@ -527,7 +605,7 @@ def test_a_file_that_moved_since_the_preview_writes_nothing(pg_client, pg_db, wo
 def test_the_export_is_the_import_format(pg_client, pg_db, world):
     device = _create(pg_client, world, name="Alexa 35", quantity_owned=3, purchase_price="65000.00", notes="Body only")
     detail = _add_serials(pg_client, world, device["id"], "B-2", "A-1", "C-3")["device"]
-    pg_client.post(f"/devices/{device['id']}/units/{_unit_id(detail, 'C-3')}/retire", headers=_h(world), json={"reduce_quantity": False})
+    _remove(pg_client, world, device["id"], _unit_id(detail, "C-3"), status="sold", reason="Sold", reduce_quantity=False)
     response = pg_client.get("/devices/export.csv", headers=_h(world))
     assert response.status_code == 200
     lines = response.content.decode("utf-8-sig").splitlines()
@@ -581,7 +659,7 @@ def _every_device_request(device_id, unit_id):
         ("post", f"{base}/reactivate", None, None),
         ("post", f"{base}/units", {"serial_numbers": ["STAFF-1"]}, None),
         ("patch", unit, {"notes": "staff"}, None),
-        ("post", f"{unit}/retire", {}, None),
+        ("post", f"{unit}/remove", {"status": "retired", "reason": "staff"}, None),
         ("post", f"{unit}/reactivate", {}, None),
     ]
 
@@ -615,7 +693,17 @@ def test_staff_see_devices_and_counts_but_no_price_and_can_change_nothing(
     pg_client, pg_db, world, every_role
 ):
     device = _create(pg_client, world, purchase_price="65432.10")
-    detail = _add_serials(pg_client, world, device["id"], "AX-1")["device"]
+    added = pg_client.post(
+        f"/devices/{device['id']}/units",
+        headers=_h(world),
+        json={
+            "serial_numbers": ["AX-1"],
+            "purchase_price": "54321.00",
+            "seller_name": "Seller Secret KG",
+            "purchase_reference": "RE-777",
+        },
+    )
+    detail = added.json()["device"]
     unit = _unit_id(detail, "AX-1")
     staff = _h(world, every_role[CompanyRole.staff])
 
@@ -633,12 +721,23 @@ def test_staff_see_devices_and_counts_but_no_price_and_can_change_nothing(
                 assert rows and all(row["price_visible"] is False for row in rows)
                 assert all(row["purchase_price"] is None for row in rows)
                 assert rows[0]["counts"]["recorded"] == 1
-            # …and the stored amount appears nowhere in what staff received.
-            assert "65432" not in response.text
+                for one in body_json.get("units", []):
+                    assert one["purchase_visible"] is False
+                    assert one["purchase_price"] is None and one["seller_name"] is None
+            # …and the stored amounts and the seller appear nowhere in it.
+            for secret in ("65432", "54321", "Seller Secret", "RE-777"):
+                assert secret not in response.text, (url, secret)
 
     # The owner, through the very same requests, does see it.
     owner_detail = pg_client.get(f"/devices/{device['id']}", headers=_h(world)).json()
     assert owner_detail["price_visible"] is True and owner_detail["purchase_price"] == "65432.10"
+    owner_unit = owner_detail["units"][0]
+    assert owner_unit["purchase_visible"] is True
+    assert (owner_unit["purchase_price"], owner_unit["seller_name"], owner_unit["purchase_reference"]) == (
+        "54321.00",
+        "Seller Secret KG",
+        "RE-777",
+    )
     owner_csv = pg_client.get("/devices/export.csv", headers=_h(world)).content.decode("utf-8-sig")
     assert "65432,10" in owner_csv
     # Nothing staff sent changed anything.

@@ -16,8 +16,15 @@ records. So adding a serial never changes `quantity_owned`, and retiring one
 only reduces it when the person says so (the retire dialog asks, ticked by
 default).
 
-**Nothing is deleted.** A device is archived (`is_active`), a unit entered by
-mistake is retired with a note. Neither table has a DELETE route.
+**Nothing is deleted.** A device is archived (`is_active`); a unit is
+removed — retired, lost or sold — with a free-text reason that says exactly
+what happened, and a unit entered by mistake is retired with that said.
+Neither table has a DELETE route.
+
+**Two prices.** The device's `purchase_price` is the usual price; a unit's
+own `purchase_price` records what that one cost when it differs (a later
+purchase, a discount). Each unit can also name its seller and the seller's
+invoice number, for a repair, a return or an insurance claim.
 
 **Case-insensitive uniqueness through stored keys.** `name_key` and
 `serial_key` are the normalised forms (`services/device_service.name_key` /
@@ -63,13 +70,25 @@ except ImportError:  # pragma: no cover
 
 
 UNIT_ACTIVE = "active"
+UNIT_NEEDS_CHECK = "needs_check"
 UNIT_IN_REPAIR = "in_repair"
+UNIT_LOST = "lost"
 UNIT_RETIRED = "retired"
-UNIT_STATUSES = (UNIT_ACTIVE, UNIT_IN_REPAIR, UNIT_RETIRED)
-
-#: Why a unit left. Optional: a unit entered by mistake is retired with a
-#: note and no reason, rather than being made to claim it was sold.
-RETIRED_REASONS = ("destroyed", "lost", "sold", "kept")
+UNIT_SOLD = "sold"
+UNIT_STATUSES = (
+    UNIT_ACTIVE,
+    UNIT_NEEDS_CHECK,
+    UNIT_IN_REPAIR,
+    UNIT_LOST,
+    UNIT_RETIRED,
+    UNIT_SOLD,
+)
+#: Still the company's, possibly not bookable today: a unit that needs a
+#: check or is in repair comes back by itself.
+UNIT_IN_HAND = (UNIT_ACTIVE, UNIT_NEEDS_CHECK, UNIT_IN_REPAIR)
+#: Gone — retired, lost or sold. Removing a unit always says exactly what
+#: happened (`removed_reason`, free text, required), Mathias 2026-11-26.
+UNIT_REMOVED = (UNIT_LOST, UNIT_RETIRED, UNIT_SOLD)
 
 
 class Device(CompanyScoped, Base):
@@ -147,15 +166,32 @@ class DeviceUnit(CompanyScoped, Base):
     )
     serial_number: Mapped[str] = mapped_column(String(128), nullable=False)
     #: `serial_number` stripped and case-folded. Unique among ALL of a
-    #: device's units, retired ones included: a retired unit coming back is
+    #: device's units, removed ones included: a unit coming back is
     #: reactivated, not entered twice.
     serial_key: Mapped[str] = mapped_column(String(128), nullable=False)
     status: Mapped[str] = mapped_column(
         String(16), nullable=False, server_default=UNIT_ACTIVE
     )
+    #: The purchase date of this unit.
     acquired_on: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
-    retired_on: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
-    retired_reason: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    #: What THIS unit cost, net — when it differs from the device's price
+    #: (a later purchase at another price, a discount). Empty means the
+    #: device's price applies. Served only with `budgets.view`, like it.
+    purchase_price: Mapped[Optional[Any]] = mapped_column(AmountColumn(), nullable=True)
+    #: Who sold it, for a repair, a return or an insurance claim: a party
+    #: on file, or a name typed in when the seller is not one.
+    seller_party_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("parties.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    seller_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    #: The seller's invoice or order number.
+    purchase_reference: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    #: When and why it was removed (retired, lost or sold). Both are set
+    #: exactly when the status is one of those three — a CHECK says so.
+    removed_on: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    removed_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -169,19 +205,22 @@ class DeviceUnit(CompanyScoped, Base):
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('active', 'in_repair', 'retired')",
+            "status IN ('active', 'needs_check', 'in_repair', 'lost', 'retired', 'sold')",
             name="ck_device_units_status",
         ),
+        # A removed unit says when and exactly why; a unit in hand says
+        # neither — an active unit "sold on 3 May" is a contradiction
+        # nobody could act on.
         CheckConstraint(
-            "retired_reason IS NULL OR retired_reason IN "
-            "('destroyed', 'lost', 'sold', 'kept')",
-            name="ck_device_units_retired_reason",
+            "(status IN ('lost', 'retired', 'sold') AND removed_on IS NOT NULL "
+            "AND removed_reason IS NOT NULL AND length(trim(removed_reason)) > 0) "
+            "OR (status NOT IN ('lost', 'retired', 'sold') AND removed_on IS NULL "
+            "AND removed_reason IS NULL)",
+            name="ck_device_units_removed_fields",
         ),
-        # A reason or a date only on a retired unit: an active unit that
-        # says it was sold is a contradiction nobody could act on.
         CheckConstraint(
-            "status = 'retired' OR (retired_reason IS NULL AND retired_on IS NULL)",
-            name="ck_device_units_retired_fields",
+            "purchase_price IS NULL OR purchase_price >= 0",
+            name="ck_device_units_purchase_price",
         ),
         Index(
             "uq_device_units_device_serial",
@@ -190,4 +229,5 @@ class DeviceUnit(CompanyScoped, Base):
             unique=True,
         ),
         Index("ix_device_units_device", "device_id"),
+        Index("ix_device_units_seller", "seller_party_id"),
     )

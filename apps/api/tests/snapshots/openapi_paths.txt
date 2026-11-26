@@ -183,7 +183,7 @@ POST /devices/{device_id}/archive
 POST /devices/{device_id}/reactivate
 POST /devices/{device_id}/units
 POST /devices/{device_id}/units/{device_unit_id}/reactivate
-POST /devices/{device_id}/units/{device_unit_id}/retire
+POST /devices/{device_id}/units/{device_unit_id}/remove
 POST /email-settings/test
 POST /me/notifications/read-all
 POST /me/notifications/{notification_id}/read

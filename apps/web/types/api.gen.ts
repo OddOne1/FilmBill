@@ -3075,7 +3075,7 @@ export interface paths {
         /**
          * Export Devices
          * @description `name;category;quantity;price;serials;notes`. The serials are the
-         *     units that are not retired; the price column is empty for a role that
+         *     units still in hand (not lost, retired or sold); the price column is empty for a role that
          *     may not see purchase prices.
          */
         get: operations["export_devices_devices_export_csv_get"];
@@ -3099,7 +3099,7 @@ export interface paths {
         /**
          * Apply Device Import
          * @description Create the preview's new devices with their serial numbers. Never
-         *     edits, archives or retires anything that exists.
+         *     edits, archives or removes anything that exists.
          */
         post: operations["apply_device_import_devices_import_post"];
         delete?: never;
@@ -3218,8 +3218,9 @@ export interface paths {
         head?: never;
         /**
          * Update Unit
-         * @description Correct a serial number, a date or a note; send a unit to repair or
-         *     bring it back from repair. Retiring is `/retire`.
+         * @description Correct a serial number, a date, a note or the purchase details;
+         *     move a unit between active, needs check and in repair. Removing is
+         *     `/remove`, coming back from it `/reactivate`.
          */
         patch: operations["update_unit_devices__device_id__units__device_unit_id__patch"];
         trace?: never;
@@ -3235,7 +3236,7 @@ export interface paths {
         put?: never;
         /**
          * Reactivate Unit
-         * @description Bring a retired unit back. `raise_quantity` defaults to yes.
+         * @description Bring a lost, retired or sold unit back. `raise_quantity` defaults to yes.
          */
         post: operations["reactivate_unit_devices__device_id__units__device_unit_id__reactivate_post"];
         delete?: never;
@@ -3244,7 +3245,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/devices/{device_id}/units/{device_unit_id}/retire": {
+    "/devices/{device_id}/units/{device_unit_id}/remove": {
         parameters: {
             query?: never;
             header?: never;
@@ -3254,11 +3255,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Retire Unit
-         * @description Retire a unit — destroyed, lost, sold, kept, or entered by mistake
-         *     (no reason, a note). `reduce_quantity` defaults to yes.
+         * Remove Unit
+         * @description Retired, lost or sold — with exactly what happened, in words (a unit
+         *     entered by mistake is retired and says so). `reduce_quantity` defaults
+         *     to yes.
          */
-        post: operations["retire_unit_devices__device_id__units__device_unit_id__retire_post"];
+        post: operations["remove_unit_devices__device_id__units__device_unit_id__remove_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -7674,26 +7676,37 @@ export interface components {
          * DeviceCounts
          * @description The two numbers and how they relate. Never an error, never corrected.
          *
-         *     `recorded` is every serial number on file, retired ones included;
-         *     `not_yet_recorded` is how many of the owned quantity have no usable
-         *     (non-retired) serial yet; `beyond_quantity` is how many usable serials
-         *     there are above the quantity owned — allowed, and said in words.
+         *     `recorded` is every serial number on file, removed ones included.
+         *     `in_hand` is active + needs check + in repair; `removed` is lost +
+         *     retired + sold. `not_yet_recorded` is how many of the owned quantity
+         *     have no serial in hand yet; `beyond_quantity` is how many serials in
+         *     hand there are above the quantity owned — allowed, and said in words.
          */
         DeviceCounts: {
             /** Active */
             active: number;
             /** Beyond Quantity */
             beyond_quantity: number;
+            /** In Hand */
+            in_hand: number;
             /** In Repair */
             in_repair: number;
+            /** Lost */
+            lost: number;
+            /** Needs Check */
+            needs_check: number;
             /** Not Yet Recorded */
             not_yet_recorded: number;
             /** Owned */
             owned: number;
             /** Recorded */
             recorded: number;
+            /** Removed */
+            removed: number;
             /** Retired */
             retired: number;
+            /** Sold */
+            sold: number;
         };
         /** DeviceCreate */
         DeviceCreate: {
@@ -7895,6 +7908,26 @@ export interface components {
              */
             raise_quantity: boolean;
         };
+        /**
+         * DeviceUnitRemove
+         * @description Retired, lost or sold — and exactly what happened, in words.
+         */
+        DeviceUnitRemove: {
+            /** Reason */
+            reason: string;
+            /**
+             * Reduce Quantity
+             * @default true
+             */
+            reduce_quantity: boolean;
+            /** Removed On */
+            removed_on?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "lost" | "retired" | "sold";
+        };
         /** DeviceUnitResponse */
         DeviceUnitResponse: {
             /** Acquired On */
@@ -7916,50 +7949,57 @@ export interface components {
             id: string;
             /** Notes */
             notes?: string | null;
-            /** Retired On */
-            retired_on?: string | null;
-            /** Retired Reason */
-            retired_reason?: ("destroyed" | "lost" | "sold" | "kept") | null;
+            /** Purchase Price */
+            purchase_price?: string | null;
+            /** Purchase Reference */
+            purchase_reference?: string | null;
+            /** Purchase Visible */
+            purchase_visible: boolean;
+            /** Removed On */
+            removed_on?: string | null;
+            /** Removed Reason */
+            removed_reason?: string | null;
+            /** Seller Name */
+            seller_name?: string | null;
+            /** Seller Party Id */
+            seller_party_id?: string | null;
+            /** Seller Party Name */
+            seller_party_name?: string | null;
             /** Serial Number */
             serial_number: string;
             /**
              * Status
              * @enum {string}
              */
-            status: "active" | "in_repair" | "retired";
+            status: "active" | "needs_check" | "in_repair" | "lost" | "retired" | "sold";
             /**
              * Updated At
              * Format: date-time
              */
             updated_at: string;
         };
-        /** DeviceUnitRetire */
-        DeviceUnitRetire: {
-            /** Notes */
-            notes?: string | null;
-            /** Reason */
-            reason?: ("destroyed" | "lost" | "sold" | "kept") | null;
-            /**
-             * Reduce Quantity
-             * @default true
-             */
-            reduce_quantity: boolean;
-            /** Retired On */
-            retired_on?: string | null;
-        };
         /**
          * DeviceUnitUpdate
-         * @description Corrections, and the in-repair round trip. Retiring is its own call.
+         * @description Corrections, the purchase details, and moving between the statuses
+         *     of a unit in hand. Removing is `/remove`, coming back is `/reactivate`.
          */
         DeviceUnitUpdate: {
             /** Acquired On */
             acquired_on?: string | null;
             /** Notes */
             notes?: string | null;
+            /** Purchase Price */
+            purchase_price?: string | null;
+            /** Purchase Reference */
+            purchase_reference?: string | null;
+            /** Seller Name */
+            seller_name?: string | null;
+            /** Seller Party Id */
+            seller_party_id?: string | null;
             /** Serial Number */
             serial_number?: string | null;
             /** Status */
-            status?: ("active" | "in_repair") | null;
+            status?: ("active" | "needs_check" | "in_repair") | null;
         };
         /**
          * DeviceUnitsAdd
@@ -7970,6 +8010,14 @@ export interface components {
             acquired_on?: string | null;
             /** Notes */
             notes?: string | null;
+            /** Purchase Price */
+            purchase_price?: string | null;
+            /** Purchase Reference */
+            purchase_reference?: string | null;
+            /** Seller Name */
+            seller_name?: string | null;
+            /** Seller Party Id */
+            seller_party_id?: string | null;
             /** Serial Numbers */
             serial_numbers: string[];
         };
@@ -16568,7 +16616,7 @@ export interface operations {
             };
         };
     };
-    retire_unit_devices__device_id__units__device_unit_id__retire_post: {
+    remove_unit_devices__device_id__units__device_unit_id__remove_post: {
         parameters: {
             query?: never;
             header?: {
@@ -16582,7 +16630,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["DeviceUnitRetire"];
+                "application/json": components["schemas"]["DeviceUnitRemove"];
             };
         };
         responses: {
