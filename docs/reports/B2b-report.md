@@ -242,5 +242,23 @@ crew tick off; there is no gear yet).
 
 ## CI on `origin/main`
 
-Filled in by the commit after the closing commit, once CI on `origin/main`
-has run.
+Merged by fast-forward: `origin/main` `515c367..aaa1bc9` (no merge commit;
+nothing had landed on `main` meanwhile).
+
+CI run **45828388612** on `aaa1bc9`: **four of five jobs green**, namely Web
+lint, typecheck, test, build · Docker build (no push) · Migrations match the
+models · API types match the schema. In **API tests**, "Run tests" and
+"Guard against a gutted suite" (floor 2900) passed, and **"Real-database
+tests ran, not skipped" failed** with exit code 1 and no `::error::`
+annotation. Neither the 1525 floor nor the zero-skip check fired, so
+pytest itself reported a failure in that second run. The job log is
+served only to repository admins, so which test failed is not known here.
+
+**Not reproduced.** The same commit, run locally in CI's order (full suite,
+then `-m realdb`, one container, one base database): 2984 passed, then 1568
+passed, 0 failed. On the separate runs: 2984 and 1568. **[Guessing]** a
+test that depends on timing on the slower runner. Nothing in the record
+names one, and this step failed once before (`a1d65df`, 2026-11-23) for a
+reason not written down. This section is the commit after `aaa1bc9`; its CI
+run is the one reported back. If that run is red in the same step, the
+failing test's lines from the job log are needed to go further.
