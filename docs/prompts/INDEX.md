@@ -29,6 +29,7 @@ from them. `docs/SCOPE.md` is where the product is decided.
 | B1.1 | Plain labels, mark finished, closing a budget, extras | [`28-filmbill-B1.1-finish-close-extras.md`](28-filmbill-B1.1-finish-close-extras.md) | `598a1bc`…closing commit | done — see notes |
 | B1.2 | Adjustments by kind and section, production fee preset, country dropdown, clearer messages | [`29-filmbill-B1.2-adjustments-fee-country-messages.md`](29-filmbill-B1.2-adjustments-fee-country-messages.md) | `30ac390`…closing commit | done — see notes |
 | B2a | The project calendar: strips instead of a day table | [`30-filmbill-B2a-project-calendar.md`](30-filmbill-B2a-project-calendar.md) | `ecc1491`…closing commit | done — see notes |
+| B2b | Crew and gear records: crew as flagged parties, devices with serial numbers | [`31-filmbill-B2b-crew-and-gear-records.md`](31-filmbill-B2b-crew-and-gear-records.md) | — | in progress |
 | P0b | Foundations: companies, roles, number series, audit, money, codegen | [`03-filmbill-P0b-foundations.md`](03-filmbill-P0b-foundations.md) | — | superseded — split into P0b-0, P0b-1, P0b-2 |
 
 ---
