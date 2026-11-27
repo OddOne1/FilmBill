@@ -34,7 +34,7 @@ from them. `docs/SCOPE.md` is where the product is decided.
 | UI-1 | Sidebar expanded, notifications popup, no Crew menu item, calendar always six weeks | [`33-filmbill-UI1-nav-notifications-calendar-weeks.md`](33-filmbill-UI1-nav-notifications-calendar-weeks.md) | `031da04`…closing commit | done — see notes |
 | B2b-2 | Gear completion: rental prices on the device, add-units popup, dependencies, alternatives, size, weight and a picture | [`34-filmbill-B2b2-gear-completion.md`](34-filmbill-B2b2-gear-completion.md) | `0fc9ab9`…closing commit | done — see notes |
 | R1 + B2c-1 | Crew roles and rates; crew assignments on the calendar (scheduled, then booked) | [`35-filmbill-R1-B2c1-crew-roles-rates-assignments.md`](35-filmbill-R1-B2c1-crew-roles-rates-assignments.md) | `4ccab1e`…closing commit | done — see notes |
-| B2c-2 | Gear bookings on strips: availability, overbooking with alternatives, dependencies | [`36-filmbill-B2c2-gear-bookings.md`](36-filmbill-B2c2-gear-bookings.md) | — | in progress |
+| B2c-2 | Gear bookings on strips: availability, overbooking with alternatives, dependencies | [`36-filmbill-B2c2-gear-bookings.md`](36-filmbill-B2c2-gear-bookings.md) | `4015a84`…closing commit | done — see notes |
 | P0b | Foundations: companies, roles, number series, audit, money, codegen | [`03-filmbill-P0b-foundations.md`](03-filmbill-P0b-foundations.md) | — | superseded — split into P0b-0, P0b-1, P0b-2 |
 
 ---
@@ -1650,3 +1650,36 @@ the strip badge, Project → Crew (where crew are also added and booked, per str
   hotels, locations, weather, the budget cost link, travel pay, overtime.
 - Not checked: the screens in a real browser.
 
+
+## B2c-2 — gear bookings: availability, overbooking with alternatives, dependencies
+
+Full report: [`docs/reports/B2c2-report.md`](../reports/B2c2-report.md).
+
+**Built.** Devices are booked on strips with days like crew, `scheduled`
+then `booked` by hand, `cancelled` with a note; the words replace §4.5's
+"option / confirmed" in the UI (D136). Migration 0031. Availability per day
+(`owned − scheduled − booked`, may be negative), the lowest day governing,
+cancelled ignored, the edited booking never against itself — one pure module
+with seven golden fixtures (D137). Overbooking warns and never blocks: every
+save answers with the shortage, who holds the device and the alternatives
+with their own availability. `always` dependencies are added with the
+device, `ask` ones by popup, one level only; followers recalculate with the
+parent's quantity, a dependent edited by hand stops following; removing a
+parent asks about its dependents (D138). The overbooking popup: Swap, Book
+anyway with a note, Cancel (D139). Strip badge "Gear: 6 booked · 2
+scheduled", Project → Gear with the total weight (D140), Gear → Planner on
+the planner grid now shared with crew, the device's Bookings tab.
+
+**Numbers.** API 3371 passed, 30 skipped (3285 / 30 before); `-m realdb`
+1902 (1832); web 1002 / 83 files (983 / 82). CI floors **3190 → 3270** and
+**1780 → 1845**.
+
+**Flagged.**
+- Followers follow the parent's quantity only, not later changes of its days
+  or status (default); a swap keeps the old dependents.
+- The picker covers the strip's first to last day, off days included; the
+  warning on save uses the booking's own days.
+- Not built (D141): specific units, check-out and return, packing lists,
+  kits, sub-renting, prices and documents, revenue and ROI, the
+  "dependencies changed, review?" notice, budget lines from bookings.
+- Not checked: the screens in a real browser.
