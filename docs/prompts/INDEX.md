@@ -33,7 +33,7 @@ from them. `docs/SCOPE.md` is where the product is decided.
 | P1b-4 | Contacts rework: person names, sole proprietors, direct tax-ID entry, Contacts layout, people inside organisations | [`32-filmbill-P1b4-contacts-rework.md`](32-filmbill-P1b4-contacts-rework.md) | `ce142a0`…closing commit | done — see notes |
 | UI-1 | Sidebar expanded, notifications popup, no Crew menu item, calendar always six weeks | [`33-filmbill-UI1-nav-notifications-calendar-weeks.md`](33-filmbill-UI1-nav-notifications-calendar-weeks.md) | `031da04`…closing commit | done — see notes |
 | B2b-2 | Gear completion: rental prices on the device, add-units popup, dependencies, alternatives, size, weight and a picture | [`34-filmbill-B2b2-gear-completion.md`](34-filmbill-B2b2-gear-completion.md) | `0fc9ab9`…closing commit | done — see notes |
-| R1 + B2c-1 | Crew roles and rates; crew assignments on the calendar (scheduled, then booked) | [`35-filmbill-R1-B2c1-crew-roles-rates-assignments.md`](35-filmbill-R1-B2c1-crew-roles-rates-assignments.md) | — | in progress |
+| R1 + B2c-1 | Crew roles and rates; crew assignments on the calendar (scheduled, then booked) | [`35-filmbill-R1-B2c1-crew-roles-rates-assignments.md`](35-filmbill-R1-B2c1-crew-roles-rates-assignments.md) | `4ccab1e`…closing commit | done — see notes |
 | P0b | Foundations: companies, roles, number series, audit, money, codegen | [`03-filmbill-P0b-foundations.md`](03-filmbill-P0b-foundations.md) | — | superseded — split into P0b-0, P0b-1, P0b-2 |
 
 ---
@@ -1615,3 +1615,37 @@ with pre-multiplied quantities and origins (D126). Alternatives: migration
 - Stored pictures, like logos, are never deleted; the old key is in the
   audit event.
 - Not checked: the popups, tabs and upload in a real browser; a real bucket.
+
+---
+
+## R1 + B2c-1 — crew roles and rates, crew on the calendar
+
+Full report: [`docs/reports/R1-B2c1-report.md`](../reports/R1-B2c1-report.md).
+
+**Built.** A crew person's roles are the catalog's labor items with an own
+day rate per role; the effective rate is own, else the item's cost rate per
+day; rates only for `budgets.view` (D130, [Guessing]). Matching tags are
+offered as roles, one click each; quick add and the CSV import match role
+names to labor items and keep the rest as tags; `day_rate` column (D131).
+Migration 0029. Crew are added to a strip with every day that is not `off`,
+untick days, own call and wrap, scheduled → booked by hand with a note,
+declined, cancelled, reopen with a note, Mark selected as booked (D132);
+clashes with other strips and unavailability warn, never block; the
+availability grid (D133). Migration 0030. Staff see no crew (D134). Screens:
+Roles & rates and Not available on the person, the Crew tab's role/rate
+filters and Availability view, the strip panel's Crew section and picker,
+the strip badge, Project → Crew.
+
+**Numbers.** API 3285 passed, 30 skipped (3191 / 30 before); `-m realdb`
+1832 (1740); web 980 / 82 files (957 / 80). CI floors **3100 → 3190** and
+**1690 → 1780**.
+
+**Flagged.**
+- Every role that sees crew also sees rates today; the rate gate is proven
+  on a narrowed matrix and shows only once D111 separates them.
+- Crew days do not follow a moved or shortened strip; the next save drops
+  days left outside it.
+- Not built (D135): gear booking (B2c-2), confirmation by link, call sheet,
+  hotels, locations, weather, the budget cost link, travel pay, overtime.
+- Not checked: the screens in a real browser.
+
