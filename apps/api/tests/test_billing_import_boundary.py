@@ -63,11 +63,13 @@ def test_importing_the_billing_package_loads_no_orm_and_no_web_framework():
         # the subprocess is the real check — it is the one that sees an
         # `importlib.import_module("sqlalchemy")`.
         "import apps.api.billing.budget as budget\n"
+        # `planning` joined with B2c-2's gear availability rule.
+        "import apps.api.billing.planning as planning\n"
         # Touch EVERY exported name, so this is not merely a check on what
         # the __init__ statements do: an import inside a function body is
         # reached as well. Written against `__all__` rather than a named
         # function so it keeps covering the whole surface as the package grows.
-        "for module in (tax, parties, calc, budget):\n"
+        "for module in (tax, parties, calc, budget, planning):\n"
         "    assert module.__all__, f'{module.__name__} exports nothing'\n"
         "    for name in module.__all__:\n"
         "        getattr(module, name)\n"
@@ -137,11 +139,11 @@ def test_the_package_has_files_to_check():
     """A glob that matched nothing would make the scan below vacuous."""
     files = _python_files()
     # billing/__init__ (1) + tax (6) + parties (6) + calc (4) +
-    # catalog (4) + budget (3) = 24, and the floor rises with the package
+    # catalog (4) + budget (3) = 24, + planning (2): 30 files at B2c-2, and the floor rises with the package
     # rather than staying at the number it was written with. It was 14 when
     # the package held 14 files and had not moved while it grew to 23 —
     # which is the shape CLAUDE.md 17e is about, in miniature.
-    assert len(files) >= 23, f"only found {files} under {BILLING}"
+    assert len(files) >= 30, f"only found {files} under {BILLING}"
 
 
 def _imported_modules(path: Path) -> list[tuple[int, str]]:

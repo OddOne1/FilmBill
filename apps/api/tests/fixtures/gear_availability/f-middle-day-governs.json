@@ -1,0 +1,75 @@
+{
+  "why": "Owned 3 over three days; 6 and 8 July have 1 booked (2 available), 7 July has 3 booked + 1 scheduled (-1). The lowest day governs: the worst day is the middle one, shortage 1.",
+  "owned": 3,
+  "dates": [
+    "2026-07-06",
+    "2026-07-07",
+    "2026-07-08"
+  ],
+  "bookings": [
+    {
+      "id": "b1",
+      "date": "2026-07-06",
+      "quantity": 1,
+      "status": "booked"
+    },
+    {
+      "id": "b1",
+      "date": "2026-07-07",
+      "quantity": 1,
+      "status": "booked"
+    },
+    {
+      "id": "b1",
+      "date": "2026-07-08",
+      "quantity": 1,
+      "status": "booked"
+    },
+    {
+      "id": "b2",
+      "date": "2026-07-07",
+      "quantity": 2,
+      "status": "booked"
+    },
+    {
+      "id": "b3",
+      "date": "2026-07-07",
+      "quantity": 1,
+      "status": "scheduled"
+    }
+  ],
+  "expect": {
+    "days": {
+      "2026-07-06": {
+        "owned": 3,
+        "scheduled": 0,
+        "booked": 1,
+        "available": 2,
+        "overbooked": false,
+        "shortage": 0
+      },
+      "2026-07-07": {
+        "owned": 3,
+        "scheduled": 1,
+        "booked": 3,
+        "available": -1,
+        "overbooked": true,
+        "shortage": 1
+      },
+      "2026-07-08": {
+        "owned": 3,
+        "scheduled": 0,
+        "booked": 1,
+        "available": 2,
+        "overbooked": false,
+        "shortage": 0
+      }
+    },
+    "period": {
+      "min_available": -1,
+      "worst_day": "2026-07-07",
+      "overbooked": true,
+      "shortage": 1
+    }
+  }
+}

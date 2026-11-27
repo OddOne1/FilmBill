@@ -1,0 +1,39 @@
+{
+  "why": "Owned 3, booked 2 + scheduled 1 on the day: 0 available, not overbooked.",
+  "owned": 3,
+  "dates": [
+    "2026-07-06"
+  ],
+  "bookings": [
+    {
+      "id": "b1",
+      "date": "2026-07-06",
+      "quantity": 2,
+      "status": "booked"
+    },
+    {
+      "id": "b2",
+      "date": "2026-07-06",
+      "quantity": 1,
+      "status": "scheduled"
+    }
+  ],
+  "expect": {
+    "days": {
+      "2026-07-06": {
+        "owned": 3,
+        "scheduled": 1,
+        "booked": 2,
+        "available": 0,
+        "overbooked": false,
+        "shortage": 0
+      }
+    },
+    "period": {
+      "min_available": 0,
+      "worst_day": "2026-07-06",
+      "overbooked": false,
+      "shortage": 0
+    }
+  }
+}

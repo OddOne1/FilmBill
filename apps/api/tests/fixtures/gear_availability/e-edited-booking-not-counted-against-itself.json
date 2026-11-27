@@ -1,0 +1,40 @@
+{
+  "why": "Owned 3; booking b1 holds 2, b2 holds 1. Editing b1 (exclude b1): only b2 counts, 2 available, so b1 may grow to 2 without a warning.",
+  "owned": 3,
+  "dates": [
+    "2026-07-06"
+  ],
+  "exclude": "b1",
+  "bookings": [
+    {
+      "id": "b1",
+      "date": "2026-07-06",
+      "quantity": 2,
+      "status": "scheduled"
+    },
+    {
+      "id": "b2",
+      "date": "2026-07-06",
+      "quantity": 1,
+      "status": "booked"
+    }
+  ],
+  "expect": {
+    "days": {
+      "2026-07-06": {
+        "owned": 3,
+        "scheduled": 0,
+        "booked": 1,
+        "available": 2,
+        "overbooked": false,
+        "shortage": 0
+      }
+    },
+    "period": {
+      "min_available": 2,
+      "worst_day": "2026-07-06",
+      "overbooked": false,
+      "shortage": 0
+    }
+  }
+}

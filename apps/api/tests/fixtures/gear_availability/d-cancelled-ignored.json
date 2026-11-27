@@ -1,0 +1,39 @@
+{
+  "why": "Owned 3, booked 2 and a cancelled booking of 2: the cancelled one never counts, 1 available.",
+  "owned": 3,
+  "dates": [
+    "2026-07-06"
+  ],
+  "bookings": [
+    {
+      "id": "b1",
+      "date": "2026-07-06",
+      "quantity": 2,
+      "status": "booked"
+    },
+    {
+      "id": "b2",
+      "date": "2026-07-06",
+      "quantity": 2,
+      "status": "cancelled"
+    }
+  ],
+  "expect": {
+    "days": {
+      "2026-07-06": {
+        "owned": 3,
+        "scheduled": 0,
+        "booked": 2,
+        "available": 1,
+        "overbooked": false,
+        "shortage": 0
+      }
+    },
+    "period": {
+      "min_available": 1,
+      "worst_day": "2026-07-06",
+      "overbooked": false,
+      "shortage": 0
+    }
+  }
+}

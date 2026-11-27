@@ -1,0 +1,33 @@
+{
+  "why": "Owned 0 with a scheduled booking of 2: overbooked by exactly that quantity.",
+  "owned": 0,
+  "dates": [
+    "2026-07-06"
+  ],
+  "bookings": [
+    {
+      "id": "b1",
+      "date": "2026-07-06",
+      "quantity": 2,
+      "status": "scheduled"
+    }
+  ],
+  "expect": {
+    "days": {
+      "2026-07-06": {
+        "owned": 0,
+        "scheduled": 2,
+        "booked": 0,
+        "available": -2,
+        "overbooked": true,
+        "shortage": 2
+      }
+    },
+    "period": {
+      "min_available": -2,
+      "worst_day": "2026-07-06",
+      "overbooked": true,
+      "shortage": 2
+    }
+  }
+}

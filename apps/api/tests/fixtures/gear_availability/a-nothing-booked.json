@@ -1,0 +1,26 @@
+{
+  "why": "Owned 3, nothing booked: all 3 are available.",
+  "owned": 3,
+  "dates": [
+    "2026-07-06"
+  ],
+  "bookings": [],
+  "expect": {
+    "days": {
+      "2026-07-06": {
+        "owned": 3,
+        "scheduled": 0,
+        "booked": 0,
+        "available": 3,
+        "overbooked": false,
+        "shortage": 0
+      }
+    },
+    "period": {
+      "min_available": 3,
+      "worst_day": "2026-07-06",
+      "overbooked": false,
+      "shortage": 0
+    }
+  }
+}

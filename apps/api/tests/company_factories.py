@@ -1041,7 +1041,9 @@ def make_device_unit(
     return row
 
 
-def make_device_association(db, company: Company, device, associated, *, quantity_per_parent: int = 1):
+def make_device_association(
+    db, company: Company, device, associated, *, quantity_per_parent: int = 1, booking_mode: str = "always"
+):
     """`device` needs `associated` (B2b-2), written directly."""
     from apps.api.models.device import DeviceAssociation
 
@@ -1050,6 +1052,7 @@ def make_device_association(db, company: Company, device, associated, *, quantit
         device_id=device.id,
         associated_device_id=associated.id,
         quantity_per_parent=quantity_per_parent,
+        booking_mode=booking_mode,
     )
     db.add(row)
     db.commit()
@@ -1120,6 +1123,48 @@ def make_crew_unavailability(db, company: Company, party, start, end, *, reason:
         company_id=company.id, party_id=party.id, start_date=start, end_date=end, reason=reason, is_active=True
     )
     db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def make_gear_booking(
+    db,
+    company: Company,
+    project,
+    block,
+    device,
+    *,
+    quantity: int = 1,
+    status: str = "scheduled",
+    dates=(),
+    parent=None,
+    association=None,
+    follows_parent: bool = False,
+    inactive_dates=(),
+):
+    """B2c-2: a quantity of a device on a strip with these days, written
+    directly. `inactive_dates` are unticked days (rows with is_active false)."""
+    from apps.api.models.gear import GearBooking, GearBookingDay
+
+    row = GearBooking(
+        company_id=company.id,
+        project_id=project.id,
+        block_id=block.id,
+        device_id=device.id,
+        quantity=quantity,
+        status=status,
+        added_via_booking_id=parent.id if parent is not None else None,
+        association_id=association.id if association is not None else None,
+        quantity_per_parent=association.quantity_per_parent if association is not None else None,
+        follows_parent=follows_parent,
+    )
+    db.add(row)
+    db.flush()
+    for day in dates:
+        db.add(GearBookingDay(company_id=company.id, booking_id=row.id, date=day, is_active=True))
+    for day in inactive_dates:
+        db.add(GearBookingDay(company_id=company.id, booking_id=row.id, date=day, is_active=False))
     db.commit()
     db.refresh(row)
     return row
