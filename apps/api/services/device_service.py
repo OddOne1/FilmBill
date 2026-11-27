@@ -43,9 +43,22 @@ DEVICE_AUDITED = (
     "purchase_price",
     "purchase_date",
     "catalog_item_id",
+    "weight_kg",
+    "length_cm",
+    "width_cm",
+    "height_cm",
     "notes",
     "is_active",
 )
+
+#: Weight and size: field → (decimal places, the largest value the column
+#: holds, the sentence's words). Metric only (B2b-2).
+MEASURES = {
+    "weight_kg": (3, Decimal("99999.999"), "The weight", "kilograms"),
+    "length_cm": (1, Decimal("9999999.9"), "The length", "centimetres"),
+    "width_cm": (1, Decimal("9999999.9"), "The width", "centimetres"),
+    "height_cm": (1, Decimal("9999999.9"), "The height", "centimetres"),
+}
 UNIT_AUDITED = (
     "serial_number",
     "status",
@@ -196,6 +209,22 @@ def _refuse_name_in_use(
 # ─── Devices ────────────────────────────────────────────────────────────────
 
 
+def _check_measure(field: str, value: Optional[Decimal]) -> Optional[Decimal]:
+    if value is None:
+        return None
+    places, largest, subject, unit = MEASURES[field]
+    if value < 0:
+        raise DeviceError(f"{subject} cannot be negative. Enter it in {unit}, such as 2.5.")
+    if value.as_tuple().exponent < -places and value != value.quantize(Decimal(1).scaleb(-places)):
+        raise DeviceError(
+            f"{subject} is in {unit} with at most {places} decimal{'s' if places > 1 else ''}. "
+            f"Round it, such as {Decimal('2.5').quantize(Decimal(1).scaleb(-places))}."
+        )
+    if value > largest:
+        raise DeviceError(f"{subject} is too large for a device. Check that it is in {unit}.")
+    return value.quantize(Decimal(1).scaleb(-places))
+
+
 def _refuse_negative_price(price: Optional[Decimal]) -> None:
     if price is not None and price < 0:
         raise DeviceError("A purchase price cannot be negative. Enter the net amount you paid.")
@@ -213,6 +242,10 @@ def create_device(
     purchase_date: Optional[date] = None,
     notes: Optional[str] = None,
     source: Optional[str] = None,
+    weight_kg: Optional[Decimal] = None,
+    length_cm: Optional[Decimal] = None,
+    width_cm: Optional[Decimal] = None,
+    height_cm: Optional[Decimal] = None,
 ) -> Device:
     clean = " ".join(name.split())
     if not clean:
@@ -227,6 +260,10 @@ def create_device(
         quantity_owned=quantity_owned,
         purchase_price=purchase_price,
         purchase_date=purchase_date,
+        weight_kg=_check_measure("weight_kg", weight_kg),
+        length_cm=_check_measure("length_cm", length_cm),
+        width_cm=_check_measure("width_cm", width_cm),
+        height_cm=_check_measure("height_cm", height_cm),
         notes=(notes or "").strip() or None,
         is_active=True,
     )
@@ -266,6 +303,9 @@ def update_device(db: Session, device: Device, *, actor: audit.Actor, changes: d
     for field in ("purchase_price", "purchase_date"):
         if field in changes:
             setattr(device, field, changes[field])
+    for field in MEASURES:
+        if field in changes:
+            setattr(device, field, _check_measure(field, changes[field]))
     if "notes" in changes:
         device.notes = (changes["notes"] or "").strip() or None
     after = audit.snapshot(device, DEVICE_AUDITED)
@@ -771,3 +811,25 @@ def apply_import(
         company_id=company_id,
     )
     return plan, created, units
+
+
+# ─── The cover picture (B2b-2 part 5) ───────────────────────────────────────
+
+
+def set_image(db: Session, device: Device, *, actor: audit.Actor, key: Optional[str]) -> None:
+    """Point the device at a newly stored picture, or at none. The old key
+    stays in the event: the objects are not deleted (as with the logo), and
+    this is where a later storage sweep finds them."""
+    before = device.image_s3_key
+    if before == key:
+        return
+    device.image_s3_key = key
+    audit.record(
+        db,
+        actor,
+        device,
+        "device.image_changed" if key else "device.image_removed",
+        {"image_s3_key": before},
+        {"image_s3_key": key},
+        fields=("image_s3_key",),
+    )

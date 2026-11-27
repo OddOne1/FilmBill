@@ -45,6 +45,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Numeric,
     String,
     Text,
     func,
@@ -124,6 +125,16 @@ class Device(CompanyScoped, Base):
         nullable=True,
     )
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    #: Weight and size, metric, for packing (a packing total is later).
+    #: B2b-2 part 5. All optional and never negative.
+    weight_kg: Mapped[Optional[Any]] = mapped_column(Numeric(8, 3), nullable=True)
+    length_cm: Mapped[Optional[Any]] = mapped_column(Numeric(8, 1), nullable=True)
+    width_cm: Mapped[Optional[Any]] = mapped_column(Numeric(8, 1), nullable=True)
+    height_cm: Mapped[Optional[Any]] = mapped_column(Numeric(8, 1), nullable=True)
+    #: The ONE cover picture (B2b-2). The resized picture is stored under this
+    #: key and its thumbnail beside it (`services/device_images.thumbnail_key`).
+    #: SCOPE §4.4.1 has several images per device later, which becomes a table.
+    image_s3_key: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="true"
     )
@@ -139,6 +150,11 @@ class Device(CompanyScoped, Base):
 
     __table_args__ = (
         CheckConstraint("quantity_owned >= 0", name="ck_devices_quantity_owned"),
+        CheckConstraint(
+            "(weight_kg IS NULL OR weight_kg >= 0) AND (length_cm IS NULL OR length_cm >= 0) "
+            "AND (width_cm IS NULL OR width_cm >= 0) AND (height_cm IS NULL OR height_cm >= 0)",
+            name="ck_devices_size_weight",
+        ),
         Index(
             "uq_devices_company_name_active",
             "company_id",

@@ -3330,6 +3330,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/devices/{device_id}/image": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload Image
+         * @description Upload or replace the cover picture: JPEG, PNG or WebP by CONTENT
+         *     (the name is not trusted), at most 5 MB, resized and given a thumbnail.
+         *     Stored through the API like the logo; served through the object proxy.
+         */
+        post: operations["upload_image_devices__device_id__image_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/devices/{device_id}/image/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Remove Image
+         * @description The device shows the placeholder again. The stored objects are kept
+         *     (the old key is in the audit event), as a replaced logo's are.
+         */
+        post: operations["remove_image_devices__device_id__image_remove_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/devices/{device_id}/reactivate": {
         parameters: {
             query?: never;
@@ -5434,6 +5477,14 @@ export interface components {
         };
         /** Body_upload_avatar_users_me_avatar_post */
         Body_upload_avatar_users_me_avatar_post: {
+            /**
+             * File
+             * Format: binary
+             */
+            file: string;
+        };
+        /** Body_upload_image_devices__device_id__image_post */
+        Body_upload_image_devices__device_id__image_post: {
             /**
              * File
              * Format: binary
@@ -8141,6 +8192,10 @@ export interface components {
         DeviceCreate: {
             /** Category */
             category?: string | null;
+            /** Height Cm */
+            height_cm?: string | null;
+            /** Length Cm */
+            length_cm?: string | null;
             /** Name */
             name: string;
             /** Notes */
@@ -8154,6 +8209,10 @@ export interface components {
              * @default 0
              */
             quantity_owned: number;
+            /** Weight Kg */
+            weight_kg?: string | null;
+            /** Width Cm */
+            width_cm?: string | null;
         };
         /**
          * DeviceDependencies
@@ -8220,13 +8279,19 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Height Cm */
+            height_cm?: string | null;
             /**
              * Id
              * Format: uuid
              */
             id: string;
+            /** Image Url */
+            image_url?: string | null;
             /** Is Active */
             is_active: boolean;
+            /** Length Cm */
+            length_cm?: string | null;
             /** Name */
             name: string;
             /** Notes */
@@ -8252,6 +8317,10 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+            /** Weight Kg */
+            weight_kg?: string | null;
+            /** Width Cm */
+            width_cm?: string | null;
         };
         /** DeviceImportApplyResponse */
         DeviceImportApplyResponse: {
@@ -8419,13 +8488,19 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Height Cm */
+            height_cm?: string | null;
             /**
              * Id
              * Format: uuid
              */
             id: string;
+            /** Image Url */
+            image_url?: string | null;
             /** Is Active */
             is_active: boolean;
+            /** Length Cm */
+            length_cm?: string | null;
             /** Name */
             name: string;
             /** Notes */
@@ -8445,6 +8520,10 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+            /** Weight Kg */
+            weight_kg?: string | null;
+            /** Width Cm */
+            width_cm?: string | null;
         };
         /** DeviceUnitChangeResponse */
         DeviceUnitChangeResponse: {
@@ -8594,6 +8673,10 @@ export interface components {
         DeviceUpdate: {
             /** Category */
             category?: string | null;
+            /** Height Cm */
+            height_cm?: string | null;
+            /** Length Cm */
+            length_cm?: string | null;
             /** Name */
             name?: string | null;
             /** Notes */
@@ -8604,6 +8687,10 @@ export interface components {
             purchase_price?: string | null;
             /** Quantity Owned */
             quantity_owned?: number | null;
+            /** Weight Kg */
+            weight_kg?: string | null;
+            /** Width Cm */
+            width_cm?: string | null;
         };
         /**
          * DuplicateWarning
@@ -17524,6 +17611,76 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DeviceDependencies"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_image_devices__device_id__image_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_image_devices__device_id__image_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_image_devices__device_id__image_remove_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceDetail"];
                 };
             };
             /** @description Validation Error */

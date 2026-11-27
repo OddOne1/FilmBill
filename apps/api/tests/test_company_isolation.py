@@ -134,6 +134,14 @@ NO_COMPANY_CONTEXT = "no-company-context"
 #: below, or the substitution silently leaves `{…}` in the URL and the
 #: endpoint 404s for the wrong reason — a green test proving nothing. There is
 #: an assertion for exactly that.
+#: A 1×1 PNG, for the device picture upload's isolation case.
+_TINY_PNG = (
+    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00"
+    b"\x1f\x15\xc4\x89\x00\x00\x00\rIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00\x05\x18\xd8N\x00"
+    b"\x00\x00\x00IEND\xaeB`\x82"
+)
+
+
 CASES: dict[str, object] = {
     "GET /companies": NO_COMPANY_CONTEXT,
     "POST /companies": NO_COMPANY_CONTEXT,
@@ -585,6 +593,11 @@ CASES: dict[str, object] = {
     "PATCH /devices/{device_id}/alternatives/{alternative_id}": {"body": {"note": "Stolen"}},
     "POST /devices/{device_id}/alternatives/{alternative_id}/move": {"body": {"direction": "down"}},
     "POST /devices/{device_id}/alternatives/{alternative_id}/remove": {"body": None},
+    # B2b-2 part 5. A real PNG, so a refusal cannot be about the content.
+    "POST /devices/{device_id}/image": {
+        "files": {"file": ("photo.png", _TINY_PNG, "image/png")}
+    },
+    "POST /devices/{device_id}/image/remove": {"body": None},
     # Pure arithmetic, no stored row — and still a company endpoint.
     "POST /calc/preview": {
         "body": {
@@ -665,6 +678,7 @@ def test_the_case_list_is_not_empty(client):
 
 
 #: Only the operations that DO take a company context get the two checks.
+
 _SCOPED_CASES = sorted(
     name for name, case in CASES.items() if case is not NO_COMPANY_CONTEXT
 )

@@ -67,7 +67,8 @@ from ..schemas.device import (
     DeviceUpdate,
     SkippedSerial,
 )
-from ..services import audit, device_links, device_service
+from ..services import audit, device_images, device_links, device_service
+from .files import proxy_url_for
 from ..services.permissions import scoped
 
 router = APIRouter(tags=["devices"])
@@ -102,6 +103,18 @@ def _unit_or_404(db: Session, membership: Membership, device: Device, unit_id: u
     return row
 
 
+def image_url(key: Optional[str]) -> Optional[str]:
+    """A token URL of the object proxy, scoped to the object's own folder —
+    `devices/<company>/<device>` — so it reads this device's pictures and
+    nothing else. Only ever put into a response the caller was authorised
+    for (`devices.view` in that company)."""
+    return proxy_url_for(key) if key else None
+
+
+def thumbnail_url(device: Device) -> Optional[str]:
+    return image_url(device_images.thumbnail_key(device.image_s3_key)) if device.image_s3_key else None
+
+
 def _responses(db: Session, membership: Membership, rows: list[Device]) -> list[DeviceResponse]:
     counts = device_service.counts_for(db, rows)
     visible = _can_see_price(membership)
@@ -122,6 +135,12 @@ def _responses(db: Session, membership: Membership, rows: list[Device]) -> list[
             catalog_item_name=items.get(row.catalog_item_id),
             notes=row.notes,
             is_active=row.is_active,
+            weight_kg=row.weight_kg,
+            length_cm=row.length_cm,
+            width_cm=row.width_cm,
+            height_cm=row.height_cm,
+            image_url=image_url(row.image_s3_key),
+            thumbnail_url=thumbnail_url(row),
             counts=DeviceCounts(**counts[row.id].as_dict()),
             created_at=row.created_at,
             updated_at=row.updated_at,
@@ -634,6 +653,48 @@ def update_rental(
     return _detail(db, membership, device)
 
 
+# ─── The cover picture (B2b-2 part 5) ───────────────────────────────────────
+
+
+@router.post("/devices/{device_id}/image", response_model=DeviceDetail)
+async def upload_image(
+    device_id: uuid.UUID,
+    request: Request,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    membership: Membership = Depends(require("devices.edit")),
+):
+    """Upload or replace the cover picture: JPEG, PNG or WebP by CONTENT
+    (the name is not trusted), at most 5 MB, resized and given a thumbnail.
+    Stored through the API like the logo; served through the object proxy."""
+    device = _device_or_404(db, membership, device_id)
+    payload = await file.read(device_images.MAX_IMAGE_BYTES + 1)
+    try:
+        key = device_images.store(membership.company_id, device.id, payload)
+    except device_images.ImageRefused as error:
+        _refuse(error, status.HTTP_422_UNPROCESSABLE_ENTITY)
+    device_service.set_image(db, device, actor=audit.actor_from(request, membership=membership), key=key)
+    db.commit()
+    db.refresh(device)
+    return _detail(db, membership, device)
+
+
+@router.post("/devices/{device_id}/image/remove", response_model=DeviceDetail)
+def remove_image(
+    device_id: uuid.UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    membership: Membership = Depends(require("devices.edit")),
+):
+    """The device shows the placeholder again. The stored objects are kept
+    (the old key is in the audit event), as a replaced logo's are."""
+    device = _device_or_404(db, membership, device_id)
+    device_service.set_image(db, device, actor=audit.actor_from(request, membership=membership), key=None)
+    db.commit()
+    db.refresh(device)
+    return _detail(db, membership, device)
+
+
 # ─── Units ──────────────────────────────────────────────────────────────────
 
 
@@ -815,7 +876,13 @@ def device_refs(db: Session, ids: set) -> dict:
 
 
 def _ref(row: Device) -> DeviceRef:
-    return DeviceRef(id=row.id, name=row.name, category=row.category, is_active=row.is_active)
+    return DeviceRef(
+        id=row.id,
+        name=row.name,
+        category=row.category,
+        is_active=row.is_active,
+        thumbnail_url=thumbnail_url(row),
+    )
 
 
 def _dependency_rows(db: Session, links: list[DeviceAssociation]) -> list[DeviceDependencyResponse]:

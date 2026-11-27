@@ -190,6 +190,8 @@ POST /devices/{device_id}/alternatives/{alternative_id}/remove
 POST /devices/{device_id}/archive
 POST /devices/{device_id}/dependencies
 POST /devices/{device_id}/dependencies/{association_id}/remove
+POST /devices/{device_id}/image
+POST /devices/{device_id}/image/remove
 POST /devices/{device_id}/reactivate
 POST /devices/{device_id}/rental/setup
 POST /devices/{device_id}/units

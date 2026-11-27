@@ -58,6 +58,13 @@ tzdata==2024.2
 pyotp==2.9.0
 qrcode[pil]==7.4.2
 
+# Device pictures (B2b-2): decoding a photo by its content, resizing it and
+# writing the WebP picture and thumbnail (services/device_images.py). Imported
+# directly, so declared directly rather than left to arrive through
+# qrcode[pil]. Pinned to the version qrcode[pil] already resolved to, so the
+# image does not change; WebP support is built into the wheel.
+Pillow==13.0.0
+
 # the password strength score. Pure Python, no data downloads at
 # runtime: the frequency dictionaries ship inside the package, which is the
 # whole reason it is a dependency rather than a service call on the path of

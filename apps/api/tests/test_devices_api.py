@@ -669,6 +669,8 @@ def _every_device_request(device_id, unit_id):
         ("patch", f"{base}/alternatives/{device_id}", {"note": "staff"}, None),
         ("post", f"{base}/alternatives/{device_id}/move", {"direction": "up"}, None),
         ("post", f"{base}/alternatives/{device_id}/remove", None, None),
+        ("post", f"{base}/image", None, {"file": ("photo.png", b"\x89PNG-not-really", "image/png")}),
+        ("post", f"{base}/image/remove", None, None),
         ("post", f"{base}/units", {"serial_numbers": ["STAFF-1"]}, None),
         ("patch", unit, {"notes": "staff"}, None),
         ("post", f"{unit}/remove", {"status": "retired", "reason": "staff"}, None),

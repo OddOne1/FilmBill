@@ -12,7 +12,7 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..core.money import Money
+from ..core.money import Money, Quantity
 
 UnitStatus = Literal["active", "needs_check", "in_repair", "lost", "retired", "sold"]
 #: The three ways a unit leaves; each needs a reason in words.
@@ -81,7 +81,15 @@ class DeviceResponse(BaseModel):
     catalog_item_name: Optional[str] = None
     notes: Optional[str] = None
     is_active: bool
-    #: The small cover picture for lists and pickers (B2b-2 part 5).
+    #: Metric, for packing (B2b-2 part 5): kilograms to three decimals,
+    #: centimetres to one. Strings on the wire, like every decimal.
+    weight_kg: Optional[Quantity] = None
+    length_cm: Optional[Quantity] = None
+    width_cm: Optional[Quantity] = None
+    height_cm: Optional[Quantity] = None
+    #: The cover picture and its thumbnail, as token URLs of the object
+    #: proxy scoped to this device's folder; `null` without a picture.
+    image_url: Optional[str] = None
     thumbnail_url: Optional[str] = None
     counts: DeviceCounts
     created_at: datetime
@@ -154,6 +162,10 @@ class DeviceCreate(BaseModel):
     quantity_owned: int = Field(default=0, ge=0, le=100_000)
     purchase_price: Optional[Money] = None
     purchase_date: Optional[date] = None
+    weight_kg: Optional[Quantity] = None
+    length_cm: Optional[Quantity] = None
+    width_cm: Optional[Quantity] = None
+    height_cm: Optional[Quantity] = None
     notes: Optional[str] = None
 
 
@@ -167,6 +179,10 @@ class DeviceUpdate(BaseModel):
     quantity_owned: Optional[int] = Field(default=None, ge=0, le=100_000)
     purchase_price: Optional[Money] = None
     purchase_date: Optional[date] = None
+    weight_kg: Optional[Quantity] = None
+    length_cm: Optional[Quantity] = None
+    width_cm: Optional[Quantity] = None
+    height_cm: Optional[Quantity] = None
     notes: Optional[str] = None
 
 

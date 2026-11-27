@@ -1,25 +1,26 @@
-'use client'
+"use client";
 
-import * as React from 'react'
-import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { Download, Plus, Search, Upload } from 'lucide-react'
-import { api, ApiError } from '@/lib/api'
-import { deviceCountsSentence } from '@/lib/device-counts'
-import { formatMoney } from '@/lib/money'
-import { saveBlob } from '@/lib/save-file'
-import { usePermissions } from '@/hooks/use-permissions'
-import { useCompanyStore } from '@/stores/company-store'
-import type { DeviceDetail, DevicePage } from '@/types'
-import { GearImport } from './gear-import'
+import * as React from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { Download, Plus, Search, Upload } from "lucide-react";
+import { api, ApiError } from "@/lib/api";
+import { deviceCountsSentence } from "@/lib/device-counts";
+import { formatMoney } from "@/lib/money";
+import { saveBlob } from "@/lib/save-file";
+import { usePermissions } from "@/hooks/use-permissions";
+import { useCompanyStore } from "@/stores/company-store";
+import type { DeviceDetail, DevicePage } from "@/types";
+import { GearImport } from "./gear-import";
 import {
   AMBIGUOUS_AMOUNT,
   amountForApi,
   amountIsAmbiguous,
+  DeviceThumb,
   GearNoAccess,
   GearReadOnlyNotice,
   useGearAccess,
-} from './gear-chrome'
+} from "./gear-chrome";
 
 /**
  * Gear — the devices the company owns.
@@ -29,51 +30,58 @@ import {
  * disagree, and that is said, never flagged as an error.
  */
 export default function GearPage() {
-  const activeCompanyId = useCompanyStore((state) => state.activeCompanyId)
-  const { active } = usePermissions()
-  const currency = active?.default_currency ?? 'EUR'
-  const { loaded, canView, canEdit, canSeePrice, refused } = useGearAccess()
+  const activeCompanyId = useCompanyStore((state) => state.activeCompanyId);
+  const { active } = usePermissions();
+  const currency = active?.default_currency ?? "EUR";
+  const { loaded, canView, canEdit, canSeePrice, refused } = useGearAccess();
 
-  const [search, setSearch] = React.useState('')
-  const [category, setCategory] = React.useState('')
-  const [includeInactive, setIncludeInactive] = React.useState(false)
-  const [page, setPage] = React.useState<DevicePage | null>(null)
-  const [error, setError] = React.useState<string | null>(null)
-  const [panel, setPanel] = React.useState<'add' | 'import' | null>(null)
+  const [search, setSearch] = React.useState("");
+  const [category, setCategory] = React.useState("");
+  const [includeInactive, setIncludeInactive] = React.useState(false);
+  const [page, setPage] = React.useState<DevicePage | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+  const [panel, setPanel] = React.useState<"add" | "import" | null>(null);
 
   const refresh = React.useCallback(async () => {
-    const params = new URLSearchParams()
-    if (search.trim()) params.set('search', search.trim())
-    if (category) params.set('category', category)
-    if (includeInactive) params.set('include_inactive', 'true')
+    const params = new URLSearchParams();
+    if (search.trim()) params.set("search", search.trim());
+    if (category) params.set("category", category);
+    if (includeInactive) params.set("include_inactive", "true");
     try {
-      const query = params.toString()
-      setPage(await api.get<DevicePage>(`/devices${query ? `?${query}` : ''}`))
-      setError(null)
+      const query = params.toString();
+      setPage(await api.get<DevicePage>(`/devices${query ? `?${query}` : ""}`));
+      setError(null);
     } catch (err) {
-      setError(err instanceof ApiError ? err.detail : 'The gear list could not be loaded. Try again.')
+      setError(
+        err instanceof ApiError
+          ? err.detail
+          : "The gear list could not be loaded. Try again.",
+      );
     }
-  }, [search, category, includeInactive])
+  }, [search, category, includeInactive]);
 
   React.useEffect(() => {
-    if (!loaded || !canView) return
-    const handle = setTimeout(() => void refresh(), 200)
-    return () => clearTimeout(handle)
-  }, [loaded, canView, activeCompanyId, refresh])
+    if (!loaded || !canView) return;
+    const handle = setTimeout(() => void refresh(), 200);
+    return () => clearTimeout(handle);
+  }, [loaded, canView, activeCompanyId, refresh]);
 
-  if (refused) return <GearNoAccess />
+  if (refused) return <GearNoAccess />;
 
   const exportCsv = async () => {
-    setError(null)
+    setError(null);
     try {
-      const query = includeInactive ? '?include_inactive=true' : ''
-      saveBlob(await api.download(`/devices/export.csv${query}`), 'gear.csv')
+      const query = includeInactive ? "?include_inactive=true" : "";
+      saveBlob(await api.download(`/devices/export.csv${query}`), "gear.csv");
     } catch (err) {
-      setError(err instanceof ApiError ? err.detail : 'The export failed. Try again.')
+      setError(
+        err instanceof ApiError ? err.detail : "The export failed. Try again.",
+      );
     }
-  }
+  };
 
-  const showPrice = page?.devices.some((device) => device.price_visible) ?? false
+  const showPrice =
+    page?.devices.some((device) => device.price_visible) ?? false;
 
   return (
     <div className="max-w-6xl p-8">
@@ -91,7 +99,7 @@ export default function GearPage() {
               <button
                 type="button"
                 data-testid="gear-add-open"
-                onClick={() => setPanel(panel === 'add' ? null : 'add')}
+                onClick={() => setPanel(panel === "add" ? null : "add")}
                 className="inline-flex items-center gap-1 rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white"
               >
                 <Plus className="h-3.5 w-3.5" /> Add device
@@ -99,7 +107,7 @@ export default function GearPage() {
               <button
                 type="button"
                 data-testid="gear-import-open"
-                onClick={() => setPanel(panel === 'import' ? null : 'import')}
+                onClick={() => setPanel(panel === "import" ? null : "import")}
                 className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-sm text-text-primary"
               >
                 <Upload className="h-3.5 w-3.5" /> Import CSV
@@ -119,14 +127,16 @@ export default function GearPage() {
 
       {loaded && canView && !canEdit && <GearReadOnlyNotice />}
 
-      {panel === 'add' && canEdit && (
+      {panel === "add" && canEdit && (
         <AddDevice
           categories={page?.categories ?? []}
           canSeePrice={canSeePrice}
           onClose={() => setPanel(null)}
         />
       )}
-      {panel === 'import' && canEdit && <GearImport onApplied={() => void refresh()} />}
+      {panel === "import" && canEdit && (
+        <GearImport onApplied={() => void refresh()} />
+      )}
 
       <div className="mt-6 flex flex-wrap items-center gap-3">
         <label className="relative">
@@ -141,7 +151,7 @@ export default function GearPage() {
           />
         </label>
         <label className="text-xs text-text-secondary">
-          Category{' '}
+          Category{" "}
           <select
             data-testid="gear-category-filter"
             value={category}
@@ -174,14 +184,21 @@ export default function GearPage() {
       )}
 
       {page === null ? (
-        !error && <p className="mt-6 text-sm text-text-secondary">Loading the gear list…</p>
+        !error && (
+          <p className="mt-6 text-sm text-text-secondary">
+            Loading the gear list…
+          </p>
+        )
       ) : page.devices.length === 0 ? (
-        <p data-testid="gear-empty" className="mt-6 text-sm text-text-secondary">
+        <p
+          data-testid="gear-empty"
+          className="mt-6 text-sm text-text-secondary"
+        >
           {search || category
-            ? 'No device matches that. Clear the search or the category to see everything.'
+            ? "No device matches that. Clear the search or the category to see everything."
             : canEdit
-              ? 'No gear yet. Add the first device, or import a CSV file.'
-              : 'No gear yet.'}
+              ? "No gear yet. Add the first device, or import a CSV file."
+              : "No gear yet."}
         </p>
       ) : (
         <table className="mt-5 w-full border-collapse text-sm">
@@ -190,29 +207,54 @@ export default function GearPage() {
               <th className="py-2 pr-3 font-medium">Device</th>
               <th className="py-2 pr-3 font-medium">Category</th>
               <th className="py-2 pr-3 font-medium">Owned and recorded</th>
-              {showPrice && <th className="py-2 pr-3 text-right font-medium">Purchase price</th>}
+              {showPrice && (
+                <th className="py-2 pr-3 text-right font-medium">
+                  Purchase price
+                </th>
+              )}
             </tr>
           </thead>
           <tbody>
             {page.devices.map((device) => (
-              <tr key={device.id} data-testid="gear-row" className="border-b border-border/60 align-top">
+              <tr
+                key={device.id}
+                data-testid="gear-row"
+                className="border-b border-border/60 align-top"
+              >
                 <td className="py-2 pr-3">
-                  <Link href={`/gear/${device.id}`} className="font-medium text-text-primary hover:underline">
-                    {device.name}
-                  </Link>
+                  <span className="inline-flex items-center gap-2 align-middle">
+                    <DeviceThumb
+                      url={device.thumbnail_url}
+                      name={device.name}
+                      size={28}
+                    />
+                    <Link
+                      href={`/gear/${device.id}`}
+                      className="font-medium text-text-primary hover:underline"
+                    >
+                      {device.name}
+                    </Link>
+                  </span>
                   {!device.is_active && (
                     <span className="ml-2 rounded bg-bg-tertiary px-1.5 py-0.5 text-2xs text-text-secondary">
                       archived
                     </span>
                   )}
                 </td>
-                <td className="py-2 pr-3 text-text-secondary">{device.category ?? '—'}</td>
-                <td data-testid="gear-counts" className="py-2 pr-3 text-text-secondary">
+                <td className="py-2 pr-3 text-text-secondary">
+                  {device.category ?? "—"}
+                </td>
+                <td
+                  data-testid="gear-counts"
+                  className="py-2 pr-3 text-text-secondary"
+                >
                   {deviceCountsSentence(device.counts)}
                 </td>
                 {showPrice && (
                   <td className="py-2 pr-3 text-right font-mono text-xs">
-                    {device.price_visible ? formatMoney(device.purchase_price, currency) : ''}
+                    {device.price_visible
+                      ? formatMoney(device.purchase_price, currency)
+                      : ""}
                   </td>
                 )}
               </tr>
@@ -221,7 +263,7 @@ export default function GearPage() {
         </table>
       )}
     </div>
-  )
+  );
 }
 
 function AddDevice({
@@ -229,51 +271,56 @@ function AddDevice({
   canSeePrice,
   onClose,
 }: {
-  categories: string[]
-  canSeePrice: boolean
-  onClose: () => void
+  categories: string[];
+  canSeePrice: boolean;
+  onClose: () => void;
 }) {
-  const router = useRouter()
-  const [name, setName] = React.useState('')
-  const [category, setCategory] = React.useState('')
-  const [quantity, setQuantity] = React.useState('1')
-  const [price, setPrice] = React.useState('')
-  const [purchaseDate, setPurchaseDate] = React.useState('')
-  const [notes, setNotes] = React.useState('')
-  const [busy, setBusy] = React.useState(false)
-  const [error, setError] = React.useState<string | null>(null)
+  const router = useRouter();
+  const [name, setName] = React.useState("");
+  const [category, setCategory] = React.useState("");
+  const [quantity, setQuantity] = React.useState("1");
+  const [price, setPrice] = React.useState("");
+  const [purchaseDate, setPurchaseDate] = React.useState("");
+  const [notes, setNotes] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
 
-  const quantityValid = /^\d+$/.test(quantity.trim())
+  const quantityValid = /^\d+$/.test(quantity.trim());
   const why = !name.trim()
-    ? 'Type a name, such as Alexa 35.'
+    ? "Type a name, such as Alexa 35."
     : !quantityValid
-      ? 'The quantity owned is a whole number — 0 is fine.'
+      ? "The quantity owned is a whole number — 0 is fine."
       : canSeePrice && amountIsAmbiguous(price)
         ? AMBIGUOUS_AMOUNT
-        : null
+        : null;
 
   const save = async (event: React.FormEvent) => {
-    event.preventDefault()
-    if (why) return
-    setBusy(true)
-    setError(null)
+    event.preventDefault();
+    if (why) return;
+    setBusy(true);
+    setError(null);
     try {
-      const created = await api.post<DeviceDetail>('/devices', {
+      const created = await api.post<DeviceDetail>("/devices", {
         name,
         category: category || null,
         quantity_owned: Number.parseInt(quantity.trim(), 10),
         purchase_price: canSeePrice ? amountForApi(price) : null,
         purchase_date: purchaseDate || null,
         notes: notes || null,
-      })
-      router.push(`/gear/${created.id}`)
+      });
+      router.push(`/gear/${created.id}`);
     } catch (err) {
-      setError(err instanceof ApiError ? err.detail : 'The device could not be saved. Try again.')
-      setBusy(false)
+      setError(
+        err instanceof ApiError
+          ? err.detail
+          : "The device could not be saved. Try again.",
+      );
+      setBusy(false);
     }
-  }
+  };
 
-  const field = 'mt-1 h-8 w-full rounded-md border border-border bg-bg-secondary px-2 text-sm text-text-primary'
+  const field =
+    "mt-1 h-8 w-full rounded-md border border-border bg-bg-secondary px-2 text-sm text-text-primary";
 
   return (
     <form
@@ -284,7 +331,13 @@ function AddDevice({
       <div className="grid gap-3 sm:grid-cols-3">
         <label className="text-xs text-text-secondary sm:col-span-2">
           Name
-          <input autoFocus data-testid="gear-add-name" value={name} onChange={(e) => setName(e.target.value)} className={field} />
+          <input
+            autoFocus
+            data-testid="gear-add-name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className={field}
+          />
         </label>
         <label className="text-xs text-text-secondary">
           Category
@@ -336,7 +389,12 @@ function AddDevice({
         </label>
         <label className="text-xs text-text-secondary sm:col-span-3">
           Notes
-          <input data-testid="gear-add-notes" value={notes} onChange={(e) => setNotes(e.target.value)} className={field} />
+          <input
+            data-testid="gear-add-notes"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            className={field}
+          />
         </label>
       </div>
       <p className="mt-2 text-xs text-text-tertiary">
@@ -352,11 +410,18 @@ function AddDevice({
         >
           Add device
         </button>
-        <button type="button" onClick={onClose} className="text-sm text-text-secondary hover:text-text-primary">
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-sm text-text-secondary hover:text-text-primary"
+        >
           Close
         </button>
         {why && !busy && (
-          <span data-testid="gear-add-why" className="text-xs text-text-tertiary">
+          <span
+            data-testid="gear-add-why"
+            className="text-xs text-text-tertiary"
+          >
             {why}
           </span>
         )}
@@ -367,5 +432,5 @@ function AddDevice({
         </p>
       )}
     </form>
-  )
+  );
 }
