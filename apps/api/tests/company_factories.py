@@ -1039,3 +1039,19 @@ def make_device_unit(
     db.commit()
     db.refresh(row)
     return row
+
+
+def make_device_association(db, company: Company, device, associated, *, quantity_per_parent: int = 1):
+    """`device` needs `associated` (B2b-2), written directly."""
+    from apps.api.models.device import DeviceAssociation
+
+    row = DeviceAssociation(
+        company_id=company.id,
+        device_id=device.id,
+        associated_device_id=associated.id,
+        quantity_per_parent=quantity_per_parent,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row

@@ -231,3 +231,89 @@ class DeviceUnit(CompanyScoped, Base):
         Index("ix_device_units_device", "device_id"),
         Index("ix_device_units_seller", "seller_party_id"),
     )
+
+
+ASSOCIATION_ALWAYS = "always"
+ASSOCIATION_ASK = "ask"
+ASSOCIATION_MODES = (ASSOCIATION_ALWAYS, ASSOCIATION_ASK)
+PRICING_INCLUDED = "included"
+PRICING_CHARGED = "charged"
+ASSOCIATION_PRICINGS = (PRICING_INCLUDED, PRICING_CHARGED)
+
+
+class DeviceAssociation(CompanyScoped, Base):
+    """A dependency: `device` needs `associated_device`, so many per parent
+    (SCOPE §4.4.3 "associated items"; the screen says Dependencies).
+
+    B2b-2 builds the DATA and the screens; what booking does with a link is
+    B2c, and B2c follows ONE level only — an associated device's own
+    dependencies are never pulled in through it. A link that would close a
+    loop (a device needing itself, directly or through others) is refused
+    by `services/device_links.py`, which walks the graph; the self-link is
+    also a CHECK here.
+
+    `origin_association_id` is set when the link was added through the setup
+    hint ("Battery has its own dependencies: Charger ..."): it points at the
+    battery's link to the charger, so a later "dependencies changed, review?"
+    notice (open, not built) can find every parent that copied it.
+
+    Removing a link sets `is_active` false; there is no DELETE. The unique
+    index is partial, so the same pair can be linked again afterwards.
+    """
+
+    __tablename__ = "device_associations"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    device_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("devices.id", ondelete="RESTRICT"), nullable=False
+    )
+    associated_device_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("devices.id", ondelete="RESTRICT"), nullable=False
+    )
+    quantity_per_parent: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
+    booking_mode: Mapped[str] = mapped_column(
+        String(8), nullable=False, server_default=ASSOCIATION_ALWAYS
+    )
+    pricing: Mapped[str] = mapped_column(String(8), nullable=False, server_default=PRICING_INCLUDED)
+    show_on_documents: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    origin_association_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("device_associations.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint("quantity_per_parent >= 1", name="ck_device_associations_quantity"),
+        CheckConstraint(
+            "booking_mode IN ('always', 'ask')", name="ck_device_associations_booking_mode"
+        ),
+        CheckConstraint("pricing IN ('included', 'charged')", name="ck_device_associations_pricing"),
+        CheckConstraint(
+            "device_id <> associated_device_id", name="ck_device_associations_not_self"
+        ),
+        Index(
+            "uq_device_associations_pair_active",
+            "device_id",
+            "associated_device_id",
+            unique=True,
+            postgresql_where=text("is_active"),
+        ),
+        Index("ix_device_associations_device", "device_id"),
+        Index("ix_device_associations_associated", "associated_device_id"),
+        Index("ix_device_associations_origin", "origin_association_id"),
+    )

@@ -3165,6 +3165,90 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/devices/{device_id}/dependencies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Dependencies
+         * @description What this device needs, and which devices need it.
+         */
+        get: operations["list_dependencies_devices__device_id__dependencies_get"];
+        put?: never;
+        /**
+         * Add Dependency
+         * @description Add a dependency, and the ticked rows of the setup hint with it, in
+         *     one transaction. A loop is refused with the chain named.
+         */
+        post: operations["add_dependency_devices__device_id__dependencies_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/devices/{device_id}/dependencies/hint": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Dependency Hint
+         * @description The setup hint: the chosen device's own dependencies, with the
+         *     quantity per THIS device pre-multiplied. They are not booked through
+         *     this device unless they are added here.
+         */
+        get: operations["dependency_hint_devices__device_id__dependencies_hint_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/devices/{device_id}/dependencies/{association_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Dependency */
+        patch: operations["update_dependency_devices__device_id__dependencies__association_id__patch"];
+        trace?: never;
+    };
+    "/devices/{device_id}/dependencies/{association_id}/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Remove Dependency
+         * @description The link goes inactive; it stays in the audit log. No DELETE.
+         */
+        post: operations["remove_dependency_devices__device_id__dependencies__association_id__remove_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/devices/{device_id}/reactivate": {
         parameters: {
             query?: never;
@@ -3238,7 +3322,9 @@ export interface paths {
         put?: never;
         /**
          * Add Units
-         * @description Record one serial number or a pasted list. Serials already on this
+         * @description Record the serial numbers of the Add new item(s) popup — one or
+         *     many, in one request, with ONE audit event (`device_unit.created_bulk`,
+         *     counts and the shared purchase details). Serials already on this
          *     device, or repeated in the list, are listed and skipped. The quantity
          *     owned does not change.
          */
@@ -7774,6 +7860,94 @@ export interface components {
              */
             used: string[];
         };
+        /** DependencyCreate */
+        DependencyCreate: {
+            /**
+             * Associated Device Id
+             * Format: uuid
+             */
+            associated_device_id: string;
+            /**
+             * Booking Mode
+             * @default always
+             * @enum {string}
+             */
+            booking_mode: "always" | "ask";
+            /** From Hint */
+            from_hint?: components["schemas"]["DependencyHintChoice"][];
+            /** Note */
+            note?: string | null;
+            /**
+             * Pricing
+             * @default included
+             * @enum {string}
+             */
+            pricing: "included" | "charged";
+            /**
+             * Quantity Per Parent
+             * @default 1
+             */
+            quantity_per_parent: number;
+            /**
+             * Show On Documents
+             * @default false
+             */
+            show_on_documents: boolean;
+        };
+        /** DependencyHint */
+        DependencyHint: {
+            associated: components["schemas"]["DeviceRef"];
+            /** Rows */
+            rows: components["schemas"]["DependencyHintRow"][];
+        };
+        /** DependencyHintChoice */
+        DependencyHintChoice: {
+            /**
+             * Origin Association Id
+             * Format: uuid
+             */
+            origin_association_id: string;
+            /** Quantity Per Parent */
+            quantity_per_parent?: number | null;
+        };
+        /** DependencyHintRow */
+        DependencyHintRow: {
+            /** Blocked Reason */
+            blocked_reason?: string | null;
+            /**
+             * Booking Mode
+             * @enum {string}
+             */
+            booking_mode: "always" | "ask";
+            device: components["schemas"]["DeviceRef"];
+            /**
+             * Origin Association Id
+             * Format: uuid
+             */
+            origin_association_id: string;
+            /**
+             * Pricing
+             * @enum {string}
+             */
+            pricing: "included" | "charged";
+            /** Quantity Per Associated */
+            quantity_per_associated: number;
+            /** Suggested Quantity */
+            suggested_quantity: number;
+        };
+        /** DependencyUpdate */
+        DependencyUpdate: {
+            /** Booking Mode */
+            booking_mode?: ("always" | "ask") | null;
+            /** Note */
+            note?: string | null;
+            /** Pricing */
+            pricing?: ("included" | "charged") | null;
+            /** Quantity Per Parent */
+            quantity_per_parent?: number | null;
+            /** Show On Documents */
+            show_on_documents?: boolean | null;
+        };
         /**
          * DeviceCounts
          * @description The two numbers and how they relate. Never an error, never corrected.
@@ -7828,6 +8002,57 @@ export interface components {
              */
             quantity_owned: number;
         };
+        /**
+         * DeviceDependencies
+         * @description `needs`: this device's own dependencies. `used_by`: the devices that
+         *     need this one (the reverse lookup).
+         */
+        DeviceDependencies: {
+            /** Needs */
+            needs: components["schemas"]["DeviceDependencyResponse"][];
+            /** Used By */
+            used_by: components["schemas"]["DeviceDependencyResponse"][];
+        };
+        /** DeviceDependencyResponse */
+        DeviceDependencyResponse: {
+            associated: components["schemas"]["DeviceRef"];
+            /**
+             * Booking Mode
+             * @enum {string}
+             */
+            booking_mode: "always" | "ask";
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Note */
+            note?: string | null;
+            /** Origin Association Id */
+            origin_association_id?: string | null;
+            /** Origin Device Name */
+            origin_device_name?: string | null;
+            parent: components["schemas"]["DeviceRef"];
+            /**
+             * Pricing
+             * @enum {string}
+             */
+            pricing: "included" | "charged";
+            /** Quantity Per Parent */
+            quantity_per_parent: number;
+            /** Show On Documents */
+            show_on_documents: boolean;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
         /** DeviceDetail */
         DeviceDetail: {
             /** Catalog Item Id */
@@ -7862,6 +8087,8 @@ export interface components {
             /** Quantity Owned */
             quantity_owned: number;
             rental: components["schemas"]["DeviceRentalPrices"];
+            /** Thumbnail Url */
+            thumbnail_url?: string | null;
             /**
              * Units
              * @default []
@@ -7954,6 +8181,25 @@ export interface components {
             total: number;
         };
         /**
+         * DeviceRef
+         * @description Another device, as a link row or a picker shows it.
+         */
+        DeviceRef: {
+            /** Category */
+            category?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Name */
+            name: string;
+            /** Thumbnail Url */
+            thumbnail_url?: string | null;
+        };
+        /**
          * DeviceRentalPrices
          * @description The device's prices — which ARE its catalog item's rates (B2b-2).
          *
@@ -8039,6 +8285,8 @@ export interface components {
             purchase_price?: string | null;
             /** Quantity Owned */
             quantity_owned: number;
+            /** Thumbnail Url */
+            thumbnail_url?: string | null;
             /**
              * Updated At
              * Format: date-time
@@ -16765,6 +17013,184 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DeviceDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_dependencies_devices__device_id__dependencies_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceDependencies"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_dependency_devices__device_id__dependencies_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DependencyCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceDependencies"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dependency_hint_devices__device_id__dependencies_hint_get: {
+        parameters: {
+            query: {
+                associated_device_id: string;
+                quantity_per_parent?: number;
+            };
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DependencyHint"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_dependency_devices__device_id__dependencies__association_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                device_id: string;
+                association_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DependencyUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceDependencies"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_dependency_devices__device_id__dependencies__association_id__remove_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                device_id: string;
+                association_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceDependencies"];
                 };
             };
             /** @description Validation Error */

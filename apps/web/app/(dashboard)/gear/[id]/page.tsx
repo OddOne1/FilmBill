@@ -11,6 +11,7 @@ import { usePermissions } from '@/hooks/use-permissions'
 import type { DeviceDetail } from '@/types'
 import { RentalPrices } from './rental-prices'
 import { UnitsTab } from './units-tab'
+import { DependenciesTab } from './dependencies-tab'
 import {
   AMBIGUOUS_AMOUNT,
   amountForApi,
@@ -189,17 +190,20 @@ export default function DevicePage() {
               onDevice={show}
             />
           )}
+
+          {tab === 'dependencies' && <DependenciesTab device={device} canEdit={canEdit} />}
         </>
       )}
     </div>
   )
 }
 
-type TabKey = 'details' | 'units'
+type TabKey = 'details' | 'units' | 'dependencies'
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: 'details', label: 'Details' },
   { key: 'units', label: 'Units' },
+  { key: 'dependencies', label: 'Dependencies' },
 ]
 
 // ─── The form ────────────────────────────────────────────────────────────────

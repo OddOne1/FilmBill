@@ -1,6 +1,7 @@
 'use client'
 
 import { usePermissions } from '@/hooks/use-permissions'
+import { resolveApiMediaUrl } from '@/lib/utils'
 
 /**
  * What every gear screen shares: who may do what, and the sentences that say
@@ -62,3 +63,40 @@ export function amountIsAmbiguous(text: string): boolean {
 
 export const AMBIGUOUS_AMOUNT =
   'Write the price without the dot (1500) or with a decimal comma (1.500,00) — 1.500 could mean either.'
+
+/** A device's small picture, or a neutral placeholder when it has none.
+ *  `url` is the API's token URL (B2b-2 part 5), already authorised. */
+export function DeviceThumb({
+  url,
+  name,
+  size = 32,
+}: {
+  url?: string | null
+  name: string
+  size?: number
+}) {
+  const style = { width: size, height: size }
+  if (url) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element -- an API-proxied object, not a static asset
+      <img
+        data-testid="device-thumb"
+        src={resolveApiMediaUrl(url) ?? undefined}
+        alt={name}
+        style={style}
+        className="shrink-0 rounded object-cover"
+      />
+    )
+  }
+  return (
+    <span
+      data-testid="device-thumb-placeholder"
+      aria-hidden="true"
+      style={style}
+      className="inline-flex shrink-0 items-center justify-center rounded bg-bg-tertiary text-[10px] font-medium uppercase text-text-tertiary"
+    >
+      {name.trim().slice(0, 2)}
+    </span>
+  )
+}
+

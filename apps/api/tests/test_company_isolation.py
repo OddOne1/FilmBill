@@ -44,6 +44,7 @@ from .company_factories import (
     make_budget_line,
     make_budget_section,
     make_device,
+    make_device_association,
     make_device_unit,
     make_company,
     make_item,
@@ -562,6 +563,18 @@ CASES: dict[str, object] = {
     # would link B's device to a new item, or change B's price list.
     "POST /devices/{device_id}/rental/setup": {"body": None},
     "PUT /devices/{device_id}/rental": {"body": {"price_per_day": "1.00"}},
+    # B2b-2 part 3. B's device and B's own dependency link; the hint names
+    # B's second device as the one being added.
+    "GET /devices/{device_id}/dependencies": {"body": None},
+    "GET /devices/{device_id}/dependencies/hint": {
+        "query_rows": {"associated_device_id": "second_device_in_b"},
+    },
+    "POST /devices/{device_id}/dependencies": {
+        "body": {},
+        "body_rows": {"associated_device_id": "second_device_in_b"},
+    },
+    "PATCH /devices/{device_id}/dependencies/{association_id}": {"body": {"note": "Stolen"}},
+    "POST /devices/{device_id}/dependencies/{association_id}/remove": {"body": None},
     # Pure arithmetic, no stored row — and still a company endpoint.
     "POST /calc/preview": {
         "body": {
@@ -599,6 +612,7 @@ OTHER_COMPANY_ROWS = {
     "{actual_id}": "actual_in_b",
     "{device_id}": "device_in_b",
     "{device_unit_id}": "device_unit_in_b",
+    "{association_id}": "association_in_b",
 }
 
 
@@ -728,6 +742,9 @@ def two_companies(pg_db):
     # B2b: a device of B's and one of its units.
     device_in_b = make_device(pg_db, company_b)
     device_unit_in_b = make_device_unit(pg_db, company_b, device_in_b)
+    # B2b-2: a second device of B's, which B's camera depends on.
+    second_device_in_b = make_device(pg_db, company_b, name="Their battery")
+    association_in_b = make_device_association(pg_db, company_b, device_in_b, second_device_in_b)
     check_in_b = PartyVatCheck(
         company_id=company_b.id,
         party_id=party_in_b.id,
@@ -770,6 +787,8 @@ def two_companies(pg_db):
         "actual_in_b": actual_in_b,
         "device_in_b": device_in_b,
         "device_unit_in_b": device_unit_in_b,
+        "second_device_in_b": second_device_in_b,
+        "association_in_b": association_in_b,
     }
 
 
@@ -794,12 +813,18 @@ def _send(client, operation: str, headers: dict, case: dict, world: dict):
             **(body or {}),
             **{name: str(world[key].id) for name, key in case["body_rows"].items()},
         }
+    params = case.get("query")
+    if case.get("query_rows"):
+        params = {
+            **(params or {}),
+            **{name: str(world[key].id) for name, key in case["query_rows"].items()},
+        }
     return client.request(
         method,
         path,
         headers=headers,
         json=body,
-        params=case.get("query"),
+        params=params,
     )
 
 

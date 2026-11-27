@@ -31,7 +31,7 @@ from ..billing.resources.device_csv import (
 from ..database import get_db
 from ..middleware.company import Membership, require
 from ..models.catalog import Item, RentalFactorGroup
-from ..models.device import UNIT_REMOVED, Device, DeviceUnit
+from ..models.device import UNIT_REMOVED, Device, DeviceAssociation, DeviceUnit
 from ..models.party import Party
 from ..schemas.device import (
     DeviceCounts,
@@ -44,6 +44,13 @@ from ..schemas.device import (
     DeviceRentalPrices,
     DeviceRentalWrite,
     CatalogItemRef,
+    DependencyCreate,
+    DependencyHint,
+    DependencyHintRow,
+    DependencyUpdate,
+    DeviceDependencies,
+    DeviceDependencyResponse,
+    DeviceRef,
     DeviceResponse,
     DeviceUnitChangeResponse,
     DeviceUnitReactivate,
@@ -55,7 +62,7 @@ from ..schemas.device import (
     DeviceUpdate,
     SkippedSerial,
 )
-from ..services import audit, device_service
+from ..services import audit, device_links, device_service
 from ..services.permissions import scoped
 
 router = APIRouter(tags=["devices"])
@@ -785,3 +792,202 @@ def reactivate_unit(
         quantity_before=before,
         quantity_after=after,
     )
+
+
+# ─── Dependencies (B2b-2 part 3) ────────────────────────────────────────────
+#
+# Data and screens only; booking with them is B2c. `devices.view` reads both
+# lists and the setup hint (nothing here is a price), `devices.edit` writes.
+# Removing is a POST that deactivates — there is no DELETE.
+
+
+def device_refs(db: Session, ids: set) -> dict:
+    """`{id: DeviceRef}` for the devices named, in one query."""
+    if not ids:
+        return {}
+    rows = db.query(Device).filter(Device.id.in_(list(ids))).all()
+    return {row.id: _ref(row) for row in rows}
+
+
+def _ref(row: Device) -> DeviceRef:
+    return DeviceRef(id=row.id, name=row.name, category=row.category, is_active=row.is_active)
+
+
+def _dependency_rows(db: Session, links: list[DeviceAssociation]) -> list[DeviceDependencyResponse]:
+    origins = {link.origin_association_id for link in links if link.origin_association_id}
+    origin_device = (
+        dict(
+            db.query(DeviceAssociation.id, DeviceAssociation.device_id)
+            .filter(DeviceAssociation.id.in_(list(origins)))
+            .all()
+        )
+        if origins
+        else {}
+    )
+    refs = device_refs(
+        db,
+        {link.device_id for link in links}
+        | {link.associated_device_id for link in links}
+        | set(origin_device.values()),
+    )
+    return [
+        DeviceDependencyResponse(
+            id=link.id,
+            parent=refs[link.device_id],
+            associated=refs[link.associated_device_id],
+            quantity_per_parent=link.quantity_per_parent,
+            booking_mode=link.booking_mode,
+            pricing=link.pricing,
+            show_on_documents=link.show_on_documents,
+            note=link.note,
+            origin_association_id=link.origin_association_id,
+            origin_device_name=(
+                refs[origin_device[link.origin_association_id]].name
+                if link.origin_association_id in origin_device
+                else None
+            ),
+            created_at=link.created_at,
+            updated_at=link.updated_at,
+        )
+        for link in links
+    ]
+
+
+def _dependencies(db: Session, device: Device) -> DeviceDependencies:
+    def active(column):
+        return (
+            db.query(DeviceAssociation)
+            .filter(column == device.id, DeviceAssociation.is_active.is_(True))
+            .order_by(DeviceAssociation.created_at, DeviceAssociation.id)
+            .all()
+        )
+
+    return DeviceDependencies(
+        needs=_dependency_rows(db, active(DeviceAssociation.device_id)),
+        used_by=_dependency_rows(db, active(DeviceAssociation.associated_device_id)),
+    )
+
+
+def _dependency_or_404(db: Session, membership: Membership, device: Device, association_id: uuid.UUID) -> DeviceAssociation:
+    row = (
+        scoped(db.query(DeviceAssociation), membership)
+        .filter(DeviceAssociation.id == association_id, DeviceAssociation.device_id == device.id)
+        .first()
+    )
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dependency not found")
+    return row
+
+
+@router.get("/devices/{device_id}/dependencies", response_model=DeviceDependencies)
+def list_dependencies(
+    device_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    membership: Membership = Depends(require("devices.view")),
+):
+    """What this device needs, and which devices need it."""
+    return _dependencies(db, _device_or_404(db, membership, device_id))
+
+
+@router.get("/devices/{device_id}/dependencies/hint", response_model=DependencyHint)
+def dependency_hint(
+    device_id: uuid.UUID,
+    associated_device_id: uuid.UUID = Query(...),
+    quantity_per_parent: int = Query(default=1, ge=1, le=10_000),
+    db: Session = Depends(get_db),
+    membership: Membership = Depends(require("devices.view")),
+):
+    """The setup hint: the chosen device's own dependencies, with the
+    quantity per THIS device pre-multiplied. They are not booked through
+    this device unless they are added here."""
+    device = _device_or_404(db, membership, device_id)
+    associated = _device_or_404(db, membership, associated_device_id)
+    rows = device_links.hint(db, device, associated, quantity_per_parent)
+    return DependencyHint(
+        associated=_ref(associated),
+        rows=[
+            DependencyHintRow(**{**row, "device": _ref(row["device"])})
+            for row in rows
+        ],
+    )
+
+
+@router.post(
+    "/devices/{device_id}/dependencies",
+    response_model=DeviceDependencies,
+    status_code=status.HTTP_201_CREATED,
+)
+def add_dependency(
+    device_id: uuid.UUID,
+    body: DependencyCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    membership: Membership = Depends(require("devices.edit")),
+):
+    """Add a dependency, and the ticked rows of the setup hint with it, in
+    one transaction. A loop is refused with the chain named."""
+    device = _device_or_404(db, membership, device_id)
+    try:
+        device_links.add_dependency(
+            db,
+            device,
+            actor=audit.actor_from(request, membership=membership),
+            associated_device_id=body.associated_device_id,
+            quantity_per_parent=body.quantity_per_parent,
+            booking_mode=body.booking_mode,
+            pricing=body.pricing,
+            show_on_documents=body.show_on_documents,
+            note=body.note,
+            from_hint=[choice.model_dump() for choice in body.from_hint],
+        )
+    except LookupError as error:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from None
+    except device_service.DeviceConflict as error:
+        db.rollback()
+        _refuse(error, status.HTTP_409_CONFLICT)
+    except device_service.DeviceError as error:
+        db.rollback()
+        _refuse(error, status.HTTP_422_UNPROCESSABLE_ENTITY)
+    db.commit()
+    return _dependencies(db, device)
+
+
+@router.patch("/devices/{device_id}/dependencies/{association_id}", response_model=DeviceDependencies)
+def update_dependency(
+    device_id: uuid.UUID,
+    association_id: uuid.UUID,
+    body: DependencyUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    membership: Membership = Depends(require("devices.edit")),
+):
+    device = _device_or_404(db, membership, device_id)
+    link = _dependency_or_404(db, membership, device, association_id)
+    try:
+        device_links.update_dependency(
+            db, link, actor=audit.actor_from(request, membership=membership), changes=body.model_dump(exclude_unset=True)
+        )
+    except device_service.DeviceError as error:
+        db.rollback()
+        _refuse(error, status.HTTP_422_UNPROCESSABLE_ENTITY)
+    db.commit()
+    return _dependencies(db, device)
+
+
+@router.post(
+    "/devices/{device_id}/dependencies/{association_id}/remove", response_model=DeviceDependencies
+)
+def remove_dependency(
+    device_id: uuid.UUID,
+    association_id: uuid.UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    membership: Membership = Depends(require("devices.edit")),
+):
+    """The link goes inactive; it stays in the audit log. No DELETE."""
+    device = _device_or_404(db, membership, device_id)
+    link = _dependency_or_404(db, membership, device, association_id)
+    device_links.remove_dependency(db, link, actor=audit.actor_from(request, membership=membership))
+    db.commit()
+    return _dependencies(db, device)

@@ -290,6 +290,11 @@ export type DeviceImportPreview = Schemas['DeviceImportPreviewResponse']
 export type DeviceImportResult = Schemas['DeviceImportApplyResponse']
 /** B2b-2: the device's rental prices — its catalog item's day rates. */
 export type DeviceRentalPrices = Schemas['DeviceRentalPrices']
+/** B2b-2: another device, as a link row or a picker shows it. */
+export type DeviceRef = Schemas['DeviceRef']
+export type DeviceDependency = Schemas['DeviceDependencyResponse']
+export type DeviceDependencies = Schemas['DeviceDependencies']
+export type DependencyHint = Schemas['DependencyHint']
 /** `active` · `needs_check` · `in_repair` · `lost` · `retired` · `sold`. */
 export type UnitStatus = DeviceUnit['status']
 

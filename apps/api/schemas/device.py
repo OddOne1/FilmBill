@@ -81,6 +81,8 @@ class DeviceResponse(BaseModel):
     catalog_item_name: Optional[str] = None
     notes: Optional[str] = None
     is_active: bool
+    #: The small cover picture for lists and pickers (B2b-2 part 5).
+    thumbnail_url: Optional[str] = None
     counts: DeviceCounts
     created_at: datetime
     updated_at: datetime
@@ -276,3 +278,96 @@ class DeviceImportApplyResponse(BaseModel):
     errors: int
     units_created: int
     digest: str
+
+
+# ─── Dependencies (B2b-2 part 3) ────────────────────────────────────────────
+
+BookingMode = Literal["always", "ask"]
+Pricing = Literal["included", "charged"]
+
+
+class DeviceRef(BaseModel):
+    """Another device, as a link row or a picker shows it."""
+
+    id: uuid.UUID
+    name: str
+    category: Optional[str] = None
+    is_active: bool
+    #: The small picture (B2b-2 part 5), `null` without one.
+    thumbnail_url: Optional[str] = None
+
+
+class DeviceDependencyResponse(BaseModel):
+    id: uuid.UUID
+    #: The device that needs the other one ("Alexa 35").
+    parent: DeviceRef
+    #: The device it needs ("Battery V-Mount 150 Wh").
+    associated: DeviceRef
+    quantity_per_parent: int
+    booking_mode: BookingMode
+    pricing: Pricing
+    show_on_documents: bool
+    note: Optional[str] = None
+    #: Set when the link was added through the setup hint: the link it
+    #: copied, and the device that link belongs to ("added via ...").
+    origin_association_id: Optional[uuid.UUID] = None
+    origin_device_name: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class DeviceDependencies(BaseModel):
+    """`needs`: this device's own dependencies. `used_by`: the devices that
+    need this one (the reverse lookup)."""
+
+    needs: list[DeviceDependencyResponse]
+    used_by: list[DeviceDependencyResponse]
+
+
+class DependencyHintRow(BaseModel):
+    origin_association_id: uuid.UUID
+    device: DeviceRef
+    #: Per ONE of the device being added ("1 per battery").
+    quantity_per_associated: int
+    #: Pre-multiplied per PARENT ("2 per camera").
+    suggested_quantity: int
+    booking_mode: BookingMode
+    pricing: Pricing
+    #: Why this row cannot be added (a loop, already linked, archived).
+    blocked_reason: Optional[str] = None
+
+
+class DependencyHint(BaseModel):
+    associated: DeviceRef
+    rows: list[DependencyHintRow]
+
+
+class DependencyHintChoice(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    origin_association_id: uuid.UUID
+    #: Edited quantity per parent; empty takes the pre-multiplied one.
+    quantity_per_parent: Optional[int] = Field(default=None, ge=1, le=10_000)
+
+
+class DependencyCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    associated_device_id: uuid.UUID
+    quantity_per_parent: int = Field(default=1, ge=1, le=10_000)
+    booking_mode: BookingMode = "always"
+    pricing: Pricing = "included"
+    show_on_documents: bool = False
+    note: Optional[str] = Field(default=None, max_length=2000)
+    #: The ticked rows of the setup hint, added in the same transaction.
+    from_hint: list[DependencyHintChoice] = Field(default_factory=list, max_length=200)
+
+
+class DependencyUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    quantity_per_parent: Optional[int] = Field(default=None, ge=1, le=10_000)
+    booking_mode: Optional[BookingMode] = None
+    pricing: Optional[Pricing] = None
+    show_on_documents: Optional[bool] = None
+    note: Optional[str] = Field(default=None, max_length=2000)

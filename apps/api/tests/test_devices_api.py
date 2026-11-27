@@ -659,6 +659,11 @@ def _every_device_request(device_id, unit_id):
         ("post", f"{base}/reactivate", None, None),
         ("post", f"{base}/rental/setup", None, None),
         ("put", f"{base}/rental", {"price_per_day": "1.00"}, None),
+        ("get", f"{base}/dependencies", None, None),
+        ("get", f"{base}/dependencies/hint?associated_device_id={device_id}", None, None),
+        ("post", f"{base}/dependencies", {"associated_device_id": str(device_id)}, None),
+        ("patch", f"{base}/dependencies/{device_id}", {"note": "staff"}, None),
+        ("post", f"{base}/dependencies/{device_id}/remove", None, None),
         ("post", f"{base}/units", {"serial_numbers": ["STAFF-1"]}, None),
         ("patch", unit, {"notes": "staff"}, None),
         ("post", f"{unit}/remove", {"status": "retired", "reason": "staff"}, None),
@@ -717,6 +722,11 @@ def test_staff_see_devices_and_counts_but_no_price_and_can_change_nothing(
             # The positive marker first: the API says the price is withheld…
             if url.endswith(".csv"):
                 assert response.content.decode("utf-8-sig").splitlines()[1].startswith("Alexa 35;Camera;3;;AX-1")
+            elif "dependencies" in url or "alternatives" in url:
+                # Link lists carry no price at all; the secrets check below
+                # is the whole assertion — after a positive marker that the
+                # list really is a device-link response.
+                assert "needs" in response.json() or "rows" in response.json() or "alternatives" in response.json()
             else:
                 body_json = response.json()
                 rows = body_json["devices"] if "devices" in body_json else [body_json]

@@ -599,3 +599,158 @@ describe('the Add new item(s) popup', () => {
     )
   })
 })
+
+describe('the Dependencies tab', () => {
+  const ref = (id: string, name: string) => ({ id, name, category: null, is_active: true, thumbnail_url: null })
+  const link = (overrides: Record<string, unknown> = {}) => ({
+    id: 'a1',
+    parent: ref('d1', 'Alexa 35'),
+    associated: ref('b1', 'Battery V-Mount 150 Wh'),
+    quantity_per_parent: 2,
+    booking_mode: 'always',
+    pricing: 'included',
+    show_on_documents: false,
+    note: null,
+    origin_association_id: null,
+    origin_device_name: null,
+    created_at: '2026-11-26T10:00:00Z',
+    updated_at: '2026-11-26T10:00:00Z',
+    ...overrides,
+  })
+
+  function routeDependencies(dependencies: unknown, hint?: unknown) {
+    const base = vi.mocked(api.get).getMockImplementation()!
+    vi.mocked(api.get).mockImplementation(async (path: string) => {
+      if (path.startsWith('/devices/d1/dependencies/hint')) return hint
+      if (path === '/devices/d1/dependencies') return dependencies
+      if (path.startsWith('/devices?')) {
+        return {
+          devices: [
+            { ...device(), units: undefined },
+            { ...device({ id: 'b1', name: 'Battery V-Mount 150 Wh' }), units: undefined },
+            { ...device({ id: 'c1', name: 'Charger' }), units: undefined },
+          ],
+          total: 3,
+          categories: [],
+        }
+      }
+      return base(path)
+    })
+  }
+
+  async function openTab() {
+    render(<DevicePage />)
+    fireEvent.click(await screen.findByTestId('device-tab-dependencies'))
+  }
+
+  it('lists what the device needs and what needs it, with the origin of a hinted link', async () => {
+    routeDependencies({
+      needs: [
+        link(),
+        link({ id: 'a2', associated: ref('c1', 'Charger'), origin_association_id: 'x', origin_device_name: 'Battery V-Mount 150 Wh' }),
+      ],
+      used_by: [link({ id: 'a3', parent: ref('k1', 'Podcast kit cam'), associated: ref('d1', 'Alexa 35'), quantity_per_parent: 1 })],
+    })
+    await openTab()
+    const rows = await screen.findAllByTestId('dependency-row')
+    expect(rows).toHaveLength(2)
+    expect(within(rows[0]).getByTestId('dependency-quantity')).toHaveValue('2')
+    expect(within(rows[1]).getByTestId('dependency-origin')).toHaveTextContent('added via Battery V-Mount 150 Wh')
+    expect(screen.getByTestId('used-by')).toHaveTextContent(/Podcast kit cam\s*needs 1 × Alexa 35/)
+    // Without a picture, the neutral placeholder.
+    expect(within(rows[0]).getByTestId('device-thumb-placeholder')).toBeInTheDocument()
+  })
+
+  it('the setup hint shows the pre-multiplied quantity and sends the ticked rows with the link', async () => {
+    routeDependencies(
+      { needs: [], used_by: [] },
+      {
+        associated: ref('b1', 'Battery V-Mount 150 Wh'),
+        rows: [
+          {
+            origin_association_id: 'o1',
+            device: ref('c1', 'Charger'),
+            quantity_per_associated: 1,
+            suggested_quantity: 2,
+            booking_mode: 'always',
+            pricing: 'included',
+            blocked_reason: null,
+          },
+        ],
+      },
+    )
+    vi.mocked(api.post).mockResolvedValue({ needs: [link()], used_by: [] })
+    await openTab()
+    fireEvent.click(await screen.findByTestId('dependency-add-open'))
+    const dialog = await screen.findByTestId('dependency-dialog')
+    expect(within(dialog).getByTestId('dependency-add-why')).toHaveTextContent('Pick the device it needs.')
+    const options = await within(dialog).findAllByTestId('dependency-option')
+    expect(options.map((option) => option.textContent)).not.toContain(expect.stringContaining('Alexa 35'))
+    fireEvent.click(within(dialog).getByRole('option', { name: /Battery V-Mount/ }))
+    fireEvent.change(within(dialog).getByTestId('dependency-add-quantity'), { target: { value: '2' } })
+    const hint = await within(dialog).findByTestId('dependency-hint')
+    expect(hint).toHaveTextContent(
+      'Battery V-Mount 150 Wh has its own dependencies: Charger (1 per Battery V-Mount 150 Wh). They will not be booked through Alexa 35 unless you add them here.',
+    )
+    await waitFor(() =>
+      expect(vi.mocked(api.get)).toHaveBeenCalledWith(
+        '/devices/d1/dependencies/hint?associated_device_id=b1&quantity_per_parent=2',
+      ),
+    )
+    expect(within(dialog).getByTestId('dependency-hint-quantity')).toHaveValue('2')
+    expect(within(dialog).getByTestId('dependency-hint-tick')).toBeChecked()
+    fireEvent.click(within(dialog).getByTestId('dependency-add-save'))
+    await waitFor(() =>
+      expect(vi.mocked(api.post)).toHaveBeenCalledWith('/devices/d1/dependencies', {
+        associated_device_id: 'b1',
+        quantity_per_parent: 2,
+        booking_mode: 'always',
+        pricing: 'included',
+        show_on_documents: false,
+        note: null,
+        from_hint: [{ origin_association_id: 'o1', quantity_per_parent: 2 }],
+      }),
+    )
+  })
+
+  it('a loop refused by the API is shown in its own words, and the dialog stays open', async () => {
+    const { ApiError } = await import('@/lib/api')
+    routeDependencies({ needs: [], used_by: [] }, { associated: ref('b1', 'Battery V-Mount 150 Wh'), rows: [] })
+    vi.mocked(api.post).mockRejectedValue(
+      new ApiError(409, 'Battery V-Mount 150 Wh already depends on Alexa 35 (…), so Alexa 35 cannot depend on Battery V-Mount 150 Wh as well: that would be a loop. Remove one of the links first.'),
+    )
+    await openTab()
+    fireEvent.click(await screen.findByTestId('dependency-add-open'))
+    const dialog = await screen.findByTestId('dependency-dialog')
+    fireEvent.click((await within(dialog).findAllByRole('option', { name: /Battery V-Mount/ }))[0])
+    fireEvent.click(within(dialog).getByTestId('dependency-add-save'))
+    expect(await within(dialog).findByTestId('dependency-add-error')).toHaveTextContent('that would be a loop')
+  })
+
+  it('changing a row sends only that field; removing posts remove', async () => {
+    routeDependencies({ needs: [link()], used_by: [] })
+    vi.mocked(api.patch).mockResolvedValue({ needs: [link({ booking_mode: 'ask' })], used_by: [] })
+    vi.mocked(api.post).mockResolvedValue({ needs: [], used_by: [] })
+    await openTab()
+    const row = (await screen.findAllByTestId('dependency-row'))[0]
+    fireEvent.change(within(row).getByTestId('dependency-mode'), { target: { value: 'ask' } })
+    await waitFor(() =>
+      expect(vi.mocked(api.patch)).toHaveBeenCalledWith('/devices/d1/dependencies/a1', { booking_mode: 'ask' }),
+    )
+    fireEvent.click(within(screen.getAllByTestId('dependency-row')[0]).getByTestId('dependency-remove'))
+    await waitFor(() => expect(vi.mocked(api.post)).toHaveBeenCalledWith('/devices/d1/dependencies/a1/remove', {}))
+    expect(await screen.findByTestId('dependencies-empty')).toBeInTheDocument()
+  })
+
+  it('staff see the dependencies and cannot change them', async () => {
+    seed(STAFF)
+    routeGets(device({ purchase_price: null, price_visible: false }))
+    routeDependencies({ needs: [link()], used_by: [] })
+    await openTab()
+    const row = (await screen.findAllByTestId('dependency-row'))[0]
+    expect(row).toHaveTextContent('Battery V-Mount 150 Wh')
+    expect(row).toHaveTextContent('Always')
+    expect(within(row).queryByTestId('dependency-mode')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('dependency-add-open')).not.toBeInTheDocument()
+  })
+})
