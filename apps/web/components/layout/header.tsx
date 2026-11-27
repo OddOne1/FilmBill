@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { useBreadcrumbStore } from '@/stores/breadcrumb-store'
 import { CompanySwitcher } from './company-switcher'
 import { NotificationBell } from './notification-popover'
+import { UserMenu } from './user-menu'
 
 interface HeaderProps {
   onSearchOpen: () => void
@@ -14,6 +15,8 @@ interface HeaderProps {
 
 const LABEL_MAP: Record<string, string> = {
   notifications: 'Notifications',
+  'crew-profile': 'My crew profile',
+  schedule: 'My schedule',
   settings: 'Settings',
   new: 'New',
 }
@@ -27,7 +30,7 @@ function isUuid(s: string): boolean {
  * Route path segments that are structural only and should not appear in the
  * breadcrumb — a route prefix that carries no meaning for the reader.
  */
-const SKIP_SEGMENTS = new Set<string>([])
+const SKIP_SEGMENTS = new Set<string>(['my'])
 
 function buildBreadcrumbs(pathname: string, dynamicLabels: Record<string, string>): { label: string; href: string }[] {
   const segments = pathname.split('/').filter(Boolean)
@@ -109,6 +112,9 @@ export function Header({ onSearchOpen }: HeaderProps) {
 
         {/* Notifications: beside Search, a small popup (UI-1). */}
         <NotificationBell />
+
+        {/* R2: Profile, My crew profile, My schedule. */}
+        <UserMenu />
 
       </div>
     </header>

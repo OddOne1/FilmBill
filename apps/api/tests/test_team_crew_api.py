@@ -585,3 +585,50 @@ def test_a_linked_contact_is_marked_team_everywhere_and_the_crew_list_filters(pg
     # Rates and roles: the same as for anybody — Max's own rate is there.
     assert pg_client.get("/crew?kind=team", headers=h).json()["members"][0]["crew_roles"][0]["own_day_rate"] == "650.00"
     assert freelancer.user_id is None
+
+
+# ─── My schedule (part 3) ───────────────────────────────────────────────────
+
+
+def test_my_schedule_is_my_own_bookings_only(pg_client, pg_db, world):
+    """The victim is Max's booking on the very strip Nora is booked on: the
+    row only the "my linked contact" filter keeps out of her schedule."""
+    w = world
+    assert pg_client.put("/me/crew", headers=_h(w, "nora"), json={"is_crew": True}).status_code == 200
+    pg_db.expire_all()
+    nora_contact = pg_db.query(Party).filter(Party.user_id == w["nora"].id).one()
+    mine = make_crew_assignment(pg_db, w["company"], w["spot"], w["shoot"], nora_contact, status="booked", dates=[FUTURE, FUTURE + timedelta(days=1)], role=w["dop"])
+    mine.status_note = "Confirmed by phone"
+    earlier = make_crew_assignment(pg_db, w["company"], w["spot"], w["prep"], nora_contact, dates=[PAST])
+    cancelled = make_crew_assignment(pg_db, w["company"], w["spot"], w["prep"], w["max_contact"], status="cancelled", dates=[PAST])
+    theirs = make_crew_assignment(pg_db, w["company"], w["spot"], w["shoot"], w["max_contact"], status="booked", dates=[FUTURE], role=w["gaffer"])
+    pg_db.commit()
+
+    body = pg_client.get("/me/schedule", headers=_h(w, "nora")).json()
+    assert body["available"] is True
+    assert [e["assignment_id"] for e in body["upcoming"]] == [str(mine.id)]
+    assert [e["assignment_id"] for e in body["past"]] == [str(earlier.id)]
+    entry = body["upcoming"][0]
+    assert (entry["project_name"], entry["strip_name"], entry["role_name"], entry["status"], entry["note"], entry["location"]) == (
+        "Spot", "Shoot", "DoP", "booked", "Confirmed by phone", "Studio Wien"
+    )
+    assert [(d["date"], d["call_time"], d["location"]) for d in entry["days"]] == [
+        (FUTURE.isoformat(), "08:00:00", "Studio Wien"),
+        ((FUTURE + timedelta(days=1)).isoformat(), "08:00:00", "Studio Wien"),
+    ]
+    # Nothing about other crew, rates, budgets or gear in the answer.
+    assert {key for _, key in [(p, p.rsplit(".", 1)[-1]) for p, _ in _walk(body)]} <= {
+        "available", "upcoming", "past", "assignment_id", "project_id", "project_name", "strip_name",
+        "role_name", "status", "note", "location", "first_date", "last_date", "days", "date",
+        "call_time", "wrap_time",
+    }
+    # The positive half: Max's own schedule does show his booking.
+    max_body = pg_client.get("/me/schedule", headers=_h(w, "max")).json()
+    assert [e["assignment_id"] for e in max_body["upcoming"]] == [str(theirs.id)]
+    assert str(cancelled.id) not in {e["assignment_id"] for e in max_body["past"]}
+
+
+def test_my_schedule_is_empty_and_closed_when_not_crew(pg_client, pg_db, world):
+    assert pg_client.get("/me/schedule", headers=_h(world, "nora")).json() == {"available": False, "upcoming": [], "past": []}
+    pg_client.put("/me/crew", headers=_h(world, "nora"), json={"is_crew": True})
+    assert pg_client.get("/me/schedule", headers=_h(world, "nora")).json() == {"available": True, "upcoming": [], "past": []}
