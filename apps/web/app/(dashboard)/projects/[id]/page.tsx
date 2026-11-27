@@ -136,6 +136,7 @@ export default function ProjectDetailPage() {
           {tab === 'crew' && access.canViewParties && (
             <CrewTab
               project={project}
+              canEdit={access.canEdit}
               onOpenStrip={(stripId) => {
                 setOpenStripId(stripId)
                 setTab('days')

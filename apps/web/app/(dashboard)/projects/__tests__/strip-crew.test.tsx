@@ -21,6 +21,8 @@ import { datesBetween, monthGridFor } from '@/lib/calendar-dates'
 import { StripCrew } from '../[id]/calendar/strip-crew'
 import { MonthGrid } from '../[id]/calendar/month-grid'
 import { CrewAvailabilityView } from '../../contacts/crew-availability'
+import { CrewTab } from '../[id]/crew-tab'
+import { useCompanyStore } from '@/stores/company-store'
 import type {
   CalendarStrip,
   CrewAssignment,
@@ -447,5 +449,80 @@ describe('Contacts → Crew → Availability', () => {
     await screen.findAllByTestId('crew-availability-row')
     expect(screen.queryByTestId('crew-availability-max-rate')).toBeNull()
     expect(screen.queryAllByTestId('crew-availability-rate')).toEqual([])
+  })
+})
+
+describe('Project → Crew: adding and booking from the tab', () => {
+  const PREP: CalendarStrip = { ...SHOOT, id: 'b0', label: 'Prep', start_date: '2026-07-01', end_date: '2026-07-02', days: [] }
+  const project = { id: 'p1' } as never
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useCompanyStore.setState({
+      companies: [
+        {
+          id: 'c1',
+          legal_name: 'YON Studio OG',
+          trading_name: null,
+          display_name: 'YON Studio OG',
+          default_currency: 'EUR',
+          role: 'owner',
+          permissions: ['projects.view', 'projects.edit', 'parties.view', 'budgets.view'],
+          expires_at: null,
+        },
+      ],
+      activeCompanyId: 'c1',
+      loaded: true,
+      error: null,
+    })
+    vi.mocked(api.get).mockImplementation(async (path: string) => {
+      if (path === '/projects/p1/crew')
+        return {
+          project_id: 'p1',
+          rates_visible: true,
+          strips: [
+            { ...crewStrip([]), block_id: 'b0', strip_name: 'Prep', start_date: '2026-07-01', end_date: '2026-07-02' },
+            crewStrip([assignment()]),
+          ],
+        }
+      if (path === '/projects/p1/calendar')
+        return { project_id: 'p1', project_start: '2026-07-01', project_end: null, strips: [PREP, SHOOT], counts: {} }
+      if (path === '/crew/roles') return { used: [], catalog: [], labor_items: [{ item_id: 'i-dop', name: 'DoP' }] }
+      if (path.startsWith('/crew/availability')) return availability([person()])
+      throw new Error(`unexpected GET ${path}`)
+    })
+  })
+
+  it('every strip card has Add crew, and the picker asks for that strip’s dates', async () => {
+    render(<CrewTab project={project} canEdit onOpenStrip={() => {}} />)
+    const cards = await screen.findAllByTestId('project-crew-strip')
+    expect(cards).toHaveLength(2)
+    expect(within(cards[0]).getByText('Prep')).toBeInTheDocument()
+    fireEvent.click(within(cards[0]).getByTestId('strip-crew-add'))
+    await within(cards[0]).findAllByTestId('crew-picker-row')
+    expect(api.get).toHaveBeenCalledWith('/crew/availability?from=2026-07-01&to=2026-07-02')
+    vi.mocked(api.post).mockResolvedValue({ assignments: [assignment({ id: 'n1', party_id: 'ben', block_id: 'b0' })], clashes: [] })
+    fireEvent.click(within(cards[0]).getByRole('checkbox', { name: 'Pick Ben Ohr' }))
+    fireEvent.click(within(cards[0]).getByTestId('crew-picker-add'))
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/projects/p1/blocks/b0/crew', { people: [{ party_id: 'ben' }] }))
+    // The tab reloads the crew from the API after the add.
+    await waitFor(() => expect(vi.mocked(api.get).mock.calls.filter(([path]) => path === '/projects/p1/crew')).toHaveLength(2))
+  })
+
+  it('books a scheduled person from the tab with the confirmed-how note', async () => {
+    vi.mocked(api.post).mockResolvedValue(assignment({ status: 'booked' }))
+    render(<CrewTab project={project} canEdit onOpenStrip={() => {}} />)
+    const cards = await screen.findAllByTestId('project-crew-strip')
+    fireEvent.click(within(cards[1]).getByRole('button', { name: /Anna Huber/ }))
+    fireEvent.change(within(cards[1]).getByTestId('strip-crew-note'), { target: { value: 'by phone' } })
+    fireEvent.click(within(cards[1]).getByTestId('strip-crew-book'))
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/projects/p1/crew/a1/status', { status: 'booked', note: 'by phone' }))
+  })
+
+  it('is read-only without projects.edit and says why', async () => {
+    render(<CrewTab project={project} canEdit={false} onOpenStrip={() => {}} />)
+    const cards = await screen.findAllByTestId('project-crew-strip')
+    expect(within(cards[1]).queryByTestId('strip-crew-add')).toBeNull()
+    expect(within(cards[1]).getByTestId('strip-crew-read-only')).toHaveTextContent('needs the project edit permission')
   })
 })

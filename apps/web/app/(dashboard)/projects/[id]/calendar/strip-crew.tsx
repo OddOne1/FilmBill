@@ -60,6 +60,7 @@ export function StripCrew({
   canSeeRates,
   currency,
   onChanged,
+  embedded = false,
 }: {
   projectId: string
   strip: CalendarStrip
@@ -69,6 +70,9 @@ export function StripCrew({
   canSeeRates: boolean
   currency: string
   onChanged: () => Promise<void> | void
+  /** Inside a card that already names the strip (Project → Crew): no rule
+   *  above it and no "Crew" heading of its own. */
+  embedded?: boolean
 }) {
   const [picking, setPicking] = React.useState(false)
   const [openId, setOpenId] = React.useState<string | null>(null)
@@ -134,9 +138,13 @@ export function StripCrew({
   }
 
   return (
-    <section data-testid="strip-crew" aria-label="Crew" className="mt-5 border-t border-border pt-4">
+    <section
+      data-testid="strip-crew"
+      aria-label={embedded ? `Crew on ${strip.label ?? strip.type}` : 'Crew'}
+      className={embedded ? 'mt-2' : 'mt-5 border-t border-border pt-4'}
+    >
       <div className="flex items-center gap-2">
-        <h3 className="text-sm font-medium text-text-primary">Crew</h3>
+        {!embedded && <h3 className="text-sm font-medium text-text-primary">Crew</h3>}
         <span data-testid="strip-crew-counts" className="text-xs text-text-tertiary">
           {crewCountsText(crew?.counts) || (crew ? 'Nobody yet' : '')}
         </span>

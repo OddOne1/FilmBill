@@ -1,32 +1,55 @@
 'use client'
 
 import * as React from 'react'
-import { AlertTriangle, Loader2 } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import { api, ApiError } from '@/lib/api'
 import { dayLabel } from '@/lib/calendar-dates'
-import { cn } from '@/lib/utils'
-import type { Project, ProjectCrew } from '@/types'
-import { crewCountsText } from './calendar/strip-crew'
+import { usePermissions } from '@/hooks/use-permissions'
+import type { Project, ProjectCalendar, ProjectCrew } from '@/types'
+import { StripCrew } from './calendar/strip-crew'
 
 /**
- * Project → Crew (B2c-1): per strip, who is scheduled, booked or declined,
- * with the API's counts and clash warnings, and a way to open the strip on
- * the calendar where the people are changed. Read-only by design: every
- * change happens in the strip's panel.
+ * Project → Crew (B2c-1): one card per strip, and in each the same Crew
+ * section as the strip's panel on the calendar — who is on it with role,
+ * status and clashes, **Add crew** with the availability picker, the days
+ * checklist, Mark booked / Decline / Cancel / Remove and **Mark selected as
+ * booked**. One component in both places, so the two can never offer
+ * different things. "Open on the calendar" still jumps to the strip.
+ *
+ * Counts, states and clashes are the API's (`GET /projects/{id}/crew`); the
+ * strips' days come from the calendar endpoint, which the checklist needs
+ * for each day's type. Without `projects.edit` it is read-only and says why.
  */
-export function CrewTab({ project, onOpenStrip }: { project: Project; onOpenStrip: (stripId: string) => void }) {
+export function CrewTab({
+  project,
+  canEdit,
+  onOpenStrip,
+}: {
+  project: Project
+  canEdit: boolean
+  onOpenStrip: (stripId: string) => void
+}) {
+  const { can, active } = usePermissions()
   const [crew, setCrew] = React.useState<ProjectCrew | null>(null)
+  const [calendar, setCalendar] = React.useState<ProjectCalendar | null>(null)
   const [error, setError] = React.useState<string | null>(null)
 
-  React.useEffect(() => {
-    api
-      .get<ProjectCrew>(`/projects/${project.id}/crew`)
-      .then((loaded) => {
-        setCrew(loaded)
-        setError(null)
-      })
-      .catch((err) => setError(err instanceof ApiError ? err.detail : 'The crew could not be loaded. Try again.'))
+  const loadCrew = React.useCallback(async () => {
+    try {
+      setCrew(await api.get<ProjectCrew>(`/projects/${project.id}/crew`))
+      setError(null)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : 'The crew could not be loaded. Try again.')
+    }
   }, [project.id])
+
+  React.useEffect(() => {
+    void loadCrew()
+    api
+      .get<ProjectCalendar>(`/projects/${project.id}/calendar`)
+      .then(setCalendar)
+      .catch((err) => setError(err instanceof ApiError ? err.detail : 'The strips could not be loaded. Try again.'))
+  }, [project.id, loadCrew])
 
   if (error) {
     return (
@@ -35,7 +58,7 @@ export function CrewTab({ project, onOpenStrip }: { project: Project; onOpenStri
       </p>
     )
   }
-  if (!crew) {
+  if (!crew || !calendar) {
     return (
       <p className="mt-6 flex items-center gap-2 text-sm text-text-secondary">
         <Loader2 className="h-4 w-4 animate-spin" /> Loading the crew…
@@ -45,73 +68,48 @@ export function CrewTab({ project, onOpenStrip }: { project: Project; onOpenStri
   if (crew.strips.length === 0) {
     return (
       <p data-testid="project-crew-empty" className="mt-6 text-sm text-text-secondary">
-        This project has no strips yet. Add a strip on the Days tab, then add crew to it.
+        This project has no strips yet. Add a strip on the Days tab, then add crew to it here.
       </p>
     )
   }
 
   return (
     <div data-testid="project-crew" className="mt-6 space-y-5">
-      {crew.strips.map((strip) => (
-        <section key={strip.block_id} data-testid="project-crew-strip" className="rounded-md border border-border p-3">
-          <div className="flex flex-wrap items-baseline gap-2">
-            <h3 className="text-sm font-medium text-text-primary">{strip.strip_name}</h3>
-            <span className="text-xs text-text-secondary">
-              {dayLabel(strip.start_date, true)} – {dayLabel(strip.end_date, true)}
-            </span>
-            <span data-testid="project-crew-counts" className="text-xs text-text-tertiary">
-              {crewCountsText(strip.counts) || 'Nobody yet'}
-              {strip.counts.declined > 0 && ` · ${strip.counts.declined} declined`}
-            </span>
-            {strip.counts.with_clashes > 0 && (
-              <span className="inline-flex items-center gap-1 text-xs text-status-warning">
-                <AlertTriangle className="h-3 w-3" aria-hidden="true" />
-                {strip.counts.with_clashes} with a clash
+      {crew.strips.map((entry) => {
+        const strip = calendar.strips.find((candidate) => candidate.kind === 'strip' && candidate.id === entry.block_id)
+        return (
+          <section key={entry.block_id} data-testid="project-crew-strip" className="rounded-md border border-border p-3">
+            <div className="flex flex-wrap items-baseline gap-2">
+              <h3 className="text-sm font-medium text-text-primary">{entry.strip_name}</h3>
+              <span className="text-xs text-text-secondary">
+                {dayLabel(entry.start_date, true)} – {dayLabel(entry.end_date, true)}
               </span>
+              <button
+                type="button"
+                data-testid="project-crew-open"
+                onClick={() => onOpenStrip(entry.block_id)}
+                className="ml-auto text-xs text-accent hover:underline"
+              >
+                Open on the calendar
+              </button>
+            </div>
+            {strip ? (
+              <StripCrew
+                embedded
+                projectId={project.id}
+                strip={strip}
+                crew={entry}
+                canEdit={canEdit}
+                canSeeRates={can('budgets.view')}
+                currency={active?.default_currency ?? 'EUR'}
+                onChanged={loadCrew}
+              />
+            ) : (
+              <p className="mt-2 text-xs text-text-secondary">This strip could not be loaded. Reload the page.</p>
             )}
-            <button
-              type="button"
-              data-testid="project-crew-open"
-              onClick={() => onOpenStrip(strip.block_id)}
-              className="ml-auto text-xs text-accent hover:underline"
-            >
-              Open on the calendar
-            </button>
-          </div>
-          {strip.assignments.length > 0 && (
-            <ul className="mt-2 divide-y divide-border/60 text-sm">
-              {strip.assignments.map((assignment) => (
-                <li key={assignment.id} data-testid="project-crew-row" className="py-1.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-text-primary">{assignment.party_name}</span>
-                    {assignment.role_name && <span className="text-xs text-text-secondary">{assignment.role_name}</span>}
-                    <span className="text-xs text-text-tertiary">
-                      {assignment.days.length} {assignment.days.length === 1 ? 'day' : 'days'}
-                    </span>
-                    <span
-                      className={cn(
-                        'ml-auto rounded px-1.5 py-0.5 text-2xs',
-                        assignment.status === 'booked'
-                          ? 'bg-status-success/15 text-status-success'
-                          : assignment.status === 'scheduled'
-                            ? 'bg-status-warning/15 text-status-warning'
-                            : 'bg-bg-tertiary text-text-tertiary',
-                      )}
-                    >
-                      {assignment.status}
-                    </span>
-                  </div>
-                  {assignment.clashes.map((clash, index) => (
-                    <p key={index} data-testid="project-crew-clash" className="mt-0.5 text-xs text-status-warning">
-                      {clash.message}
-                    </p>
-                  ))}
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      ))}
+          </section>
+        )
+      })}
     </div>
   )
 }

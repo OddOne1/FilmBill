@@ -1634,7 +1634,7 @@ clashes with other strips and unavailability warn, never block; the
 availability grid (D133). Migration 0030. Staff see no crew (D134). Screens:
 Roles & rates and Not available on the person, the Crew tab's role/rate
 filters and Availability view, the strip panel's Crew section and picker,
-the strip badge, Project → Crew.
+the strip badge, Project → Crew (where crew are also added and booked, per strip — Mathias, 2026-11-27).
 
 **Numbers.** API 3285 passed, 30 skipped (3191 / 30 before); `-m realdb`
 1832 (1740); web 980 / 82 files (957 / 80). CI floors **3100 → 3190** and

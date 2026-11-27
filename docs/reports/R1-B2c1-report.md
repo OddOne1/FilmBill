@@ -161,8 +161,10 @@ under 1832), rule 17e.
   free, with a clash flag when more than one thing is on it.
 - **Times:** a day's effective call/wrap = the person's own, else the
   project day's, else the strip's default.
-- **Project → Crew** is read-only and opens the strip on the calendar; the
-  tab is drawn only with `parties.view`.
+- **Project → Crew** shows one card per strip with the same Crew section as
+  the strip panel (add, days, book, bulk book; added after Mathias asked,
+  2026-11-27) and opens the strip on the calendar; the tab is drawn only
+  with `parties.view`.
 - **Availability view** is a "People | Availability" switch on Contacts →
   Crew, default 7 days from today (7/14/31).
 
