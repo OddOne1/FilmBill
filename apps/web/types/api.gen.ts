@@ -2945,6 +2945,10 @@ export interface paths {
         /**
          * List Crew
          * @description Everybody flagged crew. Archived people are hidden unless asked for.
+         *
+         *     The rate range and the rate sort use the EFFECTIVE rate (own else
+         *     typical) of the role filtered by, or of any role; both are a 404 for a
+         *     member who may not see rates, like any missing permission.
          */
         get: operations["list_crew_crew_get"];
         put?: never;
@@ -2955,6 +2959,10 @@ export interface paths {
          *     No address, no tax data, no number. Somebody who looks like a party
          *     already on file is created anyway and the answer says who it looked
          *     like — a warning, never a refusal, like every party create.
+         *
+         *     R1: a role that is a catalog labor item becomes a role; any other stays
+         *     a tag and is listed in `unknown_roles`. `day_rate` (needs
+         *     `budgets.view`) is the own rate in the first matched role.
          */
         post: operations["quick_add_crew_post"];
         delete?: never;
@@ -2973,7 +2981,11 @@ export interface paths {
         /**
          * Export Crew
          * @description The list in the import's own columns:
-         *     `first_name;middle_name;last_name;name;roles;email;phone;notes`.
+         *     `first_name;middle_name;last_name;name;roles;email;phone;notes;day_rate`.
+         *
+         *     `roles` lists the catalog roles first, then the tags. `day_rate` is the
+         *     person's OWN rate in their first role, so a re-import gives it back; the
+         *     column is not written at all for a member who may not see rates.
          */
         get: operations["export_crew_crew_export_csv_get"];
         put?: never;
@@ -3874,6 +3886,93 @@ export interface paths {
         put?: never;
         /** Add Contact Point */
         post: operations["add_contact_point_parties__party_id__contact_points_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/parties/{party_id}/crew-roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Crew Roles
+         * @description The person's roles with own, typical and effective rates (rates only
+         *     for `budgets.view`), and the tags that could become a role.
+         */
+        get: operations["read_crew_roles_parties__party_id__crew_roles_get"];
+        put?: never;
+        /**
+         * Add Crew Role
+         * @description A role from the catalog's labor items, with an optional own rate.
+         */
+        post: operations["add_crew_role_parties__party_id__crew_roles_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/parties/{party_id}/crew-roles/from-tag": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Crew Role From Tag
+         * @description "Use 'Gaffer' as a role": the tag becomes that labor item's role and
+         *     leaves the tags. Only ever on request — tags are never converted by
+         *     themselves.
+         */
+        post: operations["crew_role_from_tag_parties__party_id__crew_roles_from_tag_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/parties/{party_id}/crew-roles/{role_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Crew Role
+         * @description Own rate (null clears it: the typical rate applies again) and notes.
+         */
+        patch: operations["update_crew_role_parties__party_id__crew_roles__role_id__patch"];
+        trace?: never;
+    };
+    "/parties/{party_id}/crew-roles/{role_id}/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Remove Crew Role
+         * @description Retire the role. The row is kept; there is no DELETE.
+         */
+        post: operations["remove_crew_role_parties__party_id__crew_roles__role_id__remove_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -7838,6 +7937,8 @@ export interface components {
          *     no parts; when a first or last name is given, `name` is derived.
          */
         CrewCreate: {
+            /** Day Rate */
+            day_rate?: string | null;
             /** Email */
             email?: string | null;
             /** First Name */
@@ -7866,6 +7967,16 @@ export interface components {
              */
             duplicates: components["schemas"]["CrewDuplicateWarning"][];
             member: components["schemas"]["CrewMemberResponse"];
+            /**
+             * Notes
+             * @default []
+             */
+            notes: string[];
+            /**
+             * Unknown Roles
+             * @default []
+             */
+            unknown_roles: string[];
         };
         /**
          * CrewDuplicateWarning
@@ -7921,6 +8032,8 @@ export interface components {
         CrewImportRowResponse: {
             /** Action */
             action: string;
+            /** Day Rate */
+            day_rate?: string | null;
             /** Duplicate Of Line */
             duplicate_of_line?: number | null;
             /** Duplicate Of Name */
@@ -7937,6 +8050,11 @@ export interface components {
             last_name?: string | null;
             /** Line Number */
             line_number: number;
+            /**
+             * Matched Roles
+             * @default []
+             */
+            matched_roles: string[];
             /** Message */
             message?: string | null;
             /** Middle Name */
@@ -7950,10 +8068,30 @@ export interface components {
             /** Phone */
             phone?: string | null;
             /**
+             * Role Notes
+             * @default []
+             */
+            role_notes: string[];
+            /**
              * Roles
              * @default []
              */
             roles: string[];
+            /**
+             * Unknown Roles
+             * @default []
+             */
+            unknown_roles: string[];
+        };
+        /** CrewLaborItem */
+        CrewLaborItem: {
+            /**
+             * Item Id
+             * Format: uuid
+             */
+            item_id: string;
+            /** Name */
+            name: string;
         };
         /** CrewMemberResponse */
         CrewMemberResponse: {
@@ -7962,6 +8100,11 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /**
+             * Crew Roles
+             * @default []
+             */
+            crew_roles: components["schemas"]["CrewRoleResponse"][];
             /** Email */
             email?: string | null;
             /** First Name */
@@ -7998,6 +8141,17 @@ export interface components {
             party_number?: string | null;
             /** Phone */
             phone?: string | null;
+            /** Rate High */
+            rate_high?: string | null;
+            /** Rate Low */
+            rate_low?: string | null;
+            /** Rate Source */
+            rate_source?: ("own" | "typical" | "none") | null;
+            /**
+             * Rates Visible
+             * @default false
+             */
+            rates_visible: boolean;
             /**
              * Roles
              * @default []
@@ -8011,6 +8165,55 @@ export interface components {
             /** Total */
             total: number;
         };
+        /** CrewRoleCreate */
+        CrewRoleCreate: {
+            /**
+             * Item Id
+             * Format: uuid
+             */
+            item_id: string;
+            /** Notes */
+            notes?: string | null;
+            /** Own Day Rate */
+            own_day_rate?: string | null;
+        };
+        /** CrewRoleFromTag */
+        CrewRoleFromTag: {
+            /** Tag */
+            tag: string;
+        };
+        /**
+         * CrewRoleResponse
+         * @description One of a person's roles: a catalog labor item, and what the person
+         *     costs per day in it. Every number is null, and `rate_source` too, for a
+         *     member without `budgets.view` — see `rates_visible` beside it.
+         */
+        CrewRoleResponse: {
+            /** Difference To Typical */
+            difference_to_typical?: string | null;
+            /** Effective Day Rate */
+            effective_day_rate?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Item Id
+             * Format: uuid
+             */
+            item_id: string;
+            /** Name */
+            name: string;
+            /** Notes */
+            notes?: string | null;
+            /** Own Day Rate */
+            own_day_rate?: string | null;
+            /** Rate Source */
+            rate_source?: ("own" | "typical" | "none") | null;
+            /** Typical Day Rate */
+            typical_day_rate?: string | null;
+        };
         /** CrewRoleSuggestions */
         CrewRoleSuggestions: {
             /**
@@ -8019,10 +8222,40 @@ export interface components {
              */
             catalog: string[];
             /**
+             * Labor Items
+             * @default []
+             */
+            labor_items: components["schemas"]["CrewLaborItem"][];
+            /**
              * Used
              * @default []
              */
             used: string[];
+        };
+        /**
+         * CrewRoleUpdate
+         * @description Only the fields sent change; `own_day_rate: null` clears the own rate.
+         */
+        CrewRoleUpdate: {
+            /** Notes */
+            notes?: string | null;
+            /** Own Day Rate */
+            own_day_rate?: string | null;
+        };
+        /**
+         * CrewTagSuggestion
+         * @description "Use 'Gaffer' as a role": a tag that matches a labor item.
+         */
+        CrewTagSuggestion: {
+            /**
+             * Item Id
+             * Format: uuid
+             */
+            item_id: string;
+            /** Item Name */
+            item_name: string;
+            /** Tag */
+            tag: string;
         };
         /** DependencyCreate */
         DependencyCreate: {
@@ -9893,6 +10126,28 @@ export interface components {
              * @enum {string}
              */
             type: "organisation" | "department" | "person";
+        };
+        /** PartyCrewRolesResponse */
+        PartyCrewRolesResponse: {
+            /** Is Crew */
+            is_crew: boolean;
+            /**
+             * Party Id
+             * Format: uuid
+             */
+            party_id: string;
+            /** Rates Visible */
+            rates_visible: boolean;
+            /**
+             * Roles
+             * @default []
+             */
+            roles: components["schemas"]["CrewRoleResponse"][];
+            /**
+             * Tag Suggestions
+             * @default []
+             */
+            tag_suggestions: components["schemas"]["CrewTagSuggestion"][];
         };
         /**
          * PartyPage
@@ -16781,11 +17036,17 @@ export interface operations {
             query?: {
                 /** @description Name, role or email. */
                 search?: string | null;
-                /** @description One role, case-insensitive. */
+                /** @description One tag, case-insensitive. */
                 role?: string | null;
+                /** @description One role: a catalog labor item. */
+                role_item_id?: string | null;
+                /** @description Effective day rate at least. Needs budgets.view. */
+                min_rate?: number | string | null;
+                /** @description Effective day rate at most. Needs budgets.view. */
+                max_rate?: number | string | null;
                 /** @description Archived people too. */
                 include_inactive?: boolean;
-                sort?: "name" | "-name" | "role" | "-role" | "created" | "-created";
+                sort?: "name" | "-name" | "role" | "-role" | "created" | "-created" | "rate" | "-rate";
                 limit?: number;
                 offset?: number;
             };
@@ -18531,6 +18792,185 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PartyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_crew_roles_parties__party_id__crew_roles_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                party_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartyCrewRolesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_crew_role_parties__party_id__crew_roles_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                party_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CrewRoleCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartyCrewRolesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    crew_role_from_tag_parties__party_id__crew_roles_from_tag_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                party_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CrewRoleFromTag"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartyCrewRolesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_crew_role_parties__party_id__crew_roles__role_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                party_id: string;
+                role_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CrewRoleUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartyCrewRolesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_crew_role_parties__party_id__crew_roles__role_id__remove_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                party_id: string;
+                role_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartyCrewRolesResponse"];
                 };
             };
             /** @description Validation Error */

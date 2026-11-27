@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Download, Plus, Upload } from 'lucide-react'
 import { api, ApiError } from '@/lib/api'
 import { saveBlob } from '@/lib/save-file'
+import { formatMoney } from '@/lib/money'
 import { usePermissions } from '@/hooks/use-permissions'
 import { useCompanyStore } from '@/stores/company-store'
 import type { CrewMember, CrewPage, CrewRoleSuggestions } from '@/types'
@@ -24,6 +25,11 @@ import { CrewImport } from './crew-import'
  *
  * The list is the crew endpoint's: search, role and sort are query
  * parameters, so a search finds people on pages that have not been loaded.
+ *
+ * R1: the role filter offers the catalog's labor items (`role_item_id`) and
+ * the tags in use (`role`). With `budgets.view` there is a rate range and a
+ * rate sort — both on the EFFECTIVE rate, own else typical, applied by the
+ * API — and a Day rate column; without it none of the three is drawn.
  */
 
 const SORTS: { value: string; label: string }[] = [
@@ -33,25 +39,38 @@ const SORTS: { value: string; label: string }[] = [
   { value: '-created', label: 'Newest first' },
   { value: 'created', label: 'Oldest first' },
 ]
+const RATE_SORTS: { value: string; label: string }[] = [
+  { value: 'rate', label: 'Day rate, lowest first' },
+  { value: '-rate', label: 'Day rate, highest first' },
+]
+/** A role-filter value naming a labor item rather than a tag. */
+const ITEM = 'item:'
 
 export function CrewTab({ search, includeInactive }: { search: string; includeInactive: boolean }) {
   const activeCompanyId = useCompanyStore((state) => state.activeCompanyId)
-  const { can, loaded } = usePermissions()
+  const { can, loaded, active } = usePermissions()
   const canView = can('parties.view')
   const canEdit = can('parties.edit')
+  const canSeeRates = can('budgets.view')
+  const currency = active?.default_currency ?? 'EUR'
+  const [minRate, setMinRate] = React.useState('')
+  const [maxRate, setMaxRate] = React.useState('')
 
   const [role, setRole] = React.useState('')
   const [sort, setSort] = React.useState('name')
   const [page, setPage] = React.useState<CrewPage | null>(null)
-  const [roles, setRoles] = React.useState<CrewRoleSuggestions>({ used: [], catalog: [] })
+  const [roles, setRoles] = React.useState<CrewRoleSuggestions>({ used: [], catalog: [], labor_items: [] })
   const [error, setError] = React.useState<string | null>(null)
   const [panel, setPanel] = React.useState<'add' | 'import' | null>(null)
 
   const refresh = React.useCallback(async () => {
     const params = new URLSearchParams()
     if (search.trim()) params.set('search', search.trim())
-    if (role) params.set('role', role)
-    if (sort !== 'name') params.set('sort', sort)
+    if (role.startsWith(ITEM)) params.set('role_item_id', role.slice(ITEM.length))
+    else if (role) params.set('role', role)
+    if (canSeeRates && minRate.trim()) params.set('min_rate', minRate.trim().replace(',', '.'))
+    if (canSeeRates && maxRate.trim()) params.set('max_rate', maxRate.trim().replace(',', '.'))
+    if (sort !== 'name' && (canSeeRates || !sort.endsWith('rate'))) params.set('sort', sort)
     if (includeInactive) params.set('include_inactive', 'true')
     try {
       const query = params.toString()
@@ -60,7 +79,7 @@ export function CrewTab({ search, includeInactive }: { search: string; includeIn
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : 'The crew list could not be loaded. Try again.')
     }
-  }, [search, role, sort, includeInactive])
+  }, [search, role, sort, includeInactive, minRate, maxRate, canSeeRates])
 
   const refreshRoles = React.useCallback(async () => {
     try {
@@ -141,13 +160,50 @@ export function CrewTab({ search, includeInactive }: { search: string; includeIn
             className="ml-1 h-8 rounded-md border border-border bg-bg-secondary px-2 text-sm text-text-primary"
           >
             <option value="">All roles</option>
-            {roles.used.map((entry) => (
-              <option key={entry} value={entry}>
-                {entry}
-              </option>
-            ))}
+            {(roles.labor_items ?? []).length > 0 && (
+              <optgroup label="Roles (catalog)">
+                {(roles.labor_items ?? []).map((entry) => (
+                  <option key={entry.item_id} value={`${ITEM}${entry.item_id}`}>
+                    {entry.name}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {roles.used.length > 0 && (
+              <optgroup label="Tags">
+                {roles.used.map((entry) => (
+                  <option key={entry} value={entry}>
+                    {entry}
+                  </option>
+                ))}
+              </optgroup>
+            )}
           </select>
         </label>
+        {canSeeRates && (
+          <>
+            <label className="text-xs text-text-secondary">
+              Day rate from{' '}
+              <input
+                data-testid="crew-rate-min"
+                inputMode="decimal"
+                value={minRate}
+                onChange={(event) => setMinRate(event.target.value)}
+                className="ml-1 h-8 w-20 rounded-md border border-border bg-bg-secondary px-2 text-sm text-text-primary"
+              />
+            </label>
+            <label className="text-xs text-text-secondary">
+              to{' '}
+              <input
+                data-testid="crew-rate-max"
+                inputMode="decimal"
+                value={maxRate}
+                onChange={(event) => setMaxRate(event.target.value)}
+                className="ml-1 h-8 w-20 rounded-md border border-border bg-bg-secondary px-2 text-sm text-text-primary"
+              />
+            </label>
+          </>
+        )}
         <label className="text-xs text-text-secondary">
           Sort{' '}
           <select
@@ -156,7 +212,7 @@ export function CrewTab({ search, includeInactive }: { search: string; includeIn
             onChange={(event) => setSort(event.target.value)}
             className="ml-1 h-8 rounded-md border border-border bg-bg-secondary px-2 text-sm text-text-primary"
           >
-            {SORTS.map((entry) => (
+            {[...SORTS, ...(canSeeRates ? RATE_SORTS : [])].map((entry) => (
               <option key={entry.value} value={entry.value}>
                 {entry.label}
               </option>
@@ -164,6 +220,15 @@ export function CrewTab({ search, includeInactive }: { search: string; includeIn
           </select>
         </label>
       </div>
+
+      {canEdit && (
+        <p className="mt-2 text-xs text-text-tertiary">
+          Roles are the catalog&apos;s labor items, and their cost per day is the typical rate.{' '}
+          <Link href="/catalog?kind=labor" data-testid="crew-typical-rates-link" className="text-accent hover:underline">
+            Edit typical rates
+          </Link>
+        </p>
+      )}
 
       {panel === 'add' && canEdit && (
         <QuickAdd suggestions={suggestions} onAdded={changed} onClose={() => setPanel(null)} />
@@ -180,8 +245,8 @@ export function CrewTab({ search, includeInactive }: { search: string; includeIn
         !error && <p className="mt-6 text-sm text-text-secondary">Loading the crew list…</p>
       ) : page.members.length === 0 ? (
         <p data-testid="crew-empty" className="mt-6 rounded-md border border-border px-3 py-4 text-sm text-text-secondary">
-          {search.trim() || role
-            ? 'Nobody in the crew list matches that. Clear the search or the role filter to see everyone.'
+          {search.trim() || role || minRate.trim() || maxRate.trim()
+            ? 'Nobody in the crew list matches that. Clear the search, the role or the rate filter to see everyone.'
             : canEdit
               ? 'Nobody is in the crew list yet. Add the first person with Quick add crew, or import a CSV file.'
               : 'Nobody is in the crew list yet.'}
@@ -193,6 +258,7 @@ export function CrewTab({ search, includeInactive }: { search: string; includeIn
               <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-text-tertiary">
                 <th className="py-2 pr-3 font-medium">Name</th>
                 <th className="py-2 pr-3 font-medium">Roles</th>
+                {canSeeRates && <th className="py-2 pr-3 font-medium">Day rate</th>}
                 <th className="py-2 pr-3 font-medium">Phone</th>
                 <th className="py-2 pr-3 font-medium">Email</th>
                 <th className="py-2 pr-3 font-medium">Notes</th>
@@ -200,7 +266,13 @@ export function CrewTab({ search, includeInactive }: { search: string; includeIn
             </thead>
             <tbody>
               {page.members.map((member) => (
-                <CrewRow key={member.id} member={member} />
+                <CrewRow
+                  key={member.id}
+                  member={member}
+                  showRate={canSeeRates}
+                  roleSelected={role.startsWith(ITEM)}
+                  currency={currency}
+                />
               ))}
             </tbody>
           </table>
@@ -213,7 +285,38 @@ export function CrewTab({ search, includeInactive }: { search: string; includeIn
   )
 }
 
-function CrewRow({ member }: { member: CrewMember }) {
+/** The rate cell: the API's effective rate for the selected role with a
+ *  marker for own/typical, or the person's lowest to highest. */
+function rateCell(member: CrewMember, roleSelected: boolean, currency: string): React.ReactNode {
+  if (!member.rate_low) return '—'
+  if (roleSelected) {
+    return (
+      <>
+        {formatMoney(member.rate_low, currency)}
+        {member.rate_source && member.rate_source !== 'none' && (
+          <span data-testid="crew-rate-source" className="ml-1 rounded bg-bg-tertiary px-1 text-2xs text-text-secondary">
+            {member.rate_source}
+          </span>
+        )}
+      </>
+    )
+  }
+  return member.rate_high && member.rate_high !== member.rate_low
+    ? `${formatMoney(member.rate_low, currency)} – ${formatMoney(member.rate_high, currency)}`
+    : formatMoney(member.rate_low, currency)
+}
+
+function CrewRow({
+  member,
+  showRate,
+  roleSelected,
+  currency,
+}: {
+  member: CrewMember
+  showRate: boolean
+  roleSelected: boolean
+  currency: string
+}) {
   return (
     <tr data-testid="crew-row" className="border-b border-border/60 align-top">
       <td className="py-2 pr-3">
@@ -233,6 +336,11 @@ function CrewRow({ member }: { member: CrewMember }) {
       </td>
       <td className="py-2 pr-3">
         <div className="flex flex-wrap gap-1">
+          {(member.crew_roles ?? []).map((entry) => (
+            <span key={entry.id} data-testid="crew-row-role" className="rounded bg-accent/10 px-1.5 py-0.5 text-xs text-text-primary">
+              {entry.name}
+            </span>
+          ))}
           {(member.roles ?? []).map((entry) => (
             <span key={entry} className="rounded bg-bg-tertiary px-1.5 py-0.5 text-xs text-text-primary">
               {entry}
@@ -240,6 +348,11 @@ function CrewRow({ member }: { member: CrewMember }) {
           ))}
         </div>
       </td>
+      {showRate && (
+        <td data-testid="crew-row-rate" className="whitespace-nowrap py-2 pr-3 text-text-primary">
+          {rateCell(member, roleSelected, currency)}
+        </td>
+      )}
       <td className="py-2 pr-3 text-text-secondary">
         {member.phone ? <a href={`tel:${member.phone}`}>{member.phone}</a> : '—'}
       </td>

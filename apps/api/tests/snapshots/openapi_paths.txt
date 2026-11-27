@@ -54,6 +54,7 @@ GET /me/notifications
 GET /parties
 GET /parties/{party_id}
 GET /parties/{party_id}/children
+GET /parties/{party_id}/crew-roles
 GET /parties/{party_id}/resolved
 GET /parties/{party_id}/tax-ids
 GET /parties/{party_id}/tax-ids/{tax_id_id}/checks
@@ -99,6 +100,7 @@ PATCH /devices/{device_id}/dependencies/{association_id}
 PATCH /devices/{device_id}/units/{device_unit_id}
 PATCH /email-settings
 PATCH /parties/{party_id}
+PATCH /parties/{party_id}/crew-roles/{role_id}
 PATCH /parties/{party_id}/tax-ids/{tax_id_id}
 PATCH /projects/{project_id}
 PATCH /projects/{project_id}/blocks/{block_id}
@@ -205,6 +207,9 @@ POST /parties/{party_id}/addresses
 POST /parties/{party_id}/archive
 POST /parties/{party_id}/bank-accounts
 POST /parties/{party_id}/contact-points
+POST /parties/{party_id}/crew-roles
+POST /parties/{party_id}/crew-roles/from-tag
+POST /parties/{party_id}/crew-roles/{role_id}/remove
 POST /parties/{party_id}/reactivate
 POST /parties/{party_id}/tax-ids
 POST /parties/{party_id}/tax-ids/detect

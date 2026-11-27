@@ -12,7 +12,70 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-CrewSort = Literal["name", "-name", "role", "-role", "created", "-created"]
+from ..core.money import Money
+
+CrewSort = Literal["name", "-name", "role", "-role", "created", "-created", "rate", "-rate"]
+RateSource = Literal["own", "typical", "none"]
+
+
+class CrewRoleResponse(BaseModel):
+    """One of a person's roles: a catalog labor item, and what the person
+    costs per day in it. Every number is null, and `rate_source` too, for a
+    member without `budgets.view` — see `rates_visible` beside it."""
+
+    id: uuid.UUID
+    item_id: uuid.UUID
+    #: The labor item's name.
+    name: str
+    notes: Optional[str] = None
+    own_day_rate: Optional[Money] = None
+    #: The item's cost rate per day.
+    typical_day_rate: Optional[Money] = None
+    #: Own if set, else typical, else null.
+    effective_day_rate: Optional[Money] = None
+    rate_source: Optional[RateSource] = None
+    #: own − typical, when both exist; negative when the person is cheaper.
+    difference_to_typical: Optional[Money] = None
+
+
+class CrewTagSuggestion(BaseModel):
+    """"Use 'Gaffer' as a role": a tag that matches a labor item."""
+
+    tag: str
+    item_id: uuid.UUID
+    item_name: str
+
+
+class PartyCrewRolesResponse(BaseModel):
+    party_id: uuid.UUID
+    is_crew: bool
+    rates_visible: bool
+    roles: list[CrewRoleResponse] = []
+    tag_suggestions: list[CrewTagSuggestion] = []
+
+
+class CrewRoleCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    item_id: uuid.UUID
+    #: Net, company currency, per day. Empty = the typical rate.
+    own_day_rate: Optional[Money] = None
+    notes: Optional[str] = None
+
+
+class CrewRoleUpdate(BaseModel):
+    """Only the fields sent change; `own_day_rate: null` clears the own rate."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    own_day_rate: Optional[Money] = None
+    notes: Optional[str] = None
+
+
+class CrewRoleFromTag(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    tag: str = Field(min_length=1, max_length=64)
 
 
 class CrewMemberResponse(BaseModel):
@@ -22,8 +85,19 @@ class CrewMemberResponse(BaseModel):
     first_name: Optional[str] = None
     middle_name: Optional[str] = None
     last_name: Optional[str] = None
-    #: The party's `tags`: free text such as "DoP", "Gaffer", "Sound".
+    #: The party's `tags`: free text such as "Drone pilot" that is not (yet)
+    #: a catalog labor item. The roles that ARE labor items are `crew_roles`.
     roles: list[str] = []
+    #: R1. The person's roles from the catalog, with rates for `budgets.view`.
+    crew_roles: list[CrewRoleResponse] = []
+    rates_visible: bool = False
+    #: R1. The effective rate of the role filtered by, or the person's lowest
+    #: and highest over all roles; null without `budgets.view`.
+    rate_low: Optional[Money] = None
+    rate_high: Optional[Money] = None
+    #: R1. With a role filter: whether that role's rate is the person's own
+    #: or the typical one.
+    rate_source: Optional[RateSource] = None
     #: The primary email and phone, if any.
     email: Optional[str] = None
     phone: Optional[str] = None
@@ -60,6 +134,9 @@ class CrewCreate(BaseModel):
     email: Optional[str] = Field(default=None, max_length=255)
     phone: Optional[str] = Field(default=None, max_length=255)
     notes: Optional[str] = None
+    #: R1. The person's own day rate in their first role that is a catalog
+    #: labor item. Needs `budgets.view`.
+    day_rate: Optional[Money] = None
 
 
 class CrewDuplicateWarning(BaseModel):
@@ -74,6 +151,14 @@ class CrewDuplicateWarning(BaseModel):
 class CrewCreateResponse(BaseModel):
     member: CrewMemberResponse
     duplicates: list[CrewDuplicateWarning] = []
+    #: R1. Roles typed that are no labor item in the catalog: kept as tags.
+    unknown_roles: list[str] = []
+    notes: list[str] = []
+
+
+class CrewLaborItem(BaseModel):
+    item_id: uuid.UUID
+    name: str
 
 
 class CrewRoleSuggestions(BaseModel):
@@ -81,6 +166,9 @@ class CrewRoleSuggestions(BaseModel):
     used: list[str] = []
     #: Names of the catalog's active labor items, as extra suggestions.
     catalog: list[str] = []
+    #: R1. The catalog's active labor items — the roles a filter or a
+    #: person's role can be — by id and name.
+    labor_items: list[CrewLaborItem] = []
 
 
 class CrewImportRowResponse(BaseModel):
@@ -98,6 +186,13 @@ class CrewImportRowResponse(BaseModel):
     email: Optional[str] = None
     phone: Optional[str] = None
     notes: Optional[str] = None
+    #: R1. Roles matched to catalog labor items, and the ones that stay tags.
+    matched_roles: list[str] = []
+    unknown_roles: list[str] = []
+    #: R1. Null without `budgets.view` (the column is then not read at all).
+    day_rate: Optional[Money] = None
+    #: R1. Sentences about the roles and the rate; never blocking.
+    role_notes: list[str] = []
     message: Optional[str] = None
     duplicate_of_party_id: Optional[uuid.UUID] = None
     duplicate_of_name: Optional[str] = None

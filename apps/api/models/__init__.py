@@ -36,6 +36,7 @@ from .project import (
     ProjectBlock,
     ProjectDay,
 )
+from .crew import PartyCrewRole
 from .device import Device, DeviceAlternative, DeviceAssociation, DeviceUnit
 from .party import (
     Party,
@@ -47,6 +48,7 @@ from .party import (
 )
 
 __all__ = [
+    "PartyCrewRole",
     "Device",
     "DeviceAlternative",
     "DeviceAssociation",

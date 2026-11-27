@@ -1071,3 +1071,22 @@ def make_device_alternative(db, company: Company, device, alternative, *, positi
     db.commit()
     db.refresh(row)
     return row
+
+
+def make_crew_role(db, company: Company, party, item, *, own_day_rate: Optional[str] = None):
+    """R1: a role (a labor item) on a person, written directly."""
+    from decimal import Decimal
+
+    from apps.api.models.crew import PartyCrewRole
+
+    row = PartyCrewRole(
+        company_id=company.id,
+        party_id=party.id,
+        item_id=item.id,
+        own_day_rate=Decimal(own_day_rate) if own_day_rate is not None else None,
+        is_active=True,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row

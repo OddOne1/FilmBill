@@ -550,7 +550,8 @@ def test_the_export_writes_the_parts_and_survives_a_round_trip(pg_client, pg_db,
     exported = pg_client.get("/crew/export.csv", headers=_h(world))
     assert exported.status_code == 200
     lines = exported.content.decode("utf-8-sig").splitlines()
-    assert lines[0] == "first_name;middle_name;last_name;name;roles;email;phone;notes"
-    assert "Anna;Maria;Huber;Anna Maria Huber;;;;" in lines
+    # R1: `day_rate` closes the header for an owner, who may see rates.
+    assert lines[0] == "first_name;middle_name;last_name;name;roles;email;phone;notes;day_rate"
+    assert "Anna;Maria;Huber;Anna Maria Huber;;;;;" in lines
     # The unsplit person keeps their whole name in the `name` column.
-    assert ";;;Moser Karl;;;;" in lines
+    assert ";;;Moser Karl;;;;;" in lines

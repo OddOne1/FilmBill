@@ -48,6 +48,7 @@ from .company_factories import (
     make_device_association,
     make_device_unit,
     make_company,
+    make_crew_role,
     make_item,
     make_item_category,
     make_number_series,
@@ -544,6 +545,16 @@ CASES: dict[str, object] = {
     "POST /crew/import": {
         "files": {"file": ("crew.csv", b"name;roles\nStolen Person;Gaffer\n", "text/csv")}
     },
+    # R1. A person's roles: B's party and B's own role row, so a lookup by
+    # id alone would FIND them; the create names B's labor item too.
+    "GET /parties/{party_id}/crew-roles": {"body": None},
+    "POST /parties/{party_id}/crew-roles": {
+        "body": {},
+        "body_rows": {"item_id": "labor_item_in_b"},
+    },
+    "PATCH /parties/{party_id}/crew-roles/{role_id}": {"body": {"notes": "Stolen"}},
+    "POST /parties/{party_id}/crew-roles/{role_id}/remove": {"body": None},
+    "POST /parties/{party_id}/crew-roles/from-tag": {"body": {"tag": "Gaffer"}},
     # B2b part 2. Gear. `{device_id}` and `{device_unit_id}` are B's device
     # and one of its units, so a handler that looked either up by id alone
     # would FIND them — and a 200 on `/retire` would be A retiring B's
@@ -637,6 +648,7 @@ OTHER_COMPANY_ROWS = {
     "{device_unit_id}": "device_unit_in_b",
     "{association_id}": "association_in_b",
     "{alternative_id}": "alternative_in_b",
+    "{role_id}": "crew_role_in_b",
 }
 
 
@@ -771,6 +783,9 @@ def two_companies(pg_db):
     second_device_in_b = make_device(pg_db, company_b, name="Their battery")
     association_in_b = make_device_association(pg_db, company_b, device_in_b, second_device_in_b)
     alternative_in_b = make_device_alternative(pg_db, company_b, device_in_b, second_device_in_b)
+    # R1: a labor item of B's and a role on B's party.
+    labor_item_in_b = make_item(pg_db, company_b, sku="L-GAF", name_de="Gaffer", kind="labor")
+    crew_role_in_b = make_crew_role(pg_db, company_b, party_in_b, labor_item_in_b, own_day_rate="400.00")
     check_in_b = PartyVatCheck(
         company_id=company_b.id,
         party_id=party_in_b.id,
@@ -816,6 +831,8 @@ def two_companies(pg_db):
         "second_device_in_b": second_device_in_b,
         "association_in_b": association_in_b,
         "alternative_in_b": alternative_in_b,
+        "labor_item_in_b": labor_item_in_b,
+        "crew_role_in_b": crew_role_in_b,
     }
 
 

@@ -1,7 +1,14 @@
 """The crew list as a CSV file: reading it, planning the import, writing it.
 
-Columns `first_name;middle_name;last_name;roles;email;phone;notes`, roles
-separated by `|` (P1b-4). The older single `name` column is still read: such
+Columns `first_name;middle_name;last_name;roles;email;phone;notes;day_rate`,
+roles separated by `|` (P1b-4; `day_rate` R1).
+
+**Roles are matched to the catalog's labor items (R1).** A role whose name
+is a labor item's (case-insensitive) becomes a crew ROLE; one that is not
+stays a plain tag and the preview says "no such role in the catalog" — an
+import never creates a catalog item. `day_rate`, when given, is the
+person's own day rate in their FIRST matched role: German decimal comma,
+and the ambiguous dot (`1.500`) refused, as everywhere. The older single `name` column is still read: such
 a person is stored with that `name` and NO name parts — the order of names
 varies and a split would be a guess — and shows under Needs attention as
 "name not split". When a line has both, the parts win and `name` is derived. UTF-8 with or
@@ -30,9 +37,15 @@ import io
 import json
 import re
 from dataclasses import asdict, dataclass, field
+from decimal import Decimal
 from typing import Iterable, Mapping, Optional, Sequence
 
-from ..catalog.csv_import import ImportFormatError, read_rows
+from ..catalog.csv_import import ImportFormatError, normalise_decimal_text, read_rows
+
+try:  # pragma: no cover - exercised by whichever import path is in use
+    from ...core.rounding import DecimalParseError, quantize_amount, to_decimal
+except ImportError:  # pragma: no cover
+    from core.rounding import DecimalParseError, quantize_amount, to_decimal  # type: ignore[no-redef]
 
 __all__ = [
     "ACTION_CREATE",
@@ -46,6 +59,8 @@ __all__ = [
     "ImportFormatError",
     "display_name",
     "export_crew_csv",
+    "match_roles",
+    "parse_day_rate",
     "normalise_name",
     "normalise_roles",
     "plan_crew_file",
@@ -62,11 +77,14 @@ CREW_COLUMNS: tuple[str, ...] = (
     "email",
     "phone",
     "notes",
+    "day_rate",
 )
 #: What the export writes. `name` is last of the name columns and always
 #: filled with the display name, so a person whose name was never split
 #: survives an export and re-import with nothing lost.
 EXPORT_COLUMNS: tuple[str, ...] = CREW_COLUMNS
+#: The export for somebody who may not see what people cost: no rate column.
+EXPORT_COLUMNS_NO_RATES: tuple[str, ...] = tuple(c for c in CREW_COLUMNS if c != "day_rate")
 #: The header must name at least one of these. Checked by
 #: `plan_crew_file`, because `read_rows` only knows "all of these".
 CREW_NAME_COLUMNS: tuple[str, ...] = ("first_name", "last_name", "name")
@@ -104,6 +122,11 @@ CREW_ALIASES: Mapping[str, str] = {
     "notiz": "notes",
     "anmerkungen": "notes",
     "anmerkung": "notes",
+    "rate": "day_rate",
+    "dayrate": "day_rate",
+    "tagessatz": "day_rate",
+    "tagesgage": "day_rate",
+    "gage": "day_rate",
 }
 
 ROLE_SEPARATOR = "|"
@@ -118,6 +141,9 @@ ACTION_ERROR = "error"
 #: point is to catch a phone number typed into the email column, not to
 #: validate RFC 5322.
 _EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+#: `1.500` — a thousands dot with no decimals, which is fifteen hundred in a
+#: German file and one and a half in an English one. Refused (A2's rule).
+_GROUPED_WITHOUT_DECIMALS = re.compile(r"^-?\d{1,3}(\.\d{3})+$")
 
 
 # ─── Values ─────────────────────────────────────────────────────────────────
@@ -160,6 +186,50 @@ def looks_like_email(value: str) -> bool:
     return bool(_EMAIL.match(value))
 
 
+def parse_day_rate(raw: Optional[str]) -> Optional[Decimal]:
+    """A net day rate, or `None` when blank. Raises `ValueError`."""
+    stripped = (raw or "").strip()
+    if not stripped:
+        return None
+    if _GROUPED_WITHOUT_DECIMALS.match(stripped.replace("\xa0", "").replace(" ", "")):
+        raise ValueError(
+            f"The day rate {stripped!r} is ambiguous: one and a half thousand in a "
+            f"German file, one and a half in an English one. Write it without "
+            f"the dot (1500) or with a decimal comma (1.500,00)."
+        )
+    text = normalise_decimal_text(stripped)
+    if text is None:
+        return None
+    try:
+        value = quantize_amount(to_decimal(text, what="'day_rate'"))
+    except DecimalParseError:
+        raise ValueError(
+            f"The day rate {raw!r} is not an amount. Write it as 650, 650.00 "
+            f"or 650,00 — a currency symbol is fine."
+        ) from None
+    if value < 0:
+        raise ValueError(f"The day rate is {value}. A day rate cannot be negative.")
+    return value
+
+
+def match_roles(
+    roles: Sequence[str], labor_items: Mapping[str, tuple[str, str]]
+) -> tuple[tuple[tuple[str, str], ...], tuple[str, ...]]:
+    """`(matched (item id, item name) in order, unknown roles)`. Two roles
+    naming the same item count once."""
+    matched: list[tuple[str, str]] = []
+    unknown: list[str] = []
+    seen: set[str] = set()
+    for role in roles:
+        hit = labor_items.get(" ".join(role.split()).casefold())
+        if hit is None:
+            unknown.append(role)
+        elif hit[0] not in seen:
+            seen.add(hit[0])
+            matched.append(hit)
+    return tuple(matched), tuple(unknown)
+
+
 @dataclass(frozen=True)
 class CrewValues:
     #: The display name: "First Middle Last" when there are parts, otherwise
@@ -173,10 +243,36 @@ class CrewValues:
     first_name: Optional[str] = None
     middle_name: Optional[str] = None
     last_name: Optional[str] = None
+    #: R1. The roles that are catalog labor items, as `(item id, name)`, and
+    #: the rest — which are stored as tags. Empty until `match_roles` ran.
+    matched_roles: tuple[tuple[str, str], ...] = ()
+    unknown_roles: tuple[str, ...] = ()
+    #: R1. The person's own day rate in their first matched role.
+    day_rate: Optional[Decimal] = None
 
     @property
     def name_not_split(self) -> bool:
         return self.first_name is None and self.last_name is None
+
+    @property
+    def tags(self) -> tuple[str, ...]:
+        """What is stored as tags: the roles no labor item matched (all of
+        them when nothing was matched against the catalog)."""
+        return self.unknown_roles if (self.matched_roles or self.unknown_roles) else self.roles
+
+    def notes_for_preview(self) -> tuple[str, ...]:
+        out = []
+        for role in self.unknown_roles:
+            out.append(
+                f"“{role}”: no such role in the catalog. It is kept as a tag; add "
+                "a labor item of that name to the catalog to make it a role."
+            )
+        if self.day_rate is not None and not self.matched_roles:
+            out.append(
+                "The day rate is not used: none of this line's roles is a labor "
+                "item in the catalog."
+            )
+        return tuple(out)
 
 
 def _part(value: Optional[str]) -> Optional[str]:
@@ -228,6 +324,11 @@ class CrewImportContext:
     parties_by_email: Mapping[str, tuple[str, str]] = field(default_factory=dict)
     #: `normalise_name(name) → (party id, party name)`.
     parties_by_name: Mapping[str, tuple[str, str]] = field(default_factory=dict)
+    #: R1. `casefold(labor item name) → (item id, item name)`.
+    labor_items: Mapping[str, tuple[str, str]] = field(default_factory=dict)
+    #: R1. False for somebody who may not see rates: the `day_rate` column
+    #: is then not read at all.
+    read_rates: bool = True
 
 
 @dataclass(frozen=True)
@@ -281,7 +382,7 @@ class CrewImportPlan:
 # ─── The plan ───────────────────────────────────────────────────────────────
 
 
-def _values(row: Mapping[str, str]) -> CrewValues:
+def _values(row: Mapping[str, str], context: Optional["CrewImportContext"] = None) -> CrewValues:
     first = _part(row.get("first_name"))
     middle = _part(row.get("middle_name"))
     last = _part(row.get("last_name"))
@@ -317,6 +418,10 @@ def _values(row: Mapping[str, str]) -> CrewValues:
     if phone is not None and len(phone) > 255:
         raise ValueError("The phone number is longer than 255 characters.")
     notes = (row.get("notes") or "").strip() or None
+    day_rate = None
+    if context is None or context.read_rates:
+        day_rate = parse_day_rate(row.get("day_rate"))
+    matched, unknown = match_roles(roles, context.labor_items if context else {})
     return CrewValues(
         name=name,
         roles=roles,
@@ -326,6 +431,9 @@ def _values(row: Mapping[str, str]) -> CrewValues:
         first_name=first,
         middle_name=middle,
         last_name=last,
+        matched_roles=matched,
+        unknown_roles=unknown,
+        day_rate=day_rate,
     )
 
 
@@ -355,7 +463,7 @@ def plan_crew_import(
             or None
         )
         try:
-            values = _values(raw)
+            values = _values(raw, context)
         except ValueError as error:
             planned.append(
                 CrewRow(line_number=line, action=ACTION_ERROR, name=shown, message=str(error))
@@ -435,6 +543,8 @@ def plan_crew_file(payload: bytes | str, context: CrewImportContext) -> CrewImpo
     rows, ignored, delimiter = read_rows(
         payload, columns=CREW_COLUMNS, required=(), aliases=CREW_ALIASES
     )
+    if not context.read_rates and any("day_rate" in row for row in rows):
+        ignored = tuple(ignored) + ("day_rate",)
     header = {key for row in rows for key in row}
     if not any(column in header for column in CREW_NAME_COLUMNS):
         raise ImportFormatError(
@@ -448,25 +558,27 @@ def plan_crew_file(payload: bytes | str, context: CrewImportContext) -> CrewImpo
 # ─── The export ─────────────────────────────────────────────────────────────
 
 
-def export_crew_csv(people: Sequence[CrewValues]) -> bytes:
+def export_crew_csv(people: Sequence[CrewValues], *, with_rates: bool = False) -> bytes:
     """The import's own columns, `;`, UTF-8 with a BOM — so an export can be
     edited in Excel and imported again (it would come back as duplicates,
     held back, which is the point). `name` carries the display name for
     everybody, so a person whose name was never split loses nothing."""
     buffer = io.StringIO()
     writer = csv.writer(buffer, delimiter=";", lineterminator="\r\n")
-    writer.writerow(EXPORT_COLUMNS)
+    writer.writerow(EXPORT_COLUMNS if with_rates else EXPORT_COLUMNS_NO_RATES)
     for person in people:
-        writer.writerow(
-            [
-                person.first_name or "",
-                person.middle_name or "",
-                person.last_name or "",
-                person.name,
-                ROLE_SEPARATOR.join(person.roles),
-                person.email or "",
-                person.phone or "",
-                person.notes or "",
-            ]
-        )
+        line = [
+            person.first_name or "",
+            person.middle_name or "",
+            person.last_name or "",
+            person.name,
+            ROLE_SEPARATOR.join(person.roles),
+            person.email or "",
+            person.phone or "",
+            person.notes or "",
+        ]
+        if with_rates:
+            # German decimal comma: the file is `;`-separated for Excel in Vienna.
+            line.append(format(person.day_rate, "f").replace(".", ",") if person.day_rate is not None else "")
+        writer.writerow(line)
     return "﻿".encode("utf-8") + buffer.getvalue().encode("utf-8")

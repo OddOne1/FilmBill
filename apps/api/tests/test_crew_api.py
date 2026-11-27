@@ -525,10 +525,11 @@ def test_the_export_is_the_import_format_and_comes_back_as_duplicates(pg_client,
     lines = content.decode("utf-8-sig").splitlines()
     # P1b-4: the three name parts first, then the display name. These two
     # were added through the older single `name` field, so their parts are
-    # empty and the name column carries the whole name.
-    assert lines[0] == "first_name;middle_name;last_name;name;roles;email;phone;notes"
-    assert lines[1] == ';;;Anna Huber;DoP|Sound;anna@example.com;+43 1;"Ja; gern"'
-    assert lines[2] == ";;;Ben Ohr;;;;"
+    # empty and the name column carries the whole name. R1: an owner may see
+    # rates, so `day_rate` closes the row (empty: no catalog role here).
+    assert lines[0] == "first_name;middle_name;last_name;name;roles;email;phone;notes;day_rate"
+    assert lines[1] == ';;;Anna Huber;DoP|Sound;anna@example.com;+43 1;"Ja; gern";'
+    assert lines[2] == ";;;Ben Ohr;;;;;"
 
     again = _preview(pg_client, world, content)
     assert [row["action"] for row in again["rows"]] == ["duplicate", "duplicate"]

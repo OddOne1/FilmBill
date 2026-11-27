@@ -270,6 +270,17 @@ export type CrewImportRow = Schemas['CrewImportRowResponse']
 export type CrewImportPreview = Schemas['CrewImportPreviewResponse']
 export type CrewImportResult = Schemas['CrewImportApplyResponse']
 
+// ─── Crew roles and rates (R1) ──────────────────────────────────────────────
+//
+// A role is a catalog labor item; the rates in it are null for a member
+// without `budgets.view` (`rates_visible: false`).
+
+export type CrewRole = Schemas['CrewRoleResponse']
+export type CrewTagSuggestion = Schemas['CrewTagSuggestion']
+export type PartyCrewRoles = Schemas['PartyCrewRolesResponse']
+export type CrewRoleCreate = Schemas['CrewRoleCreate']
+export type CrewRoleUpdate = Schemas['CrewRoleUpdate']
+
 // ─── Gear (B2b) ─────────────────────────────────────────────────────────────
 //
 // A device holds the quantity owned (what planning uses); its units hold the

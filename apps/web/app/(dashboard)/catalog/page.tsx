@@ -62,7 +62,12 @@ export default function CatalogPage() {
   const { loaded, canEdit, refused } = useCatalogAccess()
 
   const [search, setSearch] = React.useState('')
+  // `?kind=labor` opens the list filtered (the crew page's "Edit typical rates").
   const [kind, setKind] = React.useState('')
+  React.useEffect(() => {
+    const wanted = new URLSearchParams(window.location.search).get('kind')
+    if (wanted) setKind(wanted)
+  }, [])
   const [categoryId, setCategoryId] = React.useState('')
   const [includeInactive, setIncludeInactive] = React.useState(false)
   const [offset, setOffset] = React.useState(0)

@@ -7,6 +7,7 @@ import { AlertTriangle, Loader2, ShieldQuestion } from 'lucide-react'
 import { api, ApiError } from '@/lib/api'
 import { RolePicker } from '@/components/shared/role-picker'
 import { HierarchyTab } from '../hierarchy'
+import { CrewRolesSection } from './crew-roles'
 import {
   PersonNameFields,
   personNamePayload,
@@ -233,6 +234,14 @@ export default function PartyDetailPage() {
         <div>
           {tab === 'basics' && (
             <BasicsTab party={party} resolved={resolved} canEdit={canEdit} onSaved={refresh} />
+          )}
+          {tab === 'basics' && party.is_crew && (
+            <CrewRolesSection
+              partyId={party.id}
+              partyName={party.name}
+              canEdit={canEdit}
+              onChanged={() => void refresh()}
+            />
           )}
           {tab === 'addresses' && (
             <AddressesTab party={party} resolved={resolved} canEdit={canEdit} onSaved={refresh} />

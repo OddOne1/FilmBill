@@ -94,11 +94,14 @@ export function CrewImport({ onApplied }: { onApplied: () => void }) {
         />
       </label>
       <p className="mt-2 text-xs text-text-tertiary">
-        Columns <code>first_name;middle_name;last_name;roles;email;phone;notes</code>{' '}
+        Columns <code>first_name;middle_name;last_name;roles;email;phone;notes;day_rate</code>{' '}
         — a first or last name is required. A file with the older single{' '}
         <code>name</code> column still works: those people keep the name as
         written and are listed under Needs attention until you split it. Several roles are separated by <code>|</code>, for example{' '}
-        <code>DoP|Camera operator</code>. Semicolons or commas, with or without
+        <code>DoP|Camera operator</code>. A role that is a labor item in the
+        catalog becomes a role; any other is kept as a tag. <code>day_rate</code>{' '}
+        is the person&apos;s own rate in their first catalog role (650 or 650,00).
+        Semicolons or commas, with or without
         a BOM. People who look like somebody already on file are held back
         until you tick them; nobody already on file is ever changed.
       </p>
@@ -178,12 +181,31 @@ export function CrewImport({ onApplied }: { onApplied: () => void }) {
                   </td>
                   <td className="py-2 pr-3 font-mono text-xs text-text-tertiary">{row.line_number}</td>
                   <td className="py-2 pr-3 text-text-primary">{row.name ?? '—'}</td>
-                  <td className="py-2 pr-3 text-xs text-text-secondary">{(row.roles ?? []).join(', ')}</td>
+                  <td className="py-2 pr-3 text-xs text-text-secondary">
+                    {(row.matched_roles ?? []).length > 0 || (row.unknown_roles ?? []).length > 0 ? (
+                      <>
+                        {(row.matched_roles ?? []).join(', ')}
+                        {(row.unknown_roles ?? []).length > 0 && (
+                          <span data-testid="crew-import-unknown-roles" className="block text-warning">
+                            Tag only: {(row.unknown_roles ?? []).join(', ')}
+                          </span>
+                        )}
+                      </>
+                    ) : (
+                      (row.roles ?? []).join(', ')
+                    )}
+                    {row.day_rate && <span className="block text-text-tertiary">day rate {row.day_rate}</span>}
+                  </td>
                   <td className="py-2 pr-3 text-xs text-text-secondary">{row.email ?? ''}</td>
                   <td className="py-2 pr-3 text-xs text-text-secondary">{row.phone ?? ''}</td>
                   <td className={`py-2 pr-3 text-xs ${actionClass(row.action)}`}>
                     <span className="font-medium">{ACTION_LABELS[row.action] ?? row.action}</span>
                     {row.message ? <span className="block text-text-secondary">{row.message}</span> : null}
+                    {(row.role_notes ?? []).map((note) => (
+                      <span key={note} className="block text-text-secondary">
+                        {note}
+                      </span>
+                    ))}
                   </td>
                 </tr>
               ))}

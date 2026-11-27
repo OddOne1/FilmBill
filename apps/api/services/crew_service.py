@@ -8,6 +8,8 @@ the transaction, and the audit row lands or vanishes with the write.
 """
 
 import uuid
+from dataclasses import replace
+from decimal import Decimal
 from typing import Iterable, Optional
 
 from sqlalchemy import func
@@ -19,13 +21,14 @@ from ..billing.resources.crew_csv import (
     CrewValues,
     display_name,
     looks_like_email,
+    match_roles,
     normalise_name,
     normalise_roles,
     plan_crew_file,
 )
 from ..models.catalog import Item
 from ..models.party import Party, PartyContactPoint
-from . import audit, party_service
+from . import audit, crew_roles_service, party_service
 
 SOURCE_QUICK_ADD = "crew_quick_add"
 SOURCE_IMPORT = "crew_import"
@@ -122,9 +125,10 @@ def role_suggestions(db: Session, company_id: uuid.UUID) -> tuple[list[str], lis
     return used, [name for name in catalog if name.casefold() not in used_keys]
 
 
-def import_context(db: Session, company_id: uuid.UUID) -> CrewImportContext:
+def import_context(db: Session, company_id: uuid.UUID, *, read_rates: bool = True) -> CrewImportContext:
     """Every party of the company — crew or not, active or archived — by its
-    email addresses and by its normalised name."""
+    email addresses and by its normalised name; and the labor items a role
+    is matched to (R1)."""
     by_email: dict[str, tuple[str, str]] = {}
     by_name: dict[str, tuple[str, str]] = {}
     for party_id, name in (
@@ -145,7 +149,12 @@ def import_context(db: Session, company_id: uuid.UUID) -> CrewImportContext:
         .all()
     ):
         by_email.setdefault(value.strip().casefold(), (str(party_id), name))
-    return CrewImportContext(parties_by_email=by_email, parties_by_name=by_name)
+    return CrewImportContext(
+        parties_by_email=by_email,
+        parties_by_name=by_name,
+        labor_items=crew_roles_service.labor_items_by_name(db, company_id),
+        read_rates=read_rates,
+    )
 
 
 # ─── Writing ────────────────────────────────────────────────────────────────
@@ -161,6 +170,7 @@ def clean_values(
     first_name: Optional[str] = None,
     middle_name: Optional[str] = None,
     last_name: Optional[str] = None,
+    day_rate: Optional[Decimal] = None,
 ) -> CrewValues:
     """The quick-add form's values, held to the import's rules.
 
@@ -189,6 +199,10 @@ def clean_values(
             f"{clean_email!r} is not an email address. Correct it, or leave "
             f"the email field empty."
         )
+    try:
+        clean_rate = crew_roles_service.clean_rate(day_rate)
+    except crew_roles_service.CrewRoleError as error:
+        raise CrewError(str(error)) from None
     return CrewValues(
         name=clean_name,
         roles=clean_roles,
@@ -198,7 +212,16 @@ def clean_values(
         first_name=first,
         middle_name=middle,
         last_name=last,
+        day_rate=clean_rate,
     )
+
+
+def with_role_matches(db: Session, company_id: uuid.UUID, values: CrewValues) -> CrewValues:
+    """The quick add's roles matched to labor items, by the import's rule."""
+    matched, unknown = match_roles(
+        values.roles, crew_roles_service.labor_items_by_name(db, company_id)
+    )
+    return replace(values, matched_roles=matched, unknown_roles=unknown)
 
 
 def create_member(
@@ -227,7 +250,7 @@ def create_member(
         is_customer=False,
         is_supplier=False,
         is_partner=False,
-        tags=list(values.roles),
+        tags=list(values.tags),
         notes=values.notes,
         einvoice_routing={},
     )
@@ -259,7 +282,7 @@ def create_member(
         "is_customer": False,
         "is_supplier": False,
         "party_number": party.party_number,
-        "tags": list(values.roles),
+        "tags": list(values.tags),
         "notes": values.notes,
         "email": values.email,
         "phone": values.phone,
@@ -268,14 +291,28 @@ def create_member(
     audit.record(
         db, actor, party, "party.created", None, after, fields=CREW_CREATED_FIELDS
     )
+    # R1: each matched role is a role; the day rate goes on the first one.
+    for index, (item_id, _) in enumerate(values.matched_roles):
+        item = crew_roles_service.labor_item(db, company_id, uuid.UUID(item_id))
+        crew_roles_service.add_role(
+            db,
+            party=party,
+            item=item,
+            own_day_rate=values.day_rate if index == 0 else None,
+            notes=None,
+            actor=actor,
+            source=source,
+        )
     return party
 
 
 # ─── The import ─────────────────────────────────────────────────────────────
 
 
-def preview_import(db: Session, company_id: uuid.UUID, payload: bytes) -> CrewImportPlan:
-    return plan_crew_file(payload, import_context(db, company_id))
+def preview_import(
+    db: Session, company_id: uuid.UUID, payload: bytes, *, read_rates: bool = True
+) -> CrewImportPlan:
+    return plan_crew_file(payload, import_context(db, company_id, read_rates=read_rates))
 
 
 def apply_import(
@@ -286,6 +323,7 @@ def apply_import(
     actor: audit.Actor,
     expected_digest: Optional[str],
     include_lines: Iterable[int] = (),
+    read_rates: bool = True,
 ) -> tuple[CrewImportPlan, dict[int, Party]]:
     """Recompute the plan from the same file, refuse if it moved, then create
     exactly the planned rows plus the ticked duplicates. No commit.
@@ -293,7 +331,7 @@ def apply_import(
     Never updates, archives or flags an existing party: the only write in
     this function is `create_member`.
     """
-    plan = preview_import(db, company_id, payload)
+    plan = preview_import(db, company_id, payload, read_rates=read_rates)
     if expected_digest and expected_digest != plan.digest:
         raise DigestMismatch(
             "The file no longer matches the preview you saw (somebody may "

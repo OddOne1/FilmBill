@@ -3,6 +3,7 @@
 import * as React from 'react'
 import Link from 'next/link'
 import { api, ApiError } from '@/lib/api'
+import { usePermissions } from '@/hooks/use-permissions'
 import { RolePicker } from '@/components/shared/role-picker'
 import {
   EMPTY_PERSON_NAME,
@@ -34,6 +35,10 @@ export function QuickAdd({
   const [phone, setPhone] = React.useState('')
   const [email, setEmail] = React.useState('')
   const [notes, setNotes] = React.useState('')
+  const [dayRate, setDayRate] = React.useState('')
+  const { can } = usePermissions()
+  // R1: a day rate is cost data; the field is only there for budgets.view.
+  const canSeeRates = can('budgets.view')
   const [busy, setBusy] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [last, setLast] = React.useState<CrewCreateResult | null>(null)
@@ -51,6 +56,7 @@ export function QuickAdd({
         phone: phone || null,
         email: email || null,
         notes: notes || null,
+        ...(canSeeRates && dayRate.trim() ? { day_rate: dayRate.trim().replace(',', '.') } : {}),
       })
       setLast(result)
       setName(EMPTY_PERSON_NAME)
@@ -58,6 +64,7 @@ export function QuickAdd({
       setPhone('')
       setEmail('')
       setNotes('')
+      setDayRate('')
       onAdded()
       formRef.current?.querySelector<HTMLInputElement>('input')?.focus()
     } catch (err) {
@@ -110,6 +117,22 @@ export function QuickAdd({
             className={field}
           />
         </label>
+        {canSeeRates && (
+          <label className="text-xs text-text-secondary">
+            Own day rate (net, optional)
+            <input
+              data-testid="crew-add-day-rate"
+              inputMode="decimal"
+              value={dayRate}
+              onChange={(event) => setDayRate(event.target.value)}
+              placeholder="Empty = the catalog's typical rate"
+              className={field}
+            />
+            <span className="mt-0.5 block text-2xs text-text-tertiary">
+              Applies to the first role that is in the catalog.
+            </span>
+          </label>
+        )}
         <label className="text-xs text-text-secondary sm:col-span-2">
           Notes
           <input
@@ -152,6 +175,13 @@ export function QuickAdd({
           <Link href={`/contacts/${last.member.id}`} className="underline">
             Open the full record
           </Link>
+          {(last.notes ?? []).length > 0 && (
+            <ul data-testid="crew-add-role-notes" className="mt-1 list-disc pl-5 text-xs text-text-secondary">
+              {(last.notes ?? []).map((note) => (
+                <li key={note}>{note}</li>
+              ))}
+            </ul>
+          )}
           {(last.duplicates ?? []).length > 0 && (
             <ul data-testid="crew-add-duplicates" className="mt-1 list-disc pl-5 text-xs text-warning">
               {(last.duplicates ?? []).map((entry) => (
