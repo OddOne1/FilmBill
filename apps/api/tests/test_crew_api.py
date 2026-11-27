@@ -583,8 +583,11 @@ def test_there_is_no_delete_on_the_crew_surface(client):
         for method in methods
         if path.startswith("/crew")
     )
+    # B2c-1 adds the availability grid, read-only (its own walks are in
+    # test_crew_assignments.py).
     assert crew_operations == [
         "GET /crew",
+        "GET /crew/availability",
         "GET /crew/export.csv",
         "GET /crew/roles",
         "POST /crew",

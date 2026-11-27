@@ -562,7 +562,10 @@ def test_the_calendar_surface_in_the_walks_is_the_whole_surface(client):
         f"{method.upper()} {path}"
         for path, methods in schema["paths"].items()
         for method in methods
-        if "/blocks" in path or path.endswith("/calendar")
+        # B2c-1's `.../blocks/{block_id}/crew` is crew, not the calendar:
+        # it needs parties.view as well, and test_crew_assignments.py walks
+        # it for staff and for every role.
+        if ("/blocks" in path and not path.endswith("/crew")) or path.endswith("/calendar")
     )
     assert len(operations) == len(_every_calendar_request("p", "b")), operations
     assert not [op for op in operations if op.startswith("DELETE")]

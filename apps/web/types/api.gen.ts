@@ -2971,6 +2971,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/crew/availability": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Availability
+         * @description For each crew person, per day: free, scheduled, booked or unavailable,
+         *     with what it is. At most 92 days.
+         */
+        get: operations["availability_crew_availability_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/crew/export.csv": {
         parameters: {
             query?: never;
@@ -4277,6 +4298,67 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/parties/{party_id}/unavailability": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Unavailability
+         * @description The person's own "not available" periods.
+         */
+        get: operations["list_unavailability_parties__party_id__unavailability_get"];
+        put?: never;
+        /**
+         * Add Unavailability
+         * @description A vacation, another job elsewhere. Warns on the calendar, never blocks.
+         */
+        post: operations["add_unavailability_parties__party_id__unavailability_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/parties/{party_id}/unavailability/{unavailability_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Unavailability */
+        patch: operations["update_unavailability_parties__party_id__unavailability__unavailability_id__patch"];
+        trace?: never;
+    };
+    "/parties/{party_id}/unavailability/{unavailability_id}/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Remove Unavailability
+         * @description Retire the period; the row is kept.
+         */
+        post: operations["remove_unavailability_parties__party_id__unavailability__unavailability_id__remove_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/parties/{party_id}/vat-checks": {
         parameters: {
             query?: never;
@@ -4371,6 +4453,28 @@ export interface paths {
         head?: never;
         /** Update Block */
         patch: operations["update_block_projects__project_id__blocks__block_id__patch"];
+        trace?: never;
+    };
+    "/projects/{project_id}/blocks/{block_id}/crew": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Crew
+         * @description Several people on a strip at once, `scheduled`, each with an optional
+         *     role and days (default: every day of the strip that is not `off`).
+         *     All or none. Clashes are listed, never refused.
+         */
+        post: operations["add_crew_projects__project_id__blocks__block_id__crew_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/projects/{project_id}/blocks/{block_id}/days": {
@@ -4529,6 +4633,110 @@ export interface paths {
         get: operations["read_calendar_projects__project_id__calendar_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}/crew": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Project Crew
+         * @description Per strip: who is scheduled, booked or declined, with counts and
+         *     clashes. Removed (`cancelled`) entries are not listed.
+         */
+        get: operations["project_crew_projects__project_id__crew_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}/crew/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set Crew Status Bulk
+         * @description "Mark selected as booked" (or another status) for several people.
+         *     The ones that cannot take the change are listed and left alone.
+         */
+        post: operations["set_crew_status_bulk_projects__project_id__crew_status_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}/crew/{assignment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Crew
+         * @description Role, day rate (needs `budgets.view`) and days with call and wrap. A
+         *     new role without a rate copies the person's effective rate in it.
+         */
+        patch: operations["update_crew_projects__project_id__crew__assignment_id__patch"];
+        trace?: never;
+    };
+    "/projects/{project_id}/crew/{assignment_id}/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Remove Crew
+         * @description Take the person off the strip: `cancelled`, never deleted.
+         */
+        post: operations["remove_crew_projects__project_id__crew__assignment_id__remove_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}/crew/{assignment_id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set Crew Status
+         * @description scheduled → booked (by hand, the note says how) or declined; booked
+         *     → cancelled, or back to scheduled with a note.
+         */
+        post: operations["set_crew_status_projects__project_id__crew__assignment_id__status_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5227,6 +5435,100 @@ export interface components {
             user_id?: string | null;
             /** User Name */
             user_name?: string | null;
+        };
+        /** AvailabilityDay */
+        AvailabilityDay: {
+            /**
+             * Clash
+             * @default false
+             */
+            clash: boolean;
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /**
+             * Entries
+             * @default []
+             */
+            entries: components["schemas"]["AvailabilityEntry"][];
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "free" | "scheduled" | "booked" | "unavailable";
+        };
+        /** AvailabilityEntry */
+        AvailabilityEntry: {
+            /** Assignment Id */
+            assignment_id?: string | null;
+            /** Block Id */
+            block_id?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "assignment" | "unavailable";
+            /** Project Id */
+            project_id?: string | null;
+            /** Project Name */
+            project_name?: string | null;
+            /** Reason */
+            reason?: string | null;
+            /** Status */
+            status?: ("scheduled" | "booked" | "declined" | "cancelled") | null;
+            /** Strip Name */
+            strip_name?: string | null;
+            /** Unavailability Id */
+            unavailability_id?: string | null;
+        };
+        /** AvailabilityPerson */
+        AvailabilityPerson: {
+            /**
+             * Days
+             * @default []
+             */
+            days: components["schemas"]["AvailabilityDay"][];
+            /**
+             * Free Days
+             * @default 0
+             */
+            free_days: number;
+            /** Name */
+            name: string;
+            /**
+             * Party Id
+             * Format: uuid
+             */
+            party_id: string;
+            /** Rate */
+            rate?: string | null;
+            /**
+             * Roles
+             * @default []
+             */
+            roles: string[];
+        };
+        /** AvailabilityResponse */
+        AvailabilityResponse: {
+            /**
+             * People
+             * @default []
+             */
+            people: components["schemas"]["AvailabilityPerson"][];
+            /**
+             * Range End
+             * Format: date
+             */
+            range_end: string;
+            /**
+             * Range Start
+             * Format: date
+             */
+            range_start: string;
+            /** Rates Visible */
+            rates_visible: boolean;
         };
         /**
          * BackupEmailRequest
@@ -7929,6 +8231,197 @@ export interface components {
             /** Password */
             password: string;
         };
+        /** CrewAssignmentDayResponse */
+        CrewAssignmentDayResponse: {
+            /** Call Time */
+            call_time?: string | null;
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Day Type */
+            day_type?: string | null;
+            /** Effective Call Time */
+            effective_call_time?: string | null;
+            /** Effective Wrap Time */
+            effective_wrap_time?: string | null;
+            /** Wrap Time */
+            wrap_time?: string | null;
+        };
+        /** CrewAssignmentResponse */
+        CrewAssignmentResponse: {
+            /**
+             * Block Id
+             * Format: uuid
+             */
+            block_id: string;
+            /** Booked By Name */
+            booked_by_name?: string | null;
+            /** Booked On */
+            booked_on?: string | null;
+            /**
+             * Clashes
+             * @default []
+             */
+            clashes: components["schemas"]["CrewClashResponse"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Day Rate */
+            day_rate?: string | null;
+            /**
+             * Days
+             * @default []
+             */
+            days: components["schemas"]["CrewAssignmentDayResponse"][];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Party Id
+             * Format: uuid
+             */
+            party_id: string;
+            /** Party Name */
+            party_name: string;
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /**
+             * Rates Visible
+             * @default false
+             */
+            rates_visible: boolean;
+            /** Role Item Id */
+            role_item_id?: string | null;
+            /** Role Name */
+            role_name?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "scheduled" | "booked" | "declined" | "cancelled";
+            /** Status Note */
+            status_note?: string | null;
+        };
+        /**
+         * CrewAssignmentUpdate
+         * @description Only the fields sent change. `days` replaces the ticked days (with
+         *     their own call and wrap); a day left out is unticked.
+         */
+        CrewAssignmentUpdate: {
+            /** Day Rate */
+            day_rate?: string | null;
+            /** Days */
+            days?: components["schemas"]["CrewDayWish"][] | null;
+            /** Role Item Id */
+            role_item_id?: string | null;
+        };
+        /** CrewAssignmentsCreate */
+        CrewAssignmentsCreate: {
+            /** People */
+            people: components["schemas"]["CrewNewPerson"][];
+        };
+        /** CrewAssignmentsCreated */
+        CrewAssignmentsCreated: {
+            /** Assignments */
+            assignments: components["schemas"]["CrewAssignmentResponse"][];
+            /**
+             * Clashes
+             * @default []
+             */
+            clashes: components["schemas"]["CrewClashResponse"][];
+        };
+        /** CrewBulkSkipped */
+        CrewBulkSkipped: {
+            /**
+             * Assignment Id
+             * Format: uuid
+             */
+            assignment_id: string;
+            /** Party Name */
+            party_name: string;
+            /** Reason */
+            reason: string;
+        };
+        /** CrewBulkStatusChange */
+        CrewBulkStatusChange: {
+            /** Assignment Ids */
+            assignment_ids: string[];
+            /** Note */
+            note?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "scheduled" | "booked" | "declined" | "cancelled";
+        };
+        /** CrewBulkStatusResult */
+        CrewBulkStatusResult: {
+            /**
+             * Assignments
+             * @default []
+             */
+            assignments: components["schemas"]["CrewAssignmentResponse"][];
+            /** Changed */
+            changed: number;
+            /**
+             * Skipped
+             * @default []
+             */
+            skipped: components["schemas"]["CrewBulkSkipped"][];
+        };
+        /**
+         * CrewClashResponse
+         * @description One thing a person's days run into. `message` is the sentence to show.
+         */
+        CrewClashResponse: {
+            /** Assignment Id */
+            assignment_id?: string | null;
+            /** Block Id */
+            block_id?: string | null;
+            /** Dates */
+            dates: string[];
+            /** End Date */
+            end_date?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "assignment" | "unavailable";
+            /** Message */
+            message: string;
+            /**
+             * Party Id
+             * Format: uuid
+             */
+            party_id: string;
+            /** Party Name */
+            party_name: string;
+            /** Project Id */
+            project_id?: string | null;
+            /** Project Name */
+            project_name?: string | null;
+            /** Project Number */
+            project_number?: string | null;
+            /** Reason */
+            reason?: string | null;
+            /** Start Date */
+            start_date?: string | null;
+            /** Status */
+            status?: ("scheduled" | "booked" | "declined" | "cancelled") | null;
+            /** Strip Name */
+            strip_name?: string | null;
+            /** Unavailability Id */
+            unavailability_id?: string | null;
+        };
         /**
          * CrewCreate
          * @description Quick add. A first or last name is the only thing required.
@@ -7977,6 +8470,18 @@ export interface components {
              * @default []
              */
             unknown_roles: string[];
+        };
+        /** CrewDayWish */
+        CrewDayWish: {
+            /** Call Time */
+            call_time?: string | null;
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Wrap Time */
+            wrap_time?: string | null;
         };
         /**
          * CrewDuplicateWarning
@@ -8158,6 +8663,18 @@ export interface components {
              */
             roles: string[];
         };
+        /** CrewNewPerson */
+        CrewNewPerson: {
+            /** Dates */
+            dates?: string[] | null;
+            /**
+             * Party Id
+             * Format: uuid
+             */
+            party_id: string;
+            /** Role Item Id */
+            role_item_id?: string | null;
+        };
         /** CrewPage */
         CrewPage: {
             /** Members */
@@ -8241,6 +8758,39 @@ export interface components {
             notes?: string | null;
             /** Own Day Rate */
             own_day_rate?: string | null;
+        };
+        /** CrewStatusChange */
+        CrewStatusChange: {
+            /** Note */
+            note?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "scheduled" | "booked" | "declined" | "cancelled";
+        };
+        /** CrewStripCounts */
+        CrewStripCounts: {
+            /**
+             * Booked
+             * @default 0
+             */
+            booked: number;
+            /**
+             * Declined
+             * @default 0
+             */
+            declined: number;
+            /**
+             * Scheduled
+             * @default 0
+             */
+            scheduled: number;
+            /**
+             * With Clashes
+             * @default 0
+             */
+            with_clashes: number;
         };
         /**
          * CrewTagSuggestion
@@ -10793,6 +11343,49 @@ export interface components {
              */
             status: "planning" | "active" | "wrapped" | "archived";
         };
+        /** ProjectCrewResponse */
+        ProjectCrewResponse: {
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /** Rates Visible */
+            rates_visible: boolean;
+            /**
+             * Strips
+             * @default []
+             */
+            strips: components["schemas"]["ProjectCrewStrip"][];
+        };
+        /** ProjectCrewStrip */
+        ProjectCrewStrip: {
+            /**
+             * Assignments
+             * @default []
+             */
+            assignments: components["schemas"]["CrewAssignmentResponse"][];
+            /**
+             * Block Id
+             * Format: uuid
+             */
+            block_id: string;
+            counts: components["schemas"]["CrewStripCounts"];
+            /**
+             * End Date
+             * Format: date
+             */
+            end_date: string;
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /** Strip Name */
+            strip_name: string;
+            /** Type */
+            type: string;
+        };
         /** ProjectDayList */
         ProjectDayList: {
             /** Counts */
@@ -12185,6 +12778,79 @@ export interface components {
             code: string;
             /** Pending Token */
             pending_token: string;
+        };
+        /** UnavailabilityCreate */
+        UnavailabilityCreate: {
+            /**
+             * End Date
+             * Format: date
+             */
+            end_date: string;
+            /** Note */
+            note?: string | null;
+            /** Reason */
+            reason?: string | null;
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+        };
+        /** UnavailabilityList */
+        UnavailabilityList: {
+            /**
+             * Party Id
+             * Format: uuid
+             */
+            party_id: string;
+            /**
+             * Periods
+             * @default []
+             */
+            periods: components["schemas"]["UnavailabilityResponse"][];
+        };
+        /** UnavailabilityResponse */
+        UnavailabilityResponse: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * End Date
+             * Format: date
+             */
+            end_date: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Note */
+            note?: string | null;
+            /**
+             * Party Id
+             * Format: uuid
+             */
+            party_id: string;
+            /** Reason */
+            reason?: string | null;
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+        };
+        /** UnavailabilityUpdate */
+        UnavailabilityUpdate: {
+            /** End Date */
+            end_date?: string | null;
+            /** Note */
+            note?: string | null;
+            /** Reason */
+            reason?: string | null;
+            /** Start Date */
+            start_date?: string | null;
         };
         /** UnitCreate */
         UnitCreate: {
@@ -17113,6 +17779,49 @@ export interface operations {
             };
         };
     };
+    availability_crew_availability_get: {
+        parameters: {
+            query: {
+                from: string;
+                to: string;
+                /** @description Only holders of this labor item. */
+                role_item_id?: string | null;
+                /** @description Effective day rate at most. Needs budgets.view. */
+                max_rate?: number | string | null;
+                /** @description Only people on this project. */
+                project_id?: string | null;
+                search?: string | null;
+                /** @description Only people free on every day of the range. */
+                available_only?: boolean;
+            };
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AvailabilityResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     export_crew_crew_export_csv_get: {
         parameters: {
             query?: {
@@ -19448,6 +20157,148 @@ export interface operations {
             };
         };
     };
+    list_unavailability_parties__party_id__unavailability_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                party_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailabilityList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_unavailability_parties__party_id__unavailability_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                party_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UnavailabilityCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailabilityList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_unavailability_parties__party_id__unavailability__unavailability_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                party_id: string;
+                unavailability_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UnavailabilityUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailabilityList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_unavailability_parties__party_id__unavailability__unavailability_id__remove_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                party_id: string;
+                unavailability_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailabilityList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_vat_checks_parties__party_id__vat_checks_get: {
         parameters: {
             query?: never;
@@ -19688,6 +20539,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BlockChangeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_crew_projects__project_id__blocks__block_id__crew_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+                block_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CrewAssignmentsCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CrewAssignmentsCreated"];
                 };
             };
             /** @description Validation Error */
@@ -20013,6 +20902,186 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProjectCalendarResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    project_crew_projects__project_id__crew_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectCrewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_crew_status_bulk_projects__project_id__crew_status_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CrewBulkStatusChange"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CrewBulkStatusResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_crew_projects__project_id__crew__assignment_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+                assignment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CrewAssignmentUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CrewAssignmentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_crew_projects__project_id__crew__assignment_id__remove_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+                assignment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CrewAssignmentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_crew_status_projects__project_id__crew__assignment_id__status_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+                assignment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CrewStatusChange"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CrewAssignmentResponse"];
                 };
             };
             /** @description Validation Error */

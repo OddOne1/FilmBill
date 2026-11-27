@@ -48,7 +48,9 @@ from .company_factories import (
     make_device_association,
     make_device_unit,
     make_company,
+    make_crew_assignment,
     make_crew_role,
+    make_crew_unavailability,
     make_item,
     make_item_category,
     make_number_series,
@@ -555,6 +557,26 @@ CASES: dict[str, object] = {
     "PATCH /parties/{party_id}/crew-roles/{role_id}": {"body": {"notes": "Stolen"}},
     "POST /parties/{party_id}/crew-roles/{role_id}/remove": {"body": None},
     "POST /parties/{party_id}/crew-roles/from-tag": {"body": {"tag": "Gaffer"}},
+    # B2c-1. Crew on B's calendar: B's project, strip and assignment, and
+    # B's person's unavailability. Bodies name nil ids: the project or party
+    # in the PATH is the boundary and is looked up first.
+    "GET /projects/{project_id}/crew": {"body": None},
+    "POST /projects/{project_id}/blocks/{block_id}/crew": {
+        "body": {"people": [{"party_id": "00000000-0000-0000-0000-000000000000"}]}
+    },
+    "PATCH /projects/{project_id}/crew/{assignment_id}": {"body": {"days": []}},
+    "POST /projects/{project_id}/crew/{assignment_id}/status": {"body": {"status": "booked"}},
+    "POST /projects/{project_id}/crew/{assignment_id}/remove": {"body": None},
+    "POST /projects/{project_id}/crew/status": {
+        "body": {"status": "booked", "assignment_ids": ["00000000-0000-0000-0000-000000000000"]}
+    },
+    "GET /crew/availability": {"query": {"from": "2026-07-06", "to": "2026-07-12"}},
+    "GET /parties/{party_id}/unavailability": {"body": None},
+    "POST /parties/{party_id}/unavailability": {
+        "body": {"start_date": "2026-07-01", "end_date": "2026-07-02"}
+    },
+    "PATCH /parties/{party_id}/unavailability/{unavailability_id}": {"body": {"reason": "Stolen"}},
+    "POST /parties/{party_id}/unavailability/{unavailability_id}/remove": {"body": None},
     # B2b part 2. Gear. `{device_id}` and `{device_unit_id}` are B's device
     # and one of its units, so a handler that looked either up by id alone
     # would FIND them — and a 200 on `/retire` would be A retiring B's
@@ -649,6 +671,8 @@ OTHER_COMPANY_ROWS = {
     "{association_id}": "association_in_b",
     "{alternative_id}": "alternative_in_b",
     "{role_id}": "crew_role_in_b",
+    "{assignment_id}": "crew_assignment_in_b",
+    "{unavailability_id}": "unavailability_in_b",
 }
 
 
@@ -786,6 +810,13 @@ def two_companies(pg_db):
     # R1: a labor item of B's and a role on B's party.
     labor_item_in_b = make_item(pg_db, company_b, sku="L-GAF", name_de="Gaffer", kind="labor")
     crew_role_in_b = make_crew_role(pg_db, company_b, party_in_b, labor_item_in_b, own_day_rate="400.00")
+    # B2c-1: B's person on B's strip, and a period B's person is away.
+    crew_assignment_in_b = make_crew_assignment(
+        pg_db, company_b, project_in_b, block_in_b, party_in_b, dates=[block_in_b.start_date]
+    )
+    unavailability_in_b = make_crew_unavailability(
+        pg_db, company_b, party_in_b, block_in_b.start_date, block_in_b.start_date
+    )
     check_in_b = PartyVatCheck(
         company_id=company_b.id,
         party_id=party_in_b.id,
@@ -833,6 +864,8 @@ def two_companies(pg_db):
         "alternative_in_b": alternative_in_b,
         "labor_item_in_b": labor_item_in_b,
         "crew_role_in_b": crew_role_in_b,
+        "crew_assignment_in_b": crew_assignment_in_b,
+        "unavailability_in_b": unavailability_in_b,
     }
 
 

@@ -13,6 +13,7 @@ from .routers import (
     catalog,
     companies,
     crew,
+    crew_assignments,
     devices,
     email_settings,
     events,
@@ -95,6 +96,7 @@ app.include_router(companies.router)
 app.include_router(number_series.router)
 app.include_router(parties.router)
 app.include_router(crew.router)
+app.include_router(crew_assignments.router)
 app.include_router(devices.router)
 app.include_router(projects.router)
 app.include_router(project_calendar.router)

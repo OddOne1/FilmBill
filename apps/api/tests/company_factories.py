@@ -1090,3 +1090,36 @@ def make_crew_role(db, company: Company, party, item, *, own_day_rate: Optional[
     db.commit()
     db.refresh(row)
     return row
+
+
+def make_crew_assignment(db, company: Company, project, block, party, *, status: str = "scheduled", dates=(), role=None):
+    """B2c-1: a person on a strip with these days, written directly."""
+    from apps.api.models.crew import CrewAssignment, CrewAssignmentDay
+
+    row = CrewAssignment(
+        company_id=company.id,
+        project_id=project.id,
+        block_id=block.id,
+        party_id=party.id,
+        role_item_id=role.id if role is not None else None,
+        status=status,
+    )
+    db.add(row)
+    db.flush()
+    for day in dates:
+        db.add(CrewAssignmentDay(company_id=company.id, assignment_id=row.id, date=day, is_active=True))
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def make_crew_unavailability(db, company: Company, party, start, end, *, reason: Optional[str] = "Vacation"):
+    from apps.api.models.crew import CrewUnavailability
+
+    row = CrewUnavailability(
+        company_id=company.id, party_id=party.id, start_date=start, end_date=end, reason=reason, is_active=True
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
