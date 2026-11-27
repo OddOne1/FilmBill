@@ -139,11 +139,11 @@ jobs:
           # the `-z` check below can print anything useful.
           PASSED=$(grep -oE '[0-9]+ passed' test-output.txt | grep -oE '[0-9]+' | head -1 || true)
           echo "Tests passed: ${PASSED:-0}"
-          # 3010, set at P1b-4's close (2026-11-26). The suite was 3097
+          # 3100, set at B2b-2's close (2026-11-27). The suite was 3191
           # passing on the declared local run (python:3.11 image, dev-stack
           # Postgres + Redis, 30 skipped there) and CI runs about 27 more
-          # than that. 3010 is 2.8 % under the local count. (B2b set 2900 at
-          # 2984; B2a set 2790 at 2868; B1.2 2710 at 2789; B1.1 2650 at
+          # than that. 3100 is 2.9 % under the local count. (P1b-4 set 3010
+          # at 3097; B2b set 2900 at 2984; B2a set 2790 at 2868; B1.2 2710 at 2789; B1.1 2650 at
           # 2700; B1 2580 at 2626; A2 2410 at 2450; A1 2200 at 2275.)
           #
           # Why 3 % and not the 67 % of slack this floor used to carry: the
@@ -160,8 +160,8 @@ jobs:
           # It will NOT notice ten tests going missing; nothing this shape
           # can. It notices a collapse, which is what it is for. Per
           # CLAUDE.md, the closing commit of every phase moves it back up.
-          if [ -z "$PASSED" ] || [ "$PASSED" -lt 3010 ]; then
-            echo "::error::Expected at least 3010 passing tests, got ${PASSED:-0}."
+          if [ -z "$PASSED" ] || [ "$PASSED" -lt 3100 ]; then
+            echo "::error::Expected at least 3100 passing tests, got ${PASSED:-0}."
             exit 1
           fi
 
@@ -186,14 +186,14 @@ jobs:
           PASSED=$(grep -oE '[0-9]+ passed' realdb-output.txt | grep -oE '[0-9]+' | head -1 || true)
           SKIPPED=$(grep -oE '[0-9]+ skipped' realdb-output.txt | grep -oE '[0-9]+' | head -1 || true)
           echo "Real-database tests passed: ${PASSED:-0}, skipped: ${SKIPPED:-0}"
-          # 1600, set at P1b-4's close (2026-11-26) when `-m realdb` was 1647
-          # passing — 2.9 % under (B2b set 1525 at 1568; B2a set 1415 at 1455; B1.2 1345 at 1385; B1.1 1280 at 1316;
+          # 1690, set at B2b-2's close (2026-11-27) when `-m realdb` was 1740
+          # passing — 2.9 % under (P1b-4 set 1600 at 1647; B2b set 1525 at 1568; B2a set 1415 at 1455; B1.2 1345 at 1385; B1.1 1280 at 1316;
           # B1 1210 at 1244; A2 1095 at 1124), for the same reason as the
           # floor in the step above — and with the same history: this was
           # 120 while the real count was 931, so seven eighths of the
           # real-database suite could have stopped running unnoticed.
-          if [ -z "$PASSED" ] || [ "$PASSED" -lt 1600 ]; then
-            echo "::error::Expected at least 1600 passing real-database tests, got ${PASSED:-0}. A real-database check that does not RUN is not a check."
+          if [ -z "$PASSED" ] || [ "$PASSED" -lt 1690 ]; then
+            echo "::error::Expected at least 1690 passing real-database tests, got ${PASSED:-0}. A real-database check that does not RUN is not a check."
             exit 1
           fi
           if [ -n "$SKIPPED" ] && [ "$SKIPPED" -gt 0 ]; then
