@@ -294,6 +294,12 @@ class PartyResponse(BaseModel):
     #: withheld (null / empty) rather than shown [Guessing, SCOPE]. Lets the
     #: screen tell "withheld" from "none on file".
     restricted_withheld: bool = False
+    #: R2. The contact IS a team member: linked to a login of this company
+    #: (`Party.user_id`). The list and the pickers show a "Team" chip; the
+    #: person page says which login, and an admin can unlink it there.
+    is_team_member: bool = False
+    team_user_id: Optional[uuid.UUID] = None
+    team_login_email: Optional[str] = None
     #: P1b-4 part 3. A placeholder for the Tax tab's "VAT / tax ID" field,
     #: following the contact's country for tax and taken from examples the
     #: tax-ID data already has. Null when none is known.

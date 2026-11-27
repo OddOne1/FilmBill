@@ -30,6 +30,7 @@ from ..billing.parties import VatFormatError, normalise_and_validate, tax_inputs
 from ..core.iban import normalise_iban
 from ..database import get_db
 from ..middleware.company import Membership, require
+from ..models.user import User
 from ..models.party import (
     PARTY_ORGANISATION,
     PARTY_PERSON,
@@ -222,8 +223,12 @@ def _party_response(
     resolved = party_service.resolve(db, party)
     inputs = tax_inputs(resolved)
     latest = _latest_check(db, party)
+    login = db.get(User, party.user_id) if party.user_id is not None else None
 
     return PartyResponse(
+        is_team_member=party.user_id is not None,
+        team_user_id=party.user_id,
+        team_login_email=login.email if login is not None else None,
         **{
             name: getattr(party, name)
             for name in (

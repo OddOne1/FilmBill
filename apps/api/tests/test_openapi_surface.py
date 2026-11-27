@@ -115,6 +115,12 @@ EXPECTED_TAGS = {
     #: rate" should be answerable from one tag. The isolation suite selects on
     #: the `/company/...` PATH, not the tag, so these cannot escape it.
     "tax",
+    #: R2. Team members as crew: the Team page's crew column (`/team…`,
+    #: `company.members.manage`) and a member's own crew profile and schedule
+    #: (`/me/crew…`, `/me/schedule`). Its own tag because "what can link a
+    #: login to a contact" should be answerable from one tag; the isolation
+    #: suite learned all three paths.
+    "team",
     "setup",
     "site-settings",
     "users",

@@ -52,6 +52,12 @@ except ImportError:  # pragma: no cover
     from core.money import AmountColumn
 
 
+#: R2. Who wrote a crew role: somebody with `parties.edit`, or the team
+#: member themselves through `/me/crew/roles`.
+ROLE_SET_BY_ADMIN = "admin"
+ROLE_SET_BY_SELF = "self"
+
+
 class PartyCrewRole(CompanyScoped, Base):
     """A person does this kind of work (a labor item), at this day rate.
 
@@ -78,6 +84,12 @@ class PartyCrewRole(CompanyScoped, Base):
     #: `NUMERIC(18,2)` — money (CLAUDE.md rule 1).
     own_day_rate: Mapped[Optional[Any]] = mapped_column(AmountColumn(), nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    #: R2. A role a team member set for themselves (`set_by = self`) is
+    #: unconfirmed until an admin confirms it, so a self-claimed "DoP" does
+    #: not look the same as one an admin vouched for. Every role written
+    #: through the contact's own routes (`parties.edit`) is `admin`.
+    confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    set_by: Mapped[str] = mapped_column(String(8), nullable=False, server_default=ROLE_SET_BY_ADMIN)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -90,6 +102,7 @@ class PartyCrewRole(CompanyScoped, Base):
         CheckConstraint(
             "own_day_rate IS NULL OR own_day_rate >= 0", name="ck_party_crew_roles_rate"
         ),
+        CheckConstraint("set_by IN ('admin', 'self')", name="ck_party_crew_roles_set_by"),
         Index(
             "uq_party_crew_roles_active",
             "party_id",

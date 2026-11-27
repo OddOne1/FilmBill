@@ -271,6 +271,18 @@ class Party(CompanyScoped, Base):
     is_crew: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="false"
     )
+    #: R2. The login this person contact IS — a team member who also works
+    #: as crew. Set only by an admin's confirmed link, by "create a crew
+    #: contact" from the login, or by a member switching themselves on when
+    #: no contact has their email (`services/team_crew_service.py`, the only
+    #: writer). Linking never merges or rewrites anything on the contact. At
+    #: most one contact per user and company (`uq_parties_company_user`).
+    #: A revoked login keeps its link: it is history.
+    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL", name="fk_parties_user_id"),
+        nullable=True,
+    )
     #: A Postgres array, so Part 3's tag filter can use `&&` and `@>` rather
     #: than a LIKE over a joined string.
     #:
@@ -397,6 +409,13 @@ class Party(CompanyScoped, Base):
         ),
         Index("ix_parties_company_parent", "company_id", "parent_id"),
         Index("ix_parties_company_name", "company_id", "name"),
+        Index(
+            "uq_parties_company_user",
+            "company_id",
+            "user_id",
+            unique=True,
+            postgresql_where=text("user_id IS NOT NULL"),
+        ),
         Index(
             "ix_parties_company_crew",
             "company_id",

@@ -191,6 +191,8 @@ class AvailabilityPerson(BaseModel):
     days: list[AvailabilityDay] = []
     #: Counts over the range: how many days are free.
     free_days: int = 0
+    #: R2. Linked to a login: the picker's "Team" chip.
+    is_team_member: bool = False
 
 
 class AvailabilityResponse(BaseModel):

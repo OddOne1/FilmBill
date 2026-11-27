@@ -3755,6 +3755,56 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/crew": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read My Crew
+         * @description Am I crew, my roles (confirmed or self-reported), my contact's name.
+         *     No rate.
+         */
+        get: operations["read_my_crew_me_crew_get"];
+        /**
+         * Switch My Crew
+         * @description "I also work as crew", on or off. On with no link: a new crew contact
+         *     when no contact has my email; when one does, nothing is created or
+         *     linked, the admins are notified, and the answer is a 409 with the
+         *     sentence. Off: `is_crew = false`, the link and every booking stay.
+         */
+        put: operations["switch_my_crew_me_crew_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/crew/roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set My Roles
+         * @description The labor items I can do, exactly. New ones are self-reported until
+         *     an admin confirms them; ones an admin confirmed stay confirmed; leaving
+         *     one out removes it. No rate in the request or the response.
+         */
+        put: operations["set_my_roles_me_crew_roles_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/notifications": {
         parameters: {
             query?: never;
@@ -3807,6 +3857,27 @@ export interface paths {
         put?: never;
         /** Mark Notification Read */
         post: operations["mark_notification_read_me_notifications__notification_id__read_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/schedule": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read My Schedule
+         * @description My own booked and scheduled days, upcoming first. Nothing about
+         *     other crew, rates, budgets or gear.
+         */
+        get: operations["read_my_schedule_me_schedule_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -5220,6 +5291,113 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/team": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Team
+         * @description Active members with their crew state, linked contact, roles (no
+         *     rates) and, with no link, the email suggestion; then linked contacts
+         *     whose login has no access any more.
+         */
+        get: operations["read_team_team_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/team/{user_id}/crew": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Make Crew
+         * @description "Works as crew". `link` connects the contact the admin confirmed
+         *     (`party_id` is required — a suggestion is never followed by itself);
+         *     `create` makes a new person contact from the login. Either way the
+         *     contact is crew and linked; `role_item_ids`, when sent, become its
+         *     roles, confirmed.
+         */
+        post: operations["make_crew_team__user_id__crew_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/team/{user_id}/crew/roles/{role_id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm Role
+         * @description An admin vouches for a role the member set for themselves.
+         */
+        post: operations["confirm_role_team__user_id__crew_roles__role_id__confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/team/{user_id}/crew/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop Crew
+         * @description "Stops working as crew": `is_crew = false`, the link kept. Lists the
+         *     person's future bookings; none is cancelled, nothing is deleted.
+         */
+        post: operations["stop_crew_team__user_id__crew_stop_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/team/{user_id}/unlink": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Unlink
+         * @description Removes the link. The contact stays exactly as it is.
+         */
+        post: operations["unlink_team__user_id__unlink_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/users": {
         parameters: {
             query?: never;
@@ -5712,6 +5890,11 @@ export interface components {
              * @default 0
              */
             free_days: number;
+            /**
+             * Is Team Member
+             * @default false
+             */
+            is_team_member: boolean;
             /** Name */
             name: string;
             /**
@@ -8851,6 +9034,11 @@ export interface components {
              * @default false
              */
             is_supplier: boolean;
+            /**
+             * Is Team Member
+             * @default false
+             */
+            is_team_member: boolean;
             /** Last Name */
             last_name?: string | null;
             /** Middle Name */
@@ -8923,6 +9111,11 @@ export interface components {
          *     member without `budgets.view` — see `rates_visible` beside it.
          */
         CrewRoleResponse: {
+            /**
+             * Confirmed
+             * @default true
+             */
+            confirmed: boolean;
             /** Difference To Typical */
             difference_to_typical?: string | null;
             /** Effective Day Rate */
@@ -8945,6 +9138,12 @@ export interface components {
             own_day_rate?: string | null;
             /** Rate Source */
             rate_source?: ("own" | "typical" | "none") | null;
+            /**
+             * Set By
+             * @default admin
+             * @enum {string}
+             */
+            set_by: "admin" | "self";
             /** Typical Day Rate */
             typical_day_rate?: string | null;
         };
@@ -9984,6 +10183,35 @@ export interface components {
              */
             confirm_open_commitment: boolean;
         };
+        /** FutureBookingResponse */
+        FutureBookingResponse: {
+            /**
+             * Assignment Id
+             * Format: uuid
+             */
+            assignment_id: string;
+            /**
+             * First Date
+             * Format: date
+             */
+            first_date: string;
+            /**
+             * Last Date
+             * Format: date
+             */
+            last_date: string;
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /** Project Name */
+            project_name: string;
+            /** Status */
+            status: string;
+            /** Strip Name */
+            strip_name: string;
+        };
         /**
          * GearAlternativeOffer
          * @description An alternative of an overbooked device, with its availability on the
@@ -10831,6 +11059,16 @@ export interface components {
             /** Unit Id */
             unit_id?: string | null;
         };
+        /** LaborItemChoice */
+        LaborItemChoice: {
+            /**
+             * Item Id
+             * Format: uuid
+             */
+            item_id: string;
+            /** Name */
+            name: string;
+        };
         /**
          * LineTrackingResponse
          * @description One line's cost picture. Every number the API's, none the browser's.
@@ -11004,6 +11242,130 @@ export interface components {
             role?: components["schemas"]["CompanyRole"] | null;
         };
         /**
+         * MyCrewResponse
+         * @description The caller's own crew profile. No rate, ever.
+         */
+        MyCrewResponse: {
+            /** Contact Name */
+            contact_name?: string | null;
+            /**
+             * Crew State
+             * @enum {string}
+             */
+            crew_state: "not_crew" | "crew" | "needs_link";
+            /** Is Crew */
+            is_crew: boolean;
+            /**
+             * Labor Items
+             * @default []
+             */
+            labor_items: components["schemas"]["LaborItemChoice"][];
+            /** Message */
+            message?: string | null;
+            /**
+             * Roles
+             * @default []
+             */
+            roles: components["schemas"]["TeamRole"][];
+        };
+        /**
+         * MyCrewRoles
+         * @description The labor items I can do. Nothing else: no rate, no party id.
+         */
+        MyCrewRoles: {
+            /** Item Ids */
+            item_ids: string[];
+        };
+        /** MyCrewSwitch */
+        MyCrewSwitch: {
+            /** Is Crew */
+            is_crew: boolean;
+        };
+        /** MyCrewSwitchResponse */
+        MyCrewSwitchResponse: {
+            /**
+             * Future Bookings
+             * @default []
+             */
+            future_bookings: components["schemas"]["FutureBookingResponse"][];
+            profile: components["schemas"]["MyCrewResponse"];
+        };
+        /** MyScheduleDay */
+        MyScheduleDay: {
+            /** Call Time */
+            call_time?: string | null;
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Location */
+            location?: string | null;
+            /** Wrap Time */
+            wrap_time?: string | null;
+        };
+        /**
+         * MyScheduleEntry
+         * @description One of my assignments: a project's strip, my role, my days.
+         */
+        MyScheduleEntry: {
+            /**
+             * Assignment Id
+             * Format: uuid
+             */
+            assignment_id: string;
+            /**
+             * Days
+             * @default []
+             */
+            days: components["schemas"]["MyScheduleDay"][];
+            /**
+             * First Date
+             * Format: date
+             */
+            first_date: string;
+            /**
+             * Last Date
+             * Format: date
+             */
+            last_date: string;
+            /** Location */
+            location?: string | null;
+            /** Note */
+            note?: string | null;
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /** Project Name */
+            project_name: string;
+            /** Role Name */
+            role_name?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "scheduled" | "booked";
+            /** Strip Name */
+            strip_name: string;
+        };
+        /** MyScheduleResponse */
+        MyScheduleResponse: {
+            /** Available */
+            available: boolean;
+            /**
+             * Past
+             * @default []
+             */
+            past: components["schemas"]["MyScheduleEntry"][];
+            /**
+             * Upcoming
+             * @default []
+             */
+            upcoming: components["schemas"]["MyScheduleEntry"][];
+        };
+        /**
          * NoTaxCategoryOption
          * @description One of the six, with the line the dialog shows beside it.
          */
@@ -11048,10 +11410,9 @@ export interface components {
          *     document revised, quote expiring, invoice overdue, receipt needs review
          *     (SCOPE §5.5, §9, §14). Each addition is an Alembic migration on this
          *     enum, deliberately, so the set stays a decision rather than free text.
-         * @constant
          * @enum {string}
          */
-        NotificationType: "account";
+        NotificationType: "account" | "team";
         /**
          * NumberPreviewRequest
          * @description Ask what a series would issue — without issuing it.
@@ -11599,6 +11960,11 @@ export interface components {
              * @default false
              */
             is_supplier: boolean;
+            /**
+             * Is Team Member
+             * @default false
+             */
+            is_team_member: boolean;
             /** Language */
             language?: string | null;
             /** Last Check At */
@@ -11673,6 +12039,10 @@ export interface components {
             } | null;
             /** Tax Status Note */
             tax_status_note?: string | null;
+            /** Team Login Email */
+            team_login_email?: string | null;
+            /** Team User Id */
+            team_user_id?: string | null;
             /** Title */
             title?: string | null;
             /** Trading Name */
@@ -13356,6 +13726,112 @@ export interface components {
             treatment?: string | null;
             /** Treatment Label */
             treatment_label?: string | null;
+        };
+        /**
+         * TeamContact
+         * @description A person contact, as the Team page names it.
+         */
+        TeamContact: {
+            /** Email */
+            email?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+        };
+        /**
+         * TeamCrewRequest
+         * @description "Works as crew": link the contact the admin confirmed, or create one
+         *     from the login. `role_item_ids`, when sent, becomes the person's roles
+         *     exactly — confirmed, because an admin chose them.
+         */
+        TeamCrewRequest: {
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "link" | "create";
+            /** Party Id */
+            party_id?: string | null;
+            /** Role Item Ids */
+            role_item_ids?: string[] | null;
+        };
+        /** TeamMemberResponse */
+        TeamMemberResponse: {
+            contact?: components["schemas"]["TeamContact"] | null;
+            /**
+             * Crew State
+             * @enum {string}
+             */
+            crew_state: "not_crew" | "crew" | "needs_link";
+            /** Email */
+            email: string;
+            /** Has Active Login */
+            has_active_login: boolean;
+            /**
+             * Matches
+             * @default []
+             */
+            matches: components["schemas"]["TeamContact"][];
+            /** Name */
+            name: string;
+            role?: components["schemas"]["CompanyRole"] | null;
+            /**
+             * Roles
+             * @default []
+             */
+            roles: components["schemas"]["TeamRole"][];
+            suggestion?: components["schemas"]["TeamContact"] | null;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+        };
+        /** TeamResponse */
+        TeamResponse: {
+            /** Members */
+            members: components["schemas"]["TeamMemberResponse"][];
+        };
+        /**
+         * TeamRole
+         * @description One crew role (a catalog labor item), without any rate.
+         */
+        TeamRole: {
+            /** Confirmed */
+            confirmed: boolean;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Item Id
+             * Format: uuid
+             */
+            item_id: string;
+            /** Name */
+            name: string;
+            /**
+             * Set By
+             * @enum {string}
+             */
+            set_by: "admin" | "self";
+        };
+        /**
+         * TeamStopResponse
+         * @description "Stops working as crew": nothing was cancelled; these stay as they are.
+         */
+        TeamStopResponse: {
+            /**
+             * Future Bookings
+             * @default []
+             */
+            future_bookings: components["schemas"]["FutureBookingResponse"][];
+            member: components["schemas"]["TeamMemberResponse"];
         };
         /** TestEmailRequest */
         TestEmailRequest: {
@@ -18522,6 +18998,8 @@ export interface operations {
                 max_rate?: number | string | null;
                 /** @description Archived people too. */
                 include_inactive?: boolean;
+                /** @description R2. `team`: linked to a login; `freelance`: not. */
+                kind?: ("team" | "freelance") | null;
                 sort?: "name" | "-name" | "role" | "-role" | "created" | "-created" | "rate" | "-rate";
                 limit?: number;
                 offset?: number;
@@ -20026,6 +20504,107 @@ export interface operations {
             };
         };
     };
+    read_my_crew_me_crew_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyCrewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    switch_my_crew_me_crew_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MyCrewSwitch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyCrewSwitchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_my_roles_me_crew_roles_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MyCrewRoles"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyCrewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_my_notifications: {
         parameters: {
             query?: {
@@ -20092,6 +20671,37 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_my_schedule_me_schedule_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyScheduleResponse"];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -22670,6 +23280,174 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SiteSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_team_team_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    make_crew_team__user_id__crew_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TeamCrewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamMemberResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirm_role_team__user_id__crew_roles__role_id__confirm_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                user_id: string;
+                role_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamMemberResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stop_crew_team__user_id__crew_stop_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamStopResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unlink_team__user_id__unlink_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamMemberResponse"];
                 };
             };
             /** @description Validation Error */

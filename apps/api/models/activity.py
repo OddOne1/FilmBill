@@ -23,6 +23,9 @@ class NotificationType(str, PyEnum):
     enum, deliberately, so the set stays a decision rather than free text.
     """
     account = "account"
+    #: R2. Something about the company's team: "<name> wants to work as
+    #: crew; connect their contact in Team".
+    team = "team"
 
 
 class ActivityLog(Base):

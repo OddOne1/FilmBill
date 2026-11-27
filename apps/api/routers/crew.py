@@ -39,6 +39,7 @@ from ..middleware.company import Membership, require
 from ..middleware.company import NOT_FOUND_DETAIL
 from ..models.party import Party, PartyContactPoint
 from ..schemas.crew import (
+    CrewKind,
     CrewLaborItem,
     CrewRoleCreate,
     CrewRoleFromTag,
@@ -91,6 +92,8 @@ def role_response(view: crew_roles_service.RoleView, visible: bool) -> CrewRoleR
         effective_day_rate=rate.effective if visible else None,
         rate_source=rate.source if visible else None,
         difference_to_typical=rate.difference if visible else None,
+        confirmed=view.row.confirmed,
+        set_by=view.row.set_by,
     )
 
 
@@ -134,6 +137,7 @@ def _member(row, contacts, views, visible, rates, source) -> CrewMemberResponse:
             is_customer=row.is_customer,
             is_supplier=row.is_supplier,
             party_number=row.party_number,
+            is_team_member=row.user_id is not None,
             created_at=row.created_at,
     )
 
@@ -149,8 +153,13 @@ def _crew_query(
     role_item_id: Optional[uuid.UUID] = None,
     min_rate: Optional[Decimal] = None,
     max_rate: Optional[Decimal] = None,
+    kind: Optional[str] = None,
 ):
     query = scoped(db.query(Party), membership).filter(Party.is_crew.is_(True))
+    if kind == "team":
+        query = query.filter(Party.user_id.isnot(None))
+    elif kind == "freelance":
+        query = query.filter(Party.user_id.is_(None))
     company_id = membership.company_id
     if role_item_id is not None:
         query = query.filter(crew_roles_service.has_role(company_id, Party.id, role_item_id))
@@ -219,6 +228,7 @@ def list_crew(
     min_rate: Optional[Decimal] = Query(default=None, ge=0, description="Effective day rate at least. Needs budgets.view."),
     max_rate: Optional[Decimal] = Query(default=None, ge=0, description="Effective day rate at most. Needs budgets.view."),
     include_inactive: bool = Query(default=False, description="Archived people too."),
+    kind: Optional[CrewKind] = Query(default=None, description="R2. `team`: linked to a login; `freelance`: not."),
     sort: CrewSort = Query(default="name"),
     limit: int = Query(default=200, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
@@ -243,6 +253,7 @@ def list_crew(
         role_item_id=role_item_id,
         min_rate=min_rate,
         max_rate=max_rate,
+        kind=kind,
     )
     total = query.count()
     rows = query.limit(limit).offset(offset).all()

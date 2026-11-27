@@ -31,7 +31,7 @@ from sqlalchemy.orm import Session
 from ..billing.catalog.kinds import KIND_LABOR
 from ..core.money import quantize_amount, to_decimal
 from ..models.catalog import Item, ItemRate, RATE_COST
-from ..models.crew import PartyCrewRole
+from ..models.crew import ROLE_SET_BY_ADMIN, ROLE_SET_BY_SELF, PartyCrewRole
 from ..models.party import Party
 from . import audit
 
@@ -43,7 +43,11 @@ RATE_OWN = "own"
 RATE_TYPICAL = "typical"
 RATE_NONE = "none"
 
-ROLE_FIELDS = ("party_id", "item_id", "role", "own_day_rate", "notes", "is_active", "from_tag", "source")
+ROLE_FIELDS = (
+    "party_id", "item_id", "role", "own_day_rate", "notes", "is_active", "from_tag", "source",
+    # R2.
+    "confirmed", "set_by", "self_service",
+)
 
 
 class CrewRoleError(ValueError):
@@ -277,8 +281,13 @@ def add_role(
     actor: audit.Actor,
     from_tag: Optional[str] = None,
     source: Optional[str] = None,
+    set_by: str = ROLE_SET_BY_ADMIN,
+    action: str = "party_crew_role.added",
 ) -> PartyCrewRole:
-    """One role for a crew person. No commit."""
+    """One role for a crew person. No commit.
+
+    R2: `set_by = self` is a team member's own claim — stored unconfirmed,
+    with no rate (the self-service route never passes one)."""
     check_crew(party)
     check_labor_item(item)
     existing = (
@@ -301,6 +310,8 @@ def add_role(
         item_id=item.id,
         own_day_rate=own_day_rate,
         notes=(notes or "").strip() or None,
+        confirmed=set_by != ROLE_SET_BY_SELF,
+        set_by=set_by,
         is_active=True,
         # The wall clock, not the transaction's start: a quick add creates
         # several roles in one transaction and their order is the order typed.
@@ -313,11 +324,29 @@ def add_role(
         extra["from_tag"] = from_tag
     if source is not None:
         extra["source"] = source
+    if set_by == ROLE_SET_BY_SELF:
+        extra.update(confirmed=False, set_by=ROLE_SET_BY_SELF, self_service=True)
     audit.record(
-        db, actor, row, "party_crew_role.added", None, _snapshot(row, item.name_de, **extra),
+        db, actor, row, action, None, _snapshot(row, item.name_de, **extra),
         fields=ROLE_FIELDS,
     )
     return row
+
+
+def confirm_role(db: Session, *, row: PartyCrewRole, name: str, actor: audit.Actor) -> bool:
+    """R2. An admin vouches for a role a member set for themselves. `set_by`
+    keeps saying who claimed it. False when it was confirmed already."""
+    if row.confirmed:
+        return False
+    row.confirmed = True
+    db.flush()
+    audit.record(
+        db, actor, row, "crew_role.confirmed",
+        _snapshot(row, name, confirmed=False, set_by=row.set_by),
+        _snapshot(row, name, confirmed=True, set_by=row.set_by),
+        fields=ROLE_FIELDS,
+    )
+    return True
 
 
 def update_role(
@@ -343,15 +372,26 @@ def update_role(
     return row
 
 
-def remove_role(db: Session, *, row: PartyCrewRole, name: str, actor: audit.Actor) -> None:
-    """Retire the role; the row is kept."""
+def remove_role(
+    db: Session,
+    *,
+    row: PartyCrewRole,
+    name: str,
+    actor: audit.Actor,
+    self_service: bool = False,
+) -> None:
+    """Retire the role; the row is kept. R2: a member may remove their own
+    role (`self_service`), which is recorded as `crew_role.self_set`."""
     if not row.is_active:
         return
-    before = _snapshot(row, name)
+    extra = {"self_service": True} if self_service else {}
+    before = _snapshot(row, name, **extra)
     row.is_active = False
     db.flush()
     audit.record(
-        db, actor, row, "party_crew_role.removed", before, _snapshot(row, name), fields=ROLE_FIELDS
+        db, actor, row,
+        "crew_role.self_set" if self_service else "party_crew_role.removed",
+        before, _snapshot(row, name, **extra), fields=ROLE_FIELDS,
     )
 
 

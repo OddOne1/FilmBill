@@ -112,8 +112,14 @@ _SCOPED_PREFIXES = (
     "/devices",
     # B2c-2. The gear planner's availability — a seventh top-level path.
     "/gear",
+    # R2. The Team page's crew column, and a member's own crew profile and
+    # schedule: `/me/crew…` and `/me/schedule` take a company context
+    # (unlike `/me/notifications`, which is the user's own across companies).
+    "/team",
+    "/me/crew",
+    "/me/schedule",
 )
-_SCOPED_EXACT = ("/companies", "/company", "/parties", "/projects", "/crew", "/devices", "/gear")
+_SCOPED_EXACT = ("/companies", "/company", "/parties", "/projects", "/crew", "/devices", "/gear", "/team")
 
 
 def _is_company_scoped(path: str) -> bool:
@@ -574,6 +580,19 @@ CASES: dict[str, object] = {
         "body": {"status": "booked", "assignment_ids": ["00000000-0000-0000-0000-000000000000"]}
     },
     "GET /crew/availability": {"query": {"from": "2026-07-06", "to": "2026-07-12"}},
+    # R2. `{user_id}` is B's member Bo: scoped to A, a router that looked
+    # him up without the company would find his login and his contact. Ada
+    # is linked to a crew contact of A's, so her own `/me` routes are
+    # legitimate requests that must succeed.
+    "GET /team": {"body": None},
+    "POST /team/{user_id}/crew": {"body": {"mode": "create"}},
+    "POST /team/{user_id}/crew/stop": {"body": None},
+    "POST /team/{user_id}/unlink": {"body": None},
+    "POST /team/{user_id}/crew/roles/{role_id}/confirm": {"body": None},
+    "GET /me/crew": {"body": None},
+    "PUT /me/crew": {"body": {"is_crew": True}},
+    "PUT /me/crew/roles": {"body": {"item_ids": []}},
+    "GET /me/schedule": {"body": None},
     # B2c-2. Gear on B's calendar: B's project, strip, device and booking.
     # Bodies name nil device ids: the project in the PATH is the boundary.
     "GET /projects/{project_id}/gear": {"body": None},
@@ -695,6 +714,7 @@ OTHER_COMPANY_ROWS = {
     "{assignment_id}": "crew_assignment_in_b",
     "{unavailability_id}": "unavailability_in_b",
     "{booking_id}": "gear_booking_in_b",
+    "{user_id}": "user_in_b",
 }
 
 
@@ -855,8 +875,16 @@ def two_companies(pg_db):
         response={},
     )
     pg_db.add(check_in_b)
+    # R2: Bo is linked to a crew contact of B's, carrying B's role with a
+    # self-reported twin; Ada to one of A's, so her own `/me` routes are
+    # legitimate requests here.
+    bo_contact_in_b = make_party(pg_db, company_b, type="person", name="Bo Crew", is_crew=True)
+    bo_contact_in_b.user_id = bo.id
+    ada_contact_in_a = make_party(pg_db, company_a, type="person", name="Ada Crew", is_crew=True)
+    ada_contact_in_a.user_id = ada.id
     pg_db.commit()
     return {
+        "user_in_b": bo,
         "ada": ada,
         "bo": bo,
         "a": company_a,

@@ -54,7 +54,9 @@ GET /files/object/{path}
 GET /gear/availability
 GET /health
 GET /health/pdf
+GET /me/crew
 GET /me/notifications
+GET /me/schedule
 GET /parties
 GET /parties/{party_id}
 GET /parties/{party_id}/children
@@ -74,6 +76,7 @@ GET /projects/{project_id}/gear
 GET /setup/status
 GET /site-settings
 GET /site-settings/logo-image
+GET /team
 GET /users
 GET /users/search
 PATCH /admin/users/{user_id}/clear-account-gate
@@ -255,6 +258,10 @@ POST /projects/{project_id}/status
 POST /setup/create-superadmin
 POST /site-settings/favicon-upload
 POST /site-settings/logo-upload
+POST /team/{user_id}/crew
+POST /team/{user_id}/crew/roles/{role_id}/confirm
+POST /team/{user_id}/crew/stop
+POST /team/{user_id}/unlink
 POST /users/invite
 POST /users/me/avatar
 PUT /budgets/{budget_id}/lines/{line_id}/etc
@@ -263,4 +270,6 @@ PUT /catalog/items/{item_id}/rates
 PUT /catalog/rental-factor-groups/{group_id}/factors
 PUT /company/production-fee
 PUT /devices/{device_id}/rental
+PUT /me/crew
+PUT /me/crew/roles
 PUT /projects/{project_id}/blocks/{block_id}/days

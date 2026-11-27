@@ -14,6 +14,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ..core.money import Money
 
+#: R2. The crew list's Team / Freelance filter.
+CrewKind = Literal["team", "freelance"]
 CrewSort = Literal["name", "-name", "role", "-role", "created", "-created", "rate", "-rate"]
 RateSource = Literal["own", "typical", "none"]
 
@@ -36,6 +38,10 @@ class CrewRoleResponse(BaseModel):
     rate_source: Optional[RateSource] = None
     #: own − typical, when both exist; negative when the person is cheaper.
     difference_to_typical: Optional[Money] = None
+    #: R2. False for a role a team member set for themselves that no admin
+    #: has confirmed yet ("self-reported"); `set_by` says who wrote it.
+    confirmed: bool = True
+    set_by: Literal["admin", "self"] = "admin"
 
 
 class CrewTagSuggestion(BaseModel):
@@ -109,6 +115,9 @@ class CrewMemberResponse(BaseModel):
     #: Only ever set when the party is a customer or a supplier too: crew
     #: alone consumes no number.
     party_number: Optional[str] = None
+    #: R2. Linked to a login of this company: a team member, shown with a
+    #: "Team" chip. Rates, roles and booking are the same as for anybody.
+    is_team_member: bool = False
     created_at: datetime
 
 

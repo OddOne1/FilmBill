@@ -28,6 +28,7 @@ from .routers import (
     setup,
     site_settings,
     tax,
+    team,
     users,
 )
 from .services.s3_service import ensure_bucket_exists
@@ -98,6 +99,7 @@ app.include_router(number_series.router)
 app.include_router(parties.router)
 app.include_router(crew.router)
 app.include_router(crew_assignments.router)
+app.include_router(team.router)
 app.include_router(devices.router)
 app.include_router(gear_bookings.router)
 app.include_router(projects.router)

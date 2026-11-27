@@ -604,6 +604,7 @@ def availability(
                 rate=min(rates) if visible and rates else None,
                 days=days,
                 free_days=free,
+                is_team_member=person.user_id is not None,
             )
         )
     return AvailabilityResponse(range_start=from_, range_end=to, rates_visible=visible, people=out)
