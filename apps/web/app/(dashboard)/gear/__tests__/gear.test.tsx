@@ -239,6 +239,11 @@ describe('the gear list', () => {
   })
 })
 
+async function renderUnits() {
+  render(<DevicePage />)
+  fireEvent.click(await screen.findByTestId('device-tab-units'))
+}
+
 describe('one device', () => {
   function changeResult(before: number, after: number, status = 'retired') {
     return {
@@ -251,7 +256,7 @@ describe('one device', () => {
 
   it('removing needs what happened in words, asks to reduce the quantity (ticked) and sends both', async () => {
     vi.mocked(api.post).mockResolvedValue(changeResult(3, 2))
-    render(<DevicePage />)
+    await renderUnits()
     const rows = await screen.findAllByTestId('unit-row')
     fireEvent.click(within(rows[0]).getByTestId('unit-remove'))
     expect(screen.getByTestId('remove-reduce')).toBeChecked()
@@ -275,7 +280,7 @@ describe('one device', () => {
 
   it('removing with the box unticked says the quantity stays', async () => {
     vi.mocked(api.post).mockResolvedValue(changeResult(3, 3))
-    render(<DevicePage />)
+    await renderUnits()
     const rows = await screen.findAllByTestId('unit-row')
     fireEvent.click(within(rows[1]).getByTestId('unit-remove'))
     fireEvent.click(screen.getByTestId('remove-reduce'))
@@ -297,7 +302,10 @@ describe('one device', () => {
       }),
     )
     vi.mocked(api.post).mockResolvedValue(changeResult(3, 4, 'active'))
-    render(<DevicePage />)
+    await renderUnits()
+    // Removed units are behind the toggle.
+    expect(await screen.findByTestId('units-empty')).toHaveTextContent('removed ones are hidden')
+    fireEvent.click(screen.getByTestId('units-show-removed'))
     const row = (await screen.findAllByTestId('unit-row'))[0]
     expect(within(row).getByTestId('unit-removed-reason')).toHaveTextContent('2026-11-01: Sold to Studio X')
     fireEvent.click(within(row).getByTestId('unit-reactivate'))
@@ -312,7 +320,7 @@ describe('one device', () => {
 
   it('needs check and in repair are one click and never ask about the quantity', async () => {
     vi.mocked(api.patch).mockResolvedValue(changeResult(3, 3, 'needs_check'))
-    render(<DevicePage />)
+    await renderUnits()
     const rows = await screen.findAllByTestId('unit-row')
     fireEvent.click(within(rows[0]).getByTestId('unit-needs-check'))
     await waitFor(() =>
@@ -320,34 +328,9 @@ describe('one device', () => {
     )
   })
 
-  it('a pasted list can carry one purchase: price, seller on file and invoice number', async () => {
-    vi.mocked(api.post).mockResolvedValue({ device: device(), created: [unit({ id: 'u3' })], skipped: [] })
-    render(<DevicePage />)
-    await screen.findAllByTestId('unit-row')
-    fireEvent.change(screen.getByTestId('add-serials-text'), { target: { value: 'AX-3\nAX-4' } })
-    fireEvent.change(screen.getByTestId('purchase-price'), { target: { value: '61.750,00' } })
-    await waitFor(() =>
-      expect(within(screen.getByTestId('purchase-seller-party')).getByText('ARRI Rental Wien')).toBeInTheDocument(),
-    )
-    fireEvent.change(screen.getByTestId('purchase-seller-party'), { target: { value: 's1' } })
-    expect(screen.queryByTestId('purchase-seller-name')).not.toBeInTheDocument()
-    fireEvent.change(screen.getByTestId('purchase-reference'), { target: { value: 'RE-2026-0311' } })
-    fireEvent.click(screen.getByTestId('add-serials-save'))
-    await waitFor(() =>
-      expect(vi.mocked(api.post)).toHaveBeenCalledWith('/devices/d1/units', {
-        serial_numbers: ['AX-3', 'AX-4'],
-        acquired_on: null,
-        purchase_price: '61750.00',
-        seller_party_id: 's1',
-        seller_name: null,
-        purchase_reference: 'RE-2026-0311',
-      }),
-    )
-  })
-
   it('the purchase of one unit can be corrected with a seller who is not on file', async () => {
     vi.mocked(api.patch).mockResolvedValue(changeResult(3, 3, 'active'))
-    render(<DevicePage />)
+    await renderUnits()
     const rows = await screen.findAllByTestId('unit-row')
     expect(rows[0]).toHaveTextContent('as device')
     fireEvent.click(within(rows[0]).getByTestId('unit-purchase'))
@@ -363,32 +346,6 @@ describe('one device', () => {
         acquired_on: null,
       }),
     )
-  })
-
-  it('a pasted list becomes one serial number per line, and what was skipped is listed', async () => {
-    seed(['devices.view', 'devices.edit'])
-    routeGets(device({ purchase_price: null, price_visible: false }))
-    vi.mocked(api.post).mockResolvedValue({
-      device: device(),
-      created: [unit({ id: 'u3', serial_number: 'AX-3' })],
-      skipped: [{ serial_number: 'ax-1', reason: 'already_recorded', detail: 'AX-1 is already recorded on Alexa 35.' }],
-    })
-    render(<DevicePage />)
-    await screen.findAllByTestId('unit-row')
-    fireEvent.change(screen.getByTestId('add-serials-text'), { target: { value: 'AX-3\n\n ax-1 \r\n' } })
-    expect(screen.getByTestId('add-serials-save')).toHaveTextContent('Add 2 serial numbers')
-    fireEvent.click(screen.getByTestId('add-serials-save'))
-    await waitFor(() =>
-      // Without budgets.view no purchase fields are offered or sent.
-      expect(vi.mocked(api.post)).toHaveBeenCalledWith('/devices/d1/units', {
-        serial_numbers: ['AX-3', 'ax-1'],
-        acquired_on: null,
-      }),
-    )
-    expect(await screen.findByTestId('add-serials-skipped')).toHaveTextContent(
-      'AX-1 is already recorded on Alexa 35.',
-    )
-    expect(screen.getByTestId('device-notice')).toHaveTextContent('The quantity owned is still 3.')
   })
 
   it('setting the quantity by hand sends only what changed', async () => {
@@ -414,9 +371,11 @@ describe('one device', () => {
     expect(await screen.findByTestId('device-counts')).toHaveTextContent('3 owned')
     expect(screen.queryByTestId('device-form')).not.toBeInTheDocument()
     expect(screen.queryByText('Purchase price')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('device-tab-units'))
+    await screen.findAllByTestId('unit-row')
     expect(screen.queryByText('Seller')).not.toBeInTheDocument()
     expect(screen.queryByTestId('unit-remove')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('add-serials')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('units-add-open')).not.toBeInTheDocument()
     expect(screen.getByTestId('gear-read-only')).toBeInTheDocument()
   })
 })
@@ -500,5 +459,143 @@ describe('rental prices on the device', () => {
     expect(screen.queryByText('Price per day (net)')).not.toBeInTheDocument()
     expect(screen.queryByText('Cost per day (net)')).not.toBeInTheDocument()
     expect(screen.getByTestId('rental-why')).toHaveTextContent('only shown to people who can see budgets')
+  })
+})
+
+describe('the Add new item(s) popup', () => {
+  function paste(input: HTMLElement, text: string) {
+    fireEvent.paste(input, { clipboardData: { getData: () => text } })
+  }
+
+  async function openPopup() {
+    await renderUnits()
+    fireEvent.click(await screen.findByTestId('units-add-open'))
+    return screen.findByTestId('units-add-dialog')
+  }
+
+  it('the units tab lists the current units with the counts line, and the text box is gone', async () => {
+    await renderUnits()
+    const rows = await screen.findAllByTestId('unit-row')
+    expect(rows.map((row) => row.textContent)).toEqual([expect.stringContaining('AX-1'), expect.stringContaining('AX-2')])
+    expect(screen.getByTestId('units-counts')).toHaveTextContent('3 owned · 2 serial numbers recorded · 1 not yet recorded')
+    expect(screen.queryByTestId('add-serials-text')).not.toBeInTheDocument()
+    expect(screen.getByTestId('units-add-open')).toHaveTextContent('Add new item(s)')
+  })
+
+  it('rows are added and removed; Enter adds a row and moves the cursor into it', async () => {
+    const dialog = await openPopup()
+    expect(within(dialog).getAllByTestId('units-add-row')).toHaveLength(1)
+    expect(within(dialog).queryByTestId('units-add-remove-row')).not.toBeInTheDocument()
+    expect(within(dialog).getByTestId('units-add-save')).toBeDisabled()
+    expect(within(dialog).getByTestId('units-add-why')).toHaveTextContent('Type at least one serial number.')
+    fireEvent.click(within(dialog).getByTestId('units-add-another'))
+    expect(within(dialog).getAllByTestId('units-add-row')).toHaveLength(2)
+    const inputs = within(dialog).getAllByTestId('units-add-serial')
+    fireEvent.keyDown(inputs[1], { key: 'Enter' })
+    const three = within(dialog).getAllByTestId('units-add-serial')
+    expect(three).toHaveLength(3)
+    expect(document.activeElement).toBe(three[2])
+    fireEvent.click(within(dialog).getAllByTestId('units-add-remove-row')[0])
+    expect(within(dialog).getAllByTestId('units-add-row')).toHaveLength(2)
+  })
+
+  it('pasting several lines into a row spreads them over rows', async () => {
+    const dialog = await openPopup()
+    const first = within(dialog).getByTestId('units-add-serial')
+    fireEvent.change(first, { target: { value: 'AX-3' } })
+    fireEvent.click(within(dialog).getByTestId('units-add-another'))
+    paste(within(dialog).getAllByTestId('units-add-serial')[1], 'AX-4\r\n\nAX-5\nAX-6\n')
+    const values = within(dialog)
+      .getAllByTestId('units-add-serial')
+      .map((input) => (input as HTMLInputElement).value)
+    expect(values).toEqual(['AX-3', 'AX-4', 'AX-5', 'AX-6'])
+    expect(within(dialog).getByTestId('units-add-save')).toHaveTextContent('Add 4 units')
+  })
+
+  it('a serial the device already has is flagged in its row before saving, and the skip is said after', async () => {
+    vi.mocked(api.post).mockResolvedValue({
+      device: device({
+        units: [
+          unit({ id: 'u1', serial_number: 'AX-1' }),
+          unit({ id: 'u2', serial_number: 'AX-2' }),
+          unit({ id: 'u3', serial_number: 'AX-3' }),
+        ],
+      }),
+      created: [unit({ id: 'u3', serial_number: 'AX-3' })],
+      skipped: [{ serial_number: 'ax-1', reason: 'already_recorded', detail: 'AX-1 is already recorded on Alexa 35.' }],
+    })
+    const dialog = await openPopup()
+    paste(within(dialog).getByTestId('units-add-serial'), 'AX-3\n ax-1 ')
+    const flags = within(dialog).getAllByTestId('units-add-flag')
+    expect(flags).toHaveLength(1)
+    expect(flags[0]).toHaveTextContent('AX-1 is already recorded on Alexa 35; it will be skipped.')
+    expect(within(dialog).getByTestId('units-add-save')).toHaveTextContent('Add 1 unit')
+    fireEvent.click(within(dialog).getByTestId('units-add-save'))
+    await waitFor(() =>
+      expect(vi.mocked(api.post)).toHaveBeenCalledWith(
+        '/devices/d1/units',
+        expect.objectContaining({ serial_numbers: ['AX-3', 'ax-1'] }),
+      ),
+    )
+    expect(await screen.findByTestId('units-skipped')).toHaveTextContent('Skipped: AX-1 is already recorded on Alexa 35.')
+    expect(screen.getByTestId('device-notice')).toHaveTextContent('1 unit added. The quantity owned is still 3.')
+    expect(screen.queryByTestId('units-add-dialog')).not.toBeInTheDocument()
+    // The list reflects the new unit.
+    expect(screen.getAllByTestId('unit-row')).toHaveLength(3)
+  })
+
+  it('the shared purchase fields are typed once and sent once for every serial, in one request', async () => {
+    vi.mocked(api.post).mockResolvedValue({ device: device(), created: [unit({ id: 'u3' })], skipped: [] })
+    const dialog = await openPopup()
+    paste(within(dialog).getByTestId('units-add-serial'), 'AX-3\nAX-4\nAX-5')
+    fireEvent.change(within(dialog).getByTestId('purchase-price'), { target: { value: '61.750,00' } })
+    await waitFor(() =>
+      expect(within(within(dialog).getByTestId('purchase-seller-party')).getByText('ARRI Rental Wien')).toBeInTheDocument(),
+    )
+    fireEvent.change(within(dialog).getByTestId('purchase-seller-party'), { target: { value: 's1' } })
+    fireEvent.change(within(dialog).getByTestId('purchase-reference'), { target: { value: 'RE-2026-0311' } })
+    fireEvent.change(within(dialog).getByTestId('units-add-date'), { target: { value: '2026-11-20' } })
+    fireEvent.click(within(dialog).getByTestId('units-add-save'))
+    await waitFor(() => expect(vi.mocked(api.post)).toHaveBeenCalledTimes(1))
+    expect(vi.mocked(api.post)).toHaveBeenCalledWith('/devices/d1/units', {
+      serial_numbers: ['AX-3', 'AX-4', 'AX-5'],
+      acquired_on: '2026-11-20',
+      purchase_price: '61750.00',
+      seller_party_id: 's1',
+      seller_name: null,
+      purchase_reference: 'RE-2026-0311',
+    })
+  })
+
+  it('an ambiguous price keeps Save disabled and says why; without budgets.view no purchase fields', async () => {
+    const dialog = await openPopup()
+    fireEvent.change(within(dialog).getByTestId('units-add-serial'), { target: { value: 'AX-3' } })
+    fireEvent.change(within(dialog).getByTestId('purchase-price'), { target: { value: '1.500' } })
+    expect(within(dialog).getByTestId('units-add-save')).toBeDisabled()
+    expect(within(dialog).getByTestId('units-add-why')).toHaveTextContent('1.500 could mean either')
+  })
+
+  it('Escape closes the popup without saving', async () => {
+    const dialog = await openPopup()
+    fireEvent.change(within(dialog).getByTestId('units-add-serial'), { target: { value: 'AX-3' } })
+    fireEvent.keyDown(within(dialog).getByTestId('units-add-serial'), { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByTestId('units-add-dialog')).not.toBeInTheDocument())
+    expect(vi.mocked(api.post)).not.toHaveBeenCalled()
+  })
+
+  it('a role without budgets.view gets serials and a date only', async () => {
+    seed(['devices.view', 'devices.edit'])
+    routeGets(device({ purchase_price: null, price_visible: false }))
+    vi.mocked(api.post).mockResolvedValue({ device: device(), created: [unit({ id: 'u3' })], skipped: [] })
+    const dialog = await openPopup()
+    expect(within(dialog).queryByTestId('purchase-price')).not.toBeInTheDocument()
+    fireEvent.change(within(dialog).getByTestId('units-add-serial'), { target: { value: 'AX-3' } })
+    fireEvent.click(within(dialog).getByTestId('units-add-save'))
+    await waitFor(() =>
+      expect(vi.mocked(api.post)).toHaveBeenCalledWith('/devices/d1/units', {
+        serial_numbers: ['AX-3'],
+        acquired_on: null,
+      }),
+    )
   })
 })

@@ -637,7 +637,9 @@ def add_units(
     db: Session = Depends(get_db),
     membership: Membership = Depends(require("devices.edit")),
 ):
-    """Record one serial number or a pasted list. Serials already on this
+    """Record the serial numbers of the Add new item(s) popup — one or
+    many, in one request, with ONE audit event (`device_unit.created_bulk`,
+    counts and the shared purchase details). Serials already on this
     device, or repeated in the list, are listed and skipped. The quantity
     owned does not change."""
     device = _device_or_404(db, membership, device_id)
@@ -654,6 +656,7 @@ def add_units(
             seller_party_id=body.seller_party_id,
             seller_name=body.seller_name,
             purchase_reference=body.purchase_reference,
+            audit_each=False,
         )
     except LookupError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Seller not found") from None

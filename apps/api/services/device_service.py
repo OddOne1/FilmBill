@@ -451,6 +451,7 @@ def add_units(
     seller_party_id: Optional[uuid.UUID] = None,
     seller_name: Optional[str] = None,
     purchase_reference: Optional[str] = None,
+    audit_each: bool = True,
 ) -> tuple[list[DeviceUnit], list[dict]]:
     """Record serial numbers. Repeats and serials already on this device
     are listed and skipped, never an error. `quantity_owned` is not read or
@@ -458,6 +459,10 @@ def add_units(
 
     The purchase details, when given, apply to every serial of the list:
     a pasted list is one purchase.
+
+    `audit_each=False` (the Add new item(s) popup, B2b-2) records ONE
+    `device_unit.created_bulk` event on the device with the counts and the
+    shared purchase details, instead of one `device_unit.created` per unit.
     """
     _refuse_negative_price(purchase_price)
     check_seller(db, device.company_id, seller_party_id)
@@ -513,16 +518,47 @@ def add_units(
         )
         db.add(unit)
         db.flush()
+        if audit_each:
+            audit.record(
+                db,
+                actor,
+                unit,
+                "device_unit.created",
+                None,
+                audit.snapshot(unit, UNIT_AUDITED),
+                fields=UNIT_AUDITED,
+            )
+        created.append(unit)
+    if not audit_each and (created or skipped):
         audit.record(
             db,
             actor,
-            unit,
-            "device_unit.created",
+            device,
+            "device_unit.created_bulk",
             None,
-            audit.snapshot(unit, UNIT_AUDITED),
-            fields=UNIT_AUDITED,
+            {
+                "created": len(created),
+                "skipped": len(skipped),
+                "serial_numbers": [unit.serial_number for unit in created],
+                "skipped_serial_numbers": [entry["serial_number"] for entry in skipped],
+                "acquired_on": acquired_on,
+                "purchase_price": purchase_price,
+                "seller_party_id": seller_party_id,
+                "seller_name": _clean_text(seller_name),
+                "purchase_reference": _clean_text(purchase_reference),
+            },
+            fields=(
+                "created",
+                "skipped",
+                "serial_numbers",
+                "skipped_serial_numbers",
+                "acquired_on",
+                "purchase_price",
+                "seller_party_id",
+                "seller_name",
+                "purchase_reference",
+            ),
         )
-        created.append(unit)
     return created, skipped
 
 
