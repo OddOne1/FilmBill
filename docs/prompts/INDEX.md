@@ -33,6 +33,7 @@ from them. `docs/SCOPE.md` is where the product is decided.
 | P1b-4 | Contacts rework: person names, sole proprietors, direct tax-ID entry, Contacts layout, people inside organisations | [`32-filmbill-P1b4-contacts-rework.md`](32-filmbill-P1b4-contacts-rework.md) | `ce142a0`…closing commit | done — see notes |
 | UI-1 | Sidebar expanded, notifications popup, no Crew menu item, calendar always six weeks | [`33-filmbill-UI1-nav-notifications-calendar-weeks.md`](33-filmbill-UI1-nav-notifications-calendar-weeks.md) | `031da04`…closing commit | done — see notes |
 | B2b-2 | Gear completion: rental prices on the device, add-units popup, dependencies, alternatives, size, weight and a picture | [`34-filmbill-B2b2-gear-completion.md`](34-filmbill-B2b2-gear-completion.md) | `0fc9ab9`…closing commit | done — see notes |
+| R1 + B2c-1 | Crew roles and rates; crew assignments on the calendar (scheduled, then booked) | [`35-filmbill-R1-B2c1-crew-roles-rates-assignments.md`](35-filmbill-R1-B2c1-crew-roles-rates-assignments.md) | — | in progress |
 | P0b | Foundations: companies, roles, number series, audit, money, codegen | [`03-filmbill-P0b-foundations.md`](03-filmbill-P0b-foundations.md) | — | superseded — split into P0b-0, P0b-1, P0b-2 |
 
 ---
