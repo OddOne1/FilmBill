@@ -34,6 +34,7 @@ from them. `docs/SCOPE.md` is where the product is decided.
 | UI-1 | Sidebar expanded, notifications popup, no Crew menu item, calendar always six weeks | [`33-filmbill-UI1-nav-notifications-calendar-weeks.md`](33-filmbill-UI1-nav-notifications-calendar-weeks.md) | `031da04`…closing commit | done — see notes |
 | B2b-2 | Gear completion: rental prices on the device, add-units popup, dependencies, alternatives, size, weight and a picture | [`34-filmbill-B2b2-gear-completion.md`](34-filmbill-B2b2-gear-completion.md) | `0fc9ab9`…closing commit | done — see notes |
 | R1 + B2c-1 | Crew roles and rates; crew assignments on the calendar (scheduled, then booked) | [`35-filmbill-R1-B2c1-crew-roles-rates-assignments.md`](35-filmbill-R1-B2c1-crew-roles-rates-assignments.md) | `4ccab1e`…closing commit | done — see notes |
+| B2c-2 | Gear bookings on strips: availability, overbooking with alternatives, dependencies | [`36-filmbill-B2c2-gear-bookings.md`](36-filmbill-B2c2-gear-bookings.md) | — | in progress |
 | P0b | Foundations: companies, roles, number series, audit, money, codegen | [`03-filmbill-P0b-foundations.md`](03-filmbill-P0b-foundations.md) | — | superseded — split into P0b-0, P0b-1, P0b-2 |
 
 ---
