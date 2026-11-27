@@ -283,6 +283,27 @@ describe('the strip panel: Crew', () => {
     )
   })
 
+  it('drops a day left outside the strip (the strip was shortened) on the next save', async () => {
+    vi.mocked(api.patch).mockResolvedValue(assignment())
+    const outside = assignment({
+      days: [
+        ...assignment().days,
+        { date: '2026-07-09', call_time: null, wrap_time: null, effective_call_time: null, effective_wrap_time: null, day_type: null },
+      ],
+    })
+    renderCrew([outside])
+    fireEvent.click(screen.getByRole('button', { name: /Anna Huber/ }))
+    fireEvent.click(screen.getByTestId('strip-crew-save-days'))
+    await waitFor(() =>
+      expect(api.patch).toHaveBeenCalledWith('/projects/p1/crew/a1', {
+        days: [
+          { date: '2026-07-06', call_time: null, wrap_time: null },
+          { date: '2026-07-08', call_time: null, wrap_time: null },
+        ],
+      }),
+    )
+  })
+
   it('marks booked with the confirmed-how note, and reopening needs a note', async () => {
     vi.mocked(api.post).mockResolvedValue(assignment({ status: 'booked' }))
     renderCrew([assignment()])

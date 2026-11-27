@@ -341,7 +341,10 @@ function AssignmentEditor({
     act(
       () =>
         api.patch<CrewAssignment>(base, {
+          // Only days inside the strip: after a strip was shortened, a day
+          // left outside it is dropped on the next save, not resent.
           days: Array.from(days.entries())
+            .filter(([date]) => date >= strip.start_date && date <= strip.end_date)
             .sort(([a], [b]) => (a < b ? -1 : 1))
             .map(([date, t]) => ({ date, call_time: t.call || null, wrap_time: t.wrap || null })),
         }),
