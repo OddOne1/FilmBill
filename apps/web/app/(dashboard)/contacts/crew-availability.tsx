@@ -6,7 +6,8 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { api, ApiError } from '@/lib/api'
 import { formatMoney } from '@/lib/money'
 import { cn } from '@/lib/utils'
-import { addDays, dayLabel, todayIso, weekdayLetter, type IsoDate } from '@/lib/calendar-dates'
+import { addDays, dayLabel, todayIso, type IsoDate } from '@/lib/calendar-dates'
+import { PlannerGrid } from '@/components/shared/planner-grid'
 import type { CrewAvailability, CrewAvailabilityDay, CrewAvailabilityPerson, ProjectPage } from '@/types'
 
 /**
@@ -159,56 +160,47 @@ export function CrewAvailabilityView({
         </p>
       )}
       {data && data.people.length > 0 && (
-        <div className="mt-3 overflow-x-auto">
-          <table className="border-collapse text-xs">
-            <thead>
-              <tr>
-                <th className="sticky left-0 bg-bg-primary py-1 pr-3 text-left font-medium text-text-tertiary">Person</th>
-                {data.rates_visible && <th className="py-1 pr-2 text-left font-medium text-text-tertiary">Day rate</th>}
-                {(data.people[0]?.days ?? []).map((day) => (
-                  <th key={day.date} className="w-7 px-0.5 py-1 text-center font-normal text-text-tertiary">
-                    <div>{weekdayLetter(day.date)}</div>
-                    <div>{Number(day.date.slice(8, 10))}</div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {data.people.map((person) => (
-                <tr key={person.party_id} data-testid="crew-availability-row">
-                  <td className="sticky left-0 bg-bg-primary py-0.5 pr-3">
-                    <Link href={`/contacts/${person.party_id}`} className="text-text-primary hover:underline">
-                      {person.name}
-                    </Link>
-                    {person.roles.length > 0 && <span className="ml-1 text-text-tertiary">{person.roles.join(', ')}</span>}
-                  </td>
-                  {data.rates_visible && (
-                    <td data-testid="crew-availability-rate" className="pr-2 text-text-secondary">
-                      {person.rate ? formatMoney(person.rate, currency) : '—'}
-                    </td>
-                  )}
-                  {person.days.map((day) => (
-                    <td key={day.date} className="px-0.5 py-0.5">
-                      <button
-                        type="button"
-                        data-testid="crew-availability-cell"
-                        data-state={day.state}
-                        data-clash={day.clash ? 'true' : undefined}
-                        aria-label={`${person.name}, ${dayLabel(day.date, true)}: ${STATE_WORD[day.state]}`}
-                        onClick={() => setOpen({ person, day })}
-                        className={cn(
-                          'block h-5 w-6 rounded-sm',
-                          STATE_CELL[day.state],
-                          day.clash && 'ring-2 ring-status-warning',
-                        )}
-                      />
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <PlannerGrid
+          dates={(data.people[0]?.days ?? []).map((day) => day.date)}
+          rows={data.people}
+          rowKey={(person) => person.party_id}
+          rowLabel="Person"
+          rowTestId="crew-availability-row"
+          rowHeader={(person) => (
+            <>
+              <Link href={`/contacts/${person.party_id}`} className="text-text-primary hover:underline">
+                {person.name}
+              </Link>
+              {person.roles.length > 0 && <span className="ml-1 text-text-tertiary">{person.roles.join(', ')}</span>}
+            </>
+          )}
+          extraColumns={
+            data.rates_visible
+              ? [
+                  {
+                    label: 'Day rate',
+                    render: (person) => (
+                      <span data-testid="crew-availability-rate">{person.rate ? formatMoney(person.rate, currency) : '—'}</span>
+                    ),
+                  },
+                ]
+              : []
+          }
+          cell={(person, index) => {
+            const day = person.days[index]
+            return (
+              <button
+                type="button"
+                data-testid="crew-availability-cell"
+                data-state={day.state}
+                data-clash={day.clash ? 'true' : undefined}
+                aria-label={`${person.name}, ${dayLabel(day.date, true)}: ${STATE_WORD[day.state]}`}
+                onClick={() => setOpen({ person, day })}
+                className={cn('block h-5 w-6 rounded-sm', STATE_CELL[day.state], day.clash && 'ring-2 ring-status-warning')}
+              />
+            )
+          }}
+        />
       )}
       {open && (
         <div data-testid="crew-availability-detail" role="status" className="mt-3 rounded-md border border-border bg-bg-secondary p-2 text-xs">

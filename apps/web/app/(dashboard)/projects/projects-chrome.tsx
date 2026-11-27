@@ -43,6 +43,7 @@ export function useProjectAccess() {
     canViewBudgets: can('budgets.view'),
     canEditBudgets: can('budgets.edit'),
     canViewParties: can('parties.view'),
+    canViewDevices: can('devices.view'),
     refused: loaded && !can('projects.view'),
     budgetsRefused: loaded && !can('budgets.view'),
   }

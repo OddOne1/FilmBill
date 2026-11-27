@@ -18,22 +18,25 @@ import {
 import { DaysTab } from './days-tab'
 import { BudgetsTab } from './budgets-tab'
 import { CrewTab } from './crew-tab'
+import { GearTab } from './gear-tab'
 
 /**
- * One project: Overview · Days · Crew · Budgets. The Crew tab is there for
- * a role that may see contacts (D111: staff see the calendar, not the crew).
+ * One project: Overview · Days · Crew · Gear · Budgets. The Crew tab is there
+ * for a role that may see contacts (D111: staff see the calendar, not the
+ * crew); the Gear tab for a role that may see the gear list (staff do).
  *
  * The status has its own control because it has its own endpoint (and its
  * own audit action): "went active on the 3rd" is a different question from
  * "somebody corrected the name".
  */
 
-type Tab = 'overview' | 'days' | 'crew' | 'budgets'
+type Tab = 'overview' | 'days' | 'crew' | 'gear' | 'budgets'
 
-const TABS: { key: Tab; label: string; needsParties?: boolean }[] = [
+const TABS: { key: Tab; label: string; needsParties?: boolean; needsDevices?: boolean }[] = [
   { key: 'overview', label: 'Overview' },
   { key: 'days', label: 'Days' },
   { key: 'crew', label: 'Crew', needsParties: true },
+  { key: 'gear', label: 'Gear', needsDevices: true },
   { key: 'budgets', label: 'Budgets' },
 ]
 
@@ -104,7 +107,9 @@ export default function ProjectDetailPage() {
           {access.loaded && !access.canEdit && <ProjectsReadOnlyNotice />}
 
           <nav aria-label="Project" className="mt-5 flex gap-1 border-b border-border">
-            {TABS.filter((entry) => !entry.needsParties || access.canViewParties).map((entry) => (
+            {TABS.filter(
+              (entry) => (!entry.needsParties || access.canViewParties) && (!entry.needsDevices || access.canViewDevices),
+            ).map((entry) => (
               <button
                 key={entry.key}
                 type="button"
@@ -135,6 +140,16 @@ export default function ProjectDetailPage() {
           )}
           {tab === 'crew' && access.canViewParties && (
             <CrewTab
+              project={project}
+              canEdit={access.canEdit}
+              onOpenStrip={(stripId) => {
+                setOpenStripId(stripId)
+                setTab('days')
+              }}
+            />
+          )}
+          {tab === 'gear' && access.canViewDevices && (
+            <GearTab
               project={project}
               canEdit={access.canEdit}
               onOpenStrip={(stripId) => {

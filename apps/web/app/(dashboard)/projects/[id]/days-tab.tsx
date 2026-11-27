@@ -14,13 +14,14 @@ import {
   todayIso,
   type IsoDate,
 } from '@/lib/calendar-dates'
-import type { BlockChange, BlockCreate, CalendarStrip, CrewStripCounts, Project, ProjectCalendar, ProjectCrew } from '@/types'
+import type { BlockChange, BlockCreate, CalendarStrip, CrewStripCounts, GearStripCounts, Project, ProjectCalendar, ProjectCrew, ProjectGear } from '@/types'
 import { usePermissions } from '@/hooks/use-permissions'
 import { DAY_TYPES } from '../projects-chrome'
 import { BookedDays, CreateStripForm, DayStripsList } from './calendar/calendar-parts'
 import { MonthGrid } from './calendar/month-grid'
 import { StripPanel, type StripActions } from './calendar/strip-panel'
 import { StripCrew } from './calendar/strip-crew'
+import { StripGear } from './calendar/strip-gear'
 import { countsSentence, typeColour, typeLabel } from './calendar/shared'
 
 /**
@@ -81,6 +82,26 @@ export function DaysTab({
   React.useEffect(() => {
     void loadCrew()
   }, [loadCrew])
+  // B2c-2: gear on the strips. projects.view and devices.view (staff too).
+  const canSeeGear = can('projects.view') && can('devices.view')
+  const [gear, setGear] = React.useState<ProjectGear | null>(null)
+  const loadGear = React.useCallback(async () => {
+    if (!canSeeGear) return
+    try {
+      setGear(await api.get<ProjectGear>(`/projects/${project.id}/gear`))
+    } catch {
+      // The calendar works without the gear; the panel says so.
+      setGear(null)
+    }
+  }, [canSeeGear, project.id])
+  React.useEffect(() => {
+    void loadGear()
+  }, [loadGear])
+  const gearCounts = React.useMemo(() => {
+    const map: Record<string, GearStripCounts> = {}
+    for (const entry of gear?.strips ?? []) map[entry.block_id] = entry.counts
+    return map
+  }, [gear])
   const crewCounts = React.useMemo(() => {
     const map: Record<string, CrewStripCounts> = {}
     for (const entry of crew?.strips ?? []) map[entry.block_id] = entry.counts
@@ -341,6 +362,7 @@ export function DaysTab({
                 onResize={(strip, start, end) => void resize(strip, start, end)}
                 onShowDay={setDayOpen}
                 crewCounts={crewCounts}
+                gearCounts={gearCounts}
               />
               <div className="mt-3 min-w-0">
                 <BookedDays
@@ -385,6 +407,15 @@ export function DaysTab({
                     canSeeRates={canSeeRates}
                     currency={active?.default_currency ?? 'EUR'}
                     onChanged={loadCrew}
+                  />
+                )}
+                {canSeeGear && selected.kind === 'strip' && (
+                  <StripGear
+                    projectId={project.id}
+                    strip={selected}
+                    gear={gear?.strips.find((entry) => entry.block_id === selected.id) ?? null}
+                    canEdit={canEdit}
+                    onChanged={loadGear}
                   />
                 )}
               </StripPanel>

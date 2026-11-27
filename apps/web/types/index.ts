@@ -523,3 +523,28 @@ export interface PasswordStrength {
   /** Which character classes are still missing, in the server's own wording. */
   missing: string[]
 }
+
+// ─── Gear on the calendar (B2c-2) ───────────────────────────────────────────
+//
+// A quantity of a device on a strip, scheduled then booked. Availability is
+// the API's (lowest day governs); overbooking is a warning with the device's
+// alternatives and never blocks a save. No prices anywhere.
+
+export type GearBooking = Schemas['GearBookingResponse']
+export type GearWarning = Schemas['GearWarning']
+export type GearHolder = Schemas['GearHolder']
+export type GearAlternativeOffer = Schemas['GearAlternativeOffer']
+export type GearSuggestion = Schemas['GearSuggestion']
+export type GearBookingsCreated = Schemas['GearBookingsCreated']
+export type GearBookingsPreview = Schemas['GearBookingsPreview']
+export type GearPlannedBooking = Schemas['GearPlannedBooking']
+export type GearBookingUpdated = Schemas['GearBookingUpdated']
+export type GearBulkStatusResult = Schemas['GearBulkStatusResult']
+export type GearRemoveResult = Schemas['GearRemoveResult']
+export type GearStripCounts = Schemas['GearStripCounts']
+export type ProjectGear = Schemas['ProjectGearResponse']
+export type ProjectGearStrip = Schemas['ProjectGearStrip']
+export type GearAvailability = Schemas['GearAvailabilityResponse']
+export type DeviceAvailability = Schemas['DeviceAvailability']
+export type GearDay = Schemas['GearDay']
+export type DeviceBookings = Schemas['DeviceBookingsResponse']

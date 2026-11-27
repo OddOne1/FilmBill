@@ -49,7 +49,7 @@ export function StripPanel({
   canEdit: boolean
   actions: StripActions
   onClose: () => void
-  /** B2c-1: the strip's Crew section, drawn at the panel's end. */
+  /** B2c-1/B2c-2: the strip's Crew and Gear sections, drawn at the panel's end. */
   children?: React.ReactNode
 }) {
   const base = `/projects/${projectId}/blocks/${strip.id}`

@@ -13,6 +13,7 @@ import { RentalPrices } from "./rental-prices";
 import { UnitsTab } from "./units-tab";
 import { DependenciesTab } from "./dependencies-tab";
 import { AlternativesTab } from "./alternatives-tab";
+import { BookingsTab } from "./bookings-tab";
 import { DevicePicture } from "./device-picture";
 import {
   AMBIGUOUS_AMOUNT,
@@ -47,6 +48,8 @@ export default function DevicePage() {
   const [error, setError] = React.useState<string | null>(null);
   const [notice, setNotice] = React.useState<string | null>(null);
   const [tab, setTab] = React.useState<TabKey>("details");
+  // B2c-2: where it is booked — the bookings need projects.view as well.
+  const canSeeBookings = can("projects.view");
 
   const load = React.useCallback(async () => {
     try {
@@ -169,7 +172,7 @@ export default function DevicePage() {
             role="tablist"
             className="mt-5 flex gap-1 border-b border-border"
           >
-            {TABS.map((entry) => (
+            {TABS.filter((entry) => entry.key !== "bookings" || canSeeBookings).map((entry) => (
               <button
                 key={entry.key}
                 type="button"
@@ -263,6 +266,7 @@ export default function DevicePage() {
           {tab === "alternatives" && (
             <AlternativesTab device={device} canEdit={canEdit} />
           )}
+          {tab === "bookings" && canSeeBookings && <BookingsTab device={device} />}
         </>
       )}
     </div>
@@ -295,13 +299,14 @@ function sizeText(device: DeviceDetail): string {
     : "—";
 }
 
-type TabKey = "details" | "units" | "dependencies" | "alternatives";
+type TabKey = "details" | "units" | "dependencies" | "alternatives" | "bookings";
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "details", label: "Details" },
   { key: "units", label: "Units" },
   { key: "dependencies", label: "Dependencies" },
   { key: "alternatives", label: "Alternatives" },
+  { key: "bookings", label: "Bookings" },
 ];
 
 // ─── The form ────────────────────────────────────────────────────────────────

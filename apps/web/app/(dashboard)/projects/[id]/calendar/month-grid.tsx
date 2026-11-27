@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { AlertTriangle, Plane } from 'lucide-react'
-import type { CalendarStrip, CrewStripCounts } from '@/types'
+import type { CalendarStrip, CrewStripCounts, GearStripCounts } from '@/types'
 import { cn } from '@/lib/utils'
 import {
   addDays,
@@ -17,6 +17,7 @@ import {
 } from '@/lib/calendar-dates'
 import { dateAtPointer, dayByDate, stripName, typeColour, typeLabel, typeText } from './shared'
 import { crewCountsText } from './strip-crew'
+import { gearCountsText } from './strip-gear'
 
 /**
  * The month grid: weeks as rows, Monday first, strips drawn as bars across
@@ -62,6 +63,9 @@ export interface MonthGridProps {
   /** B2c-1: crew per strip id, from `GET /projects/{id}/crew` — the badge
    *  "4 booked · 2 scheduled" and a marker when somebody has a clash. */
   crewCounts?: Record<string, CrewStripCounts>
+  /** B2c-2: gear per strip id, from `GET /projects/{id}/gear` — the badge
+   *  "Gear: 6 booked · 2 scheduled" and a marker when anything is overbooked. */
+  gearCounts?: Record<string, GearStripCounts>
 }
 
 export function MonthGrid(props: MonthGridProps) {
@@ -255,6 +259,7 @@ export function MonthGrid(props: MonthGridProps) {
                   canEdit={canEdit && segment.strip.kind === 'strip'}
                   selected={props.selectedStripId === segment.strip.id}
                   crew={props.crewCounts?.[segment.strip.id] ?? null}
+                  gear={props.gearCounts?.[segment.strip.id] ?? null}
                   dragging={draggingId === segment.strip.id}
                   onPointerDown={(event, kind) => {
                     if (event.button !== 0) return
@@ -290,6 +295,7 @@ function StripBar({
   canEdit,
   selected,
   crew,
+  gear,
   dragging,
   onPointerDown,
   onOpen,
@@ -299,6 +305,7 @@ function StripBar({
   canEdit: boolean
   selected: boolean
   crew: CrewStripCounts | null
+  gear: GearStripCounts | null
   dragging: boolean
   onPointerDown: (event: React.PointerEvent, kind: 'move' | 'start' | 'end') => void
   onOpen: (date: IsoDate | null) => void
@@ -381,6 +388,14 @@ function StripBar({
           )}
           {crew && crew.with_clashes > 0 && (
             <AlertTriangle data-testid="strip-crew-clash-marker" aria-label="Crew clash" className="ml-1 h-3 w-3 shrink-0" />
+          )}
+          {gear && (gear.booked > 0 || gear.scheduled > 0) && (
+            <span data-testid="strip-gear-badge" className="ml-1.5 shrink-0 rounded bg-black/25 px-1 font-normal">
+              Gear: {gearCountsText(gear)}
+            </span>
+          )}
+          {gear && gear.overbooked > 0 && (
+            <AlertTriangle data-testid="strip-gear-overbooked-marker" aria-label="Gear overbooked" className="ml-1 h-3 w-3 shrink-0 text-status-error" />
           )}
         </span>
       )}

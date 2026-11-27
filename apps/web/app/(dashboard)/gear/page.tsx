@@ -12,6 +12,7 @@ import { usePermissions } from "@/hooks/use-permissions";
 import { useCompanyStore } from "@/stores/company-store";
 import type { DeviceDetail, DevicePage } from "@/types";
 import { GearImport } from "./gear-import";
+import { GearPlanner } from "./gear-planner";
 import {
   AMBIGUOUS_AMOUNT,
   amountForApi,
@@ -23,7 +24,8 @@ import {
 } from "./gear-chrome";
 
 /**
- * Gear — the devices the company owns.
+ * Gear — the devices the company owns. **List** is the gear list;
+ * **Planner** (B2c-2) shows what is booked on which day.
  *
  * Each row shows the two numbers in words: how many are owned (what planning
  * will book against) and how many serial numbers are on file. They may
@@ -31,7 +33,10 @@ import {
  */
 export default function GearPage() {
   const activeCompanyId = useCompanyStore((state) => state.activeCompanyId);
-  const { active } = usePermissions();
+  const { active, can } = usePermissions();
+  // B2c-2: the planner reads bookings, so it needs projects.view as well.
+  const canPlan = can("projects.view");
+  const [view, setView] = React.useState<"list" | "planner">("list");
   const currency = active?.default_currency ?? "EUR";
   const { loaded, canView, canEdit, canSeePrice, refused } = useGearAccess();
 
@@ -138,6 +143,32 @@ export default function GearPage() {
         <GearImport onApplied={() => void refresh()} />
       )}
 
+      {canPlan && (
+        <nav aria-label="Gear view" role="tablist" className="mt-5 flex gap-1 border-b border-border">
+          {(["list", "planner"] as const).map((key) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              data-testid={`gear-view-${key}`}
+              aria-selected={view === key}
+              onClick={() => setView(key)}
+              className={
+                view === key
+                  ? "border-b-2 border-accent px-3 py-2 text-sm font-medium text-text-primary"
+                  : "border-b-2 border-transparent px-3 py-2 text-sm text-text-secondary hover:text-text-primary"
+              }
+            >
+              {key === "list" ? "List" : "Planner"}
+            </button>
+          ))}
+        </nav>
+      )}
+
+      {view === "planner" && canPlan ? (
+        <GearPlanner categories={page?.categories ?? []} />
+      ) : (
+      <>
       <div className="mt-6 flex flex-wrap items-center gap-3">
         <label className="relative">
           <span className="sr-only">Search gear</span>
@@ -261,6 +292,8 @@ export default function GearPage() {
             ))}
           </tbody>
         </table>
+      )}
+      </>
       )}
     </div>
   );
