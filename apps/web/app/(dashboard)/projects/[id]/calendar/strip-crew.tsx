@@ -1,5 +1,6 @@
 'use client'
 
+import { TeamChip } from '@/components/shared/team-chip'
 import * as React from 'react'
 import Link from 'next/link'
 import { AlertTriangle, Plus, UserPlus } from 'lucide-react'
@@ -684,6 +685,7 @@ function CrewPicker({
                   }}
                 />
                 <span className="w-28 truncate text-text-primary">{person.name}</span>
+                {person.is_team_member && <TeamChip />}
                 <span className="w-20 truncate text-text-tertiary">{person.roles.join(', ')}</span>
                 {data.rates_visible && (
                   <span data-testid="crew-picker-rate" className="w-20 text-text-secondary">

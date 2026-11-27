@@ -103,6 +103,9 @@ function taxId(overrides: Partial<PartyTaxId> = {}): PartyTaxId {
 
 function makeParty(overrides: Partial<Party> = {}): Party {
   return {
+    is_team_member: false,
+    team_user_id: null,
+    team_login_email: null,
     id: 'p1',
     type: 'organisation',
     parent_id: null,

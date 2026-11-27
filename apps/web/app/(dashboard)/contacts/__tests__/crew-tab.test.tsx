@@ -152,6 +152,23 @@ describe('Contacts → Crew', () => {
     expect(findPartyWords(container)).toEqual([])
   })
 
+  it('marks a team member with the Team chip, and only them (R2)', async () => {
+    routeGets([member({ id: 'p1', name: 'Max Crew', is_team_member: true }), member({ id: 'p2', name: 'Fred Lance', is_team_member: false })])
+    render(<CrewListPage />)
+    const rows = await screen.findAllByTestId('crew-row')
+    expect(within(rows[0]).getByTestId('team-chip')).toHaveTextContent('Team')
+    expect(within(rows[1]).queryByTestId('team-chip')).toBeNull()
+  })
+
+  it('sends the Team / Freelance filter to the API (R2)', async () => {
+    render(<CrewListPage />)
+    await screen.findAllByTestId('crew-row')
+    fireEvent.change(screen.getByTestId('crew-kind-filter'), { target: { value: 'team' } })
+    await waitFor(() => expect(vi.mocked(api.get)).toHaveBeenCalledWith('/crew?kind=team'))
+    fireEvent.change(screen.getByTestId('crew-kind-filter'), { target: { value: 'freelance' } })
+    await waitFor(() => expect(vi.mocked(api.get)).toHaveBeenCalledWith('/crew?kind=freelance'))
+  })
+
   it('lists what the API returned, each name linking to the full party record', async () => {
     routeGets([member(), member({ id: 'p2', name: 'Ben Ohr', roles: ['Sound'], is_supplier: true })])
     render(<CrewListPage />)

@@ -300,6 +300,21 @@ export type CrewAvailabilityDay = Schemas['AvailabilityDay']
 export type CrewUnavailabilityList = Schemas['UnavailabilityList']
 export type CrewUnavailability = Schemas['UnavailabilityResponse']
 
+// ─── Team members as crew (R2) ──────────────────────────────────────────────
+// A login linked to a person contact. No shape here carries a rate.
+export type TeamMember = Schemas['TeamMemberResponse']
+export type TeamPage = Schemas['TeamResponse']
+export type TeamContact = Schemas['TeamContact']
+export type TeamRole = Schemas['TeamRole']
+export type TeamCrewRequest = Schemas['TeamCrewRequest']
+export type TeamStopResult = Schemas['TeamStopResponse']
+export type FutureBooking = Schemas['FutureBookingResponse']
+export type MyCrewProfile = Schemas['MyCrewResponse']
+export type MyCrewSwitchResult = Schemas['MyCrewSwitchResponse']
+export type MySchedule = Schemas['MyScheduleResponse']
+export type MyScheduleEntry = Schemas['MyScheduleEntry']
+export type LaborItemChoice = Schemas['LaborItemChoice']
+
 // ─── Gear (B2b) ─────────────────────────────────────────────────────────────
 //
 // A device holds the quantity owned (what planning uses); its units hold the

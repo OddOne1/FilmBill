@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { Bell, ShieldCheck } from 'lucide-react'
+import { Bell, ShieldCheck, Users } from 'lucide-react'
 import { useNotificationStore } from '@/stores/notification-store'
 import { usePageTitle } from '@/hooks/use-page-title'
 import { formatRelativeTime } from '@/lib/utils'
@@ -13,6 +13,8 @@ import type { Notification, NotificationType } from '@/types'
 // Kept in step with NotificationType in apps/api/models/activity.py.
 const notificationIcons: Record<NotificationType, React.ElementType> = {
   account: ShieldCheck,
+  // R2: "<name> wants to work as crew".
+  team: Users,
 }
 
 function NotificationItem({ notification }: { notification: Notification }) {

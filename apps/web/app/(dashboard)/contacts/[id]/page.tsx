@@ -1,5 +1,7 @@
 'use client'
 
+import { TeamLoginLine } from './team-login'
+import { TeamChip } from '@/components/shared/team-chip'
 import * as React from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
@@ -156,7 +158,11 @@ export default function PartyDetailPage() {
         <div>
           <h1 className="text-lg font-semibold text-text-primary">
             {party.title ? `${party.title} ${party.name}` : party.name}
+            {party.is_team_member && <TeamChip />}
           </h1>
+          {party.is_team_member && (
+            <TeamLoginLine party={party} canUnlink={can('company.members.manage')} onDone={refresh} />
+          )}
           {party.name_addition && (
             <p data-testid="party-name-addition" className="text-sm text-text-secondary">
               {party.name_addition}

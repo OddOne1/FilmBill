@@ -154,8 +154,14 @@ describe('the company group follows company permissions', () => {
     const entries = order()
     expect(entries).toContain('Audit log')
     expect(entries).not.toContain('Bank accounts')
-    expect(entries).not.toContain('Members')
+    expect(entries).not.toContain('Team')
     expect(entries).not.toContain('Number series')
+  })
+
+  it('shows Team (the members page) to somebody who manages members', () => {
+    seedCompany(['company.view', 'company.members.manage'])
+    renderNav()
+    expect(order()).toContain('Team')
   })
 
   it('shows it when the permission is held, between Accounting and Security', () => {
@@ -214,7 +220,7 @@ describe('the company group follows company permissions', () => {
     const entries = order()
     expect(entries).toContain('Tax')
     expect(entries).toContain('Audit log')
-    expect(entries).not.toContain('Members')
+    expect(entries).not.toContain('Team')
   })
 
   it('hides the whole company group while the company list has not answered', () => {

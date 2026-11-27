@@ -138,6 +138,7 @@ function crewStrip(assignments: CrewAssignment[]): ProjectCrewStrip {
 
 function person(overrides: Partial<CrewAvailabilityPerson> = {}): CrewAvailabilityPerson {
   return {
+    is_team_member: false,
     party_id: 'ben',
     name: 'Ben Ohr',
     roles: ['Gaffer'],
@@ -206,6 +207,17 @@ describe('the strip panel: Crew', () => {
     expect(screen.getByTestId('strip-crew-counts')).toHaveTextContent('1 booked · 1 scheduled')
     fireEvent.click(within(rows[0]).getByRole('button', { name: /Anna Huber/ }))
     expect(within(screen.getByTestId('strip-crew-row-clashes')).getByText(CLASH.message)).toBeInTheDocument()
+  })
+
+  it('the picker shows the Team chip on a team member, with rate and availability as for anybody (R2)', async () => {
+    routeGets([person({ party_id: 'max', name: 'Max Crew', is_team_member: true, rate: '650.00' }), BUSY_CLEO])
+    renderCrew([assignment()])
+    fireEvent.click(screen.getByTestId('strip-crew-add'))
+    const rows = await screen.findAllByTestId('crew-picker-row')
+    expect(within(rows[0]).getByTestId('team-chip')).toHaveTextContent('Team')
+    expect(within(rows[0]).getByTestId('crew-picker-rate')).toHaveTextContent('650.00')
+    expect(within(rows[0]).getByTestId('crew-picker-availability')).toHaveAttribute('data-state', 'free')
+    expect(within(rows[1]).queryByTestId('team-chip')).toBeNull()
   })
 
   it('the picker sends its filters and shows what the strip dates look like for each person', async () => {

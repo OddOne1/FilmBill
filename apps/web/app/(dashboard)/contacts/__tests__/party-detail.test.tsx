@@ -50,6 +50,9 @@ const SERVER_ONLY_RATE = '13.7500'
 
 function makeParty(overrides: Partial<Party> = {}): Party {
   return {
+    is_team_member: false,
+    team_user_id: null,
+    team_login_email: null,
     id: 'p-person',
     type: 'person',
     parent_id: 'p-dept',

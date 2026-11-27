@@ -7,6 +7,7 @@ import { api, ApiError } from '@/lib/api'
 import { saveBlob } from '@/lib/save-file'
 import { formatMoney } from '@/lib/money'
 import { usePermissions } from '@/hooks/use-permissions'
+import { TeamChip } from '@/components/shared/team-chip'
 import { useCompanyStore } from '@/stores/company-store'
 import type { CrewMember, CrewPage, CrewRoleSuggestions } from '@/types'
 import { QuickAdd } from './quick-add'
@@ -61,6 +62,8 @@ export function CrewTab({ search, includeInactive }: { search: string; includeIn
   const [maxRate, setMaxRate] = React.useState('')
 
   const [role, setRole] = React.useState('')
+  // R2. Team members (linked to a login) or freelancers; '' is everybody.
+  const [kind, setKind] = React.useState<'' | 'team' | 'freelance'>('')
   const [sort, setSort] = React.useState('name')
   const [page, setPage] = React.useState<CrewPage | null>(null)
   const [roles, setRoles] = React.useState<CrewRoleSuggestions>({ used: [], catalog: [], labor_items: [] })
@@ -75,6 +78,7 @@ export function CrewTab({ search, includeInactive }: { search: string; includeIn
     if (canSeeRates && minRate.trim()) params.set('min_rate', minRate.trim().replace(',', '.'))
     if (canSeeRates && maxRate.trim()) params.set('max_rate', maxRate.trim().replace(',', '.'))
     if (sort !== 'name' && (canSeeRates || !sort.endsWith('rate'))) params.set('sort', sort)
+    if (kind) params.set('kind', kind)
     if (includeInactive) params.set('include_inactive', 'true')
     try {
       const query = params.toString()
@@ -83,7 +87,7 @@ export function CrewTab({ search, includeInactive }: { search: string; includeIn
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : 'The crew list could not be loaded. Try again.')
     }
-  }, [search, role, sort, includeInactive, minRate, maxRate, canSeeRates])
+  }, [search, role, kind, sort, includeInactive, minRate, maxRate, canSeeRates])
 
   const refreshRoles = React.useCallback(async () => {
     try {
@@ -178,6 +182,19 @@ export function CrewTab({ search, includeInactive }: { search: string; includeIn
         </button>
         <span className="flex-1" />
         <label className="text-xs text-text-secondary">
+          Show{' '}
+          <select
+            data-testid="crew-kind-filter"
+            value={kind}
+            onChange={(event) => setKind(event.target.value as '' | 'team' | 'freelance')}
+            className="ml-1 h-8 rounded-md border border-border bg-bg-secondary px-2 text-sm text-text-primary"
+          >
+            <option value="">Team and freelance</option>
+            <option value="team">Team</option>
+            <option value="freelance">Freelance</option>
+          </select>
+        </label>
+        <label className="text-xs text-text-secondary">
           Role{' '}
           <select
             data-testid="crew-role-filter"
@@ -271,8 +288,8 @@ export function CrewTab({ search, includeInactive }: { search: string; includeIn
         !error && <p className="mt-6 text-sm text-text-secondary">Loading the crew list…</p>
       ) : page.members.length === 0 ? (
         <p data-testid="crew-empty" className="mt-6 rounded-md border border-border px-3 py-4 text-sm text-text-secondary">
-          {search.trim() || role || minRate.trim() || maxRate.trim()
-            ? 'Nobody in the crew list matches that. Clear the search, the role or the rate filter to see everyone.'
+          {search.trim() || role || kind || minRate.trim() || maxRate.trim()
+            ? 'Nobody in the crew list matches that. Clear the search, the team filter, the role or the rate filter to see everyone.'
             : canEdit
               ? 'Nobody is in the crew list yet. Add the first person with Quick add crew, or import a CSV file.'
               : 'Nobody is in the crew list yet.'}
@@ -351,6 +368,7 @@ function CrewRow({
         <Link href={`/contacts/${member.id}`} className="font-medium text-text-primary hover:underline">
           {member.name}
         </Link>
+        {member.is_team_member && <TeamChip />}
         {!member.is_active && (
           <span className="ml-2 rounded bg-bg-tertiary px-1.5 py-0.5 text-2xs text-text-secondary">
             archived

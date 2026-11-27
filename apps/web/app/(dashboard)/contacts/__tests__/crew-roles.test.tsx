@@ -70,6 +70,8 @@ function role(overrides: Partial<CrewRole> = {}): CrewRole {
     effective_day_rate: '650.00',
     rate_source: 'own',
     difference_to_typical: '50.00',
+    confirmed: true,
+    set_by: 'admin',
     ...overrides,
   }
 }
@@ -185,6 +187,7 @@ describe('Roles & rates on the person page', () => {
 
 function member(overrides: Partial<CrewMember> = {}): CrewMember {
   return {
+    is_team_member: false,
     id: 'p1',
     name: 'Anna Huber',
     roles: ['Drone pilot'],

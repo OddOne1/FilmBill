@@ -125,7 +125,9 @@ const settingsNavGroups: SettingsNavItem[][] = [
     },
     {
       href: '/settings/company/members',
-      label: 'Members',
+      // R2: the members page is the Team page — logins, roles, and who
+      // also works as crew.
+      label: 'Team',
       icon: Users,
       permission: 'company.members.manage',
     },

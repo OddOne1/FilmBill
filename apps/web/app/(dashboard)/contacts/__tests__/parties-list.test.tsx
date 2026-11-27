@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, within, fireEvent, waitFor } from '@testing-library/react'
 
 vi.mock('@/lib/api', () => ({
   api: { get: vi.fn(), patch: vi.fn(), post: vi.fn(), delete: vi.fn() },
@@ -33,6 +33,9 @@ import type { Party, PartyPage } from '@/types'
 
 function makeParty(overrides: Partial<Party> = {}): Party {
   return {
+    is_team_member: false,
+    team_user_id: null,
+    team_login_email: null,
     id: 'p1',
     type: 'organisation',
     parent_id: null,
@@ -145,6 +148,18 @@ describe('the list', () => {
     expect(screen.getByTestId('party-chip-archived-p2')).toHaveTextContent(
       'Archived',
     )
+  })
+
+  it('shows the Team chip beside a person linked to a login, and only there (R2)', async () => {
+    mockApi([
+      makeParty({ id: 'p1', type: 'person', name: 'Max Crew', is_team_member: true, team_user_id: 'u-max' }),
+      makeParty({ id: 'p2', type: 'person', name: 'Fred Lance' }),
+    ])
+    render(<PartiesPage />)
+    const max = (await screen.findByTestId('party-row-p1')).parentElement as HTMLElement
+    expect(within(max).getByTestId('team-chip')).toHaveTextContent('Team')
+    const fred = screen.getByTestId('party-row-p2').parentElement as HTMLElement
+    expect(within(fred).queryByTestId('team-chip')).toBeNull()
   })
 
   it('links each row to its detail page', async () => {

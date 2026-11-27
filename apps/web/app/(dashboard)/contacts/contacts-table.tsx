@@ -1,5 +1,6 @@
 'use client'
 
+import { TeamChip } from '@/components/shared/team-chip'
 import * as React from 'react'
 import Link from 'next/link'
 import { Columns3 } from 'lucide-react'
@@ -200,6 +201,7 @@ function cell(party: Party, key: ColumnKey): React.ReactNode {
             >
               {party.name}
             </Link>
+            {party.is_team_member && <TeamChip />}
             {party.trading_name && (
               <span className="truncate text-xs text-text-tertiary">({party.trading_name})</span>
             )}

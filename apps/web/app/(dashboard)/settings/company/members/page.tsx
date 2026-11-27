@@ -6,10 +6,12 @@ import { api, ApiError } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { usePermissions } from '@/hooks/use-permissions'
-import type { CompanyMember, CompanyRole } from '@/types'
+import { CrewCell } from '@/components/settings/team-crew'
+import type { CompanyMember, CompanyRole, CrewRoleSuggestions, LaborItemChoice, TeamMember, TeamPage } from '@/types'
 
 /**
- * Settings → Company → Members.
+ * Settings → Company → Team (the members page; R2 renamed it and added the
+ * Crew column — there is no second page).
  *
  * Invite by email with a role and an optional expiry; change either; revoke.
  * Everything here talks to `/company/members`, which resolves the company
@@ -49,13 +51,23 @@ export default function CompanyMembersPage() {
   const [expiresAt, setExpiresAt] = React.useState('')
   const [inviting, setInviting] = React.useState(false)
   const [notice, setNotice] = React.useState<string | null>(null)
+  // R2. The Crew column, keyed by user id, and the roles one can pick.
+  const [team, setTeam] = React.useState<Record<string, TeamMember>>({})
+  const [laborItems, setLaborItems] = React.useState<LaborItemChoice[]>([])
+  const [crewNotice, setCrewNotice] = React.useState<string | null>(null)
 
   const allowed = can('company.members.manage')
 
   const refresh = React.useCallback(async () => {
     setLoading(true)
     try {
-      setMembers(await api.get<CompanyMember[]>('/company/members'))
+      const [loadedMembers, loadedTeam] = await Promise.all([
+        api.get<CompanyMember[]>('/company/members'),
+        // The Crew column is extra: if it fails, the members still show.
+        api.get<TeamPage>('/team').catch(() => ({ members: [] }) as TeamPage),
+      ])
+      setMembers(loadedMembers)
+      setTeam(Object.fromEntries(loadedTeam.members.map((entry) => [entry.user_id, entry])))
       setError(null)
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : 'Could not load members')
@@ -70,6 +82,10 @@ export default function CompanyMembersPage() {
       return
     }
     void refresh()
+    api
+      .get<CrewRoleSuggestions>('/crew/roles')
+      .then((roles) => setLaborItems(roles.labor_items ?? []))
+      .catch(() => setLaborItems([]))
     // Re-fetches when the active company changes, which is the whole point of
     // keying on it: switching company must not leave the previous company's
     // members on screen.
@@ -140,7 +156,7 @@ export default function CompanyMembersPage() {
     // nothing is the state this codebase has agreed never to produce.
     return (
       <div className="p-8">
-        <h1 className="text-lg font-semibold text-text-primary">Members</h1>
+        <h1 className="text-lg font-semibold text-text-primary">Team</h1>
         <p className="mt-2 text-sm text-text-secondary">
           Your role in {active?.display_name ?? 'this company'} does not
           include managing members.
@@ -150,10 +166,11 @@ export default function CompanyMembersPage() {
   }
 
   return (
-    <div className="p-8 max-w-3xl">
-      <h1 className="text-lg font-semibold text-text-primary">Members</h1>
+    <div className="p-8 max-w-5xl">
+      <h1 className="text-lg font-semibold text-text-primary">Team</h1>
       <p className="mt-1 text-sm text-text-secondary">
-        Who may work in {active?.display_name ?? 'this company'}, and as what.
+        Who may work in {active?.display_name ?? 'this company'}, and as what —
+        and who of them also works as crew.
       </p>
 
       <form
@@ -230,6 +247,12 @@ export default function CompanyMembersPage() {
         </div>
       </form>
 
+      {crewNotice && (
+        <p data-testid="crew-notice" className="mt-4 rounded-md border border-border bg-bg-secondary px-3 py-2 text-sm text-text-secondary">
+          {crewNotice}
+        </p>
+      )}
+
       {error && (
         <p className="mt-4 rounded-md border border-status-error/40 bg-status-error/10 px-3 py-2 text-sm text-status-error">
           {error}
@@ -252,6 +275,7 @@ export default function CompanyMembersPage() {
                 <th className="px-3 py-2 font-medium">Role</th>
                 <th className="px-3 py-2 font-medium">Access ends</th>
                 <th className="px-3 py-2 font-medium">2FA</th>
+                <th className="px-3 py-2 font-medium">Crew</th>
                 <th className="px-3 py-2" />
               </tr>
             </thead>
@@ -287,6 +311,18 @@ export default function CompanyMembersPage() {
                   </td>
                   <td className="px-3 py-2 text-text-secondary">
                     {member.two_factor_enabled ? 'On' : '—'}
+                  </td>
+                  <td className="px-3 py-2">
+                    {team[member.user_id] ? (
+                      <CrewCell
+                        member={team[member.user_id]}
+                        laborItems={laborItems}
+                        onChanged={refresh}
+                        onNotice={setCrewNotice}
+                      />
+                    ) : (
+                      <span className="text-xs text-text-tertiary">—</span>
+                    )}
                   </td>
                   <td className="px-3 py-2 text-right">
                     <button

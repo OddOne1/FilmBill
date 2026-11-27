@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import * as Popover from '@radix-ui/react-popover'
-import { Bell, ShieldCheck, Settings } from 'lucide-react'
+import { Bell, ShieldCheck, Settings, Users } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useNotificationStore } from '@/stores/notification-store'
@@ -26,6 +26,8 @@ import type { Notification, NotificationType } from '@/types'
 // alongside its backend enum case.
 const notificationIcons: Record<NotificationType, React.ElementType> = {
   account: ShieldCheck,
+  // R2: "<name> wants to work as crew".
+  team: Users,
 }
 
 /** "9+" above nine, nothing at all at zero. */
