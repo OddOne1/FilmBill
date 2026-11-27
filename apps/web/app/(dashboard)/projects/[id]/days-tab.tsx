@@ -14,11 +14,13 @@ import {
   todayIso,
   type IsoDate,
 } from '@/lib/calendar-dates'
-import type { BlockChange, BlockCreate, CalendarStrip, Project, ProjectCalendar } from '@/types'
+import type { BlockChange, BlockCreate, CalendarStrip, CrewStripCounts, Project, ProjectCalendar, ProjectCrew } from '@/types'
+import { usePermissions } from '@/hooks/use-permissions'
 import { DAY_TYPES } from '../projects-chrome'
 import { BookedDays, CreateStripForm, DayStripsList } from './calendar/calendar-parts'
 import { MonthGrid } from './calendar/month-grid'
 import { StripPanel, type StripActions } from './calendar/strip-panel'
+import { StripCrew } from './calendar/strip-crew'
 import { countsSentence, typeColour, typeLabel } from './calendar/shared'
 
 /**
@@ -50,14 +52,40 @@ export function DaysTab({
   project,
   canEdit,
   onChanged,
+  openStripId = null,
 }: {
   project: Project
   canEdit: boolean
   onChanged: () => void
+  /** Open this strip's panel (the Crew tab's "Open on the calendar"). */
+  openStripId?: string | null
 }) {
   const [calendar, setCalendar] = React.useState<ProjectCalendar | null>(null)
   const [month, setMonth] = React.useState<string | null>(null)
-  const [selectedId, setSelectedId] = React.useState<string | null>(null)
+  const [selectedId, setSelectedId] = React.useState<string | null>(openStripId)
+  // B2c-1: crew on the strips. Needs parties.view as well (D111: staff see
+  // the calendar, not who is on it).
+  const { can, active } = usePermissions()
+  const canSeeCrew = can('projects.view') && can('parties.view')
+  const canSeeRates = can('budgets.view')
+  const [crew, setCrew] = React.useState<ProjectCrew | null>(null)
+  const loadCrew = React.useCallback(async () => {
+    if (!canSeeCrew) return
+    try {
+      setCrew(await api.get<ProjectCrew>(`/projects/${project.id}/crew`))
+    } catch {
+      // The calendar works without the crew; the panel says so.
+      setCrew(null)
+    }
+  }, [canSeeCrew, project.id])
+  React.useEffect(() => {
+    void loadCrew()
+  }, [loadCrew])
+  const crewCounts = React.useMemo(() => {
+    const map: Record<string, CrewStripCounts> = {}
+    for (const entry of crew?.strips ?? []) map[entry.block_id] = entry.counts
+    return map
+  }, [crew])
   /** The day a click on a strip landed on: the panel opens with it. */
   const [focusDate, setFocusDate] = React.useState<IsoDate | null>(null)
   const [pick, setPick] = React.useState<{ from: IsoDate; to: IsoDate } | null>(null)
@@ -75,10 +103,15 @@ export function DaysTab({
       const fetched = await api.get<ProjectCalendar>(`/projects/${project.id}/calendar`)
       setCalendar(fetched)
       setError(null)
-      setMonth((current) => current ?? initialMonth(fetched, today))
+      setMonth((current) => {
+        if (current) return current
+        const opened = openStripId ? fetched.strips.find((strip) => strip.id === openStripId) : null
+        return opened ? opened.start_date.slice(0, 7) : initialMonth(fetched, today)
+      })
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : 'Could not load the calendar')
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.id, today])
 
   React.useEffect(() => {
@@ -112,6 +145,8 @@ export function DaysTab({
         const change = await call()
         apply(change)
         onChanged()
+        // A strip that moved may now clash, or stop clashing.
+        void loadCrew()
         return change
       } catch (err) {
         setError(err instanceof ApiError ? err.detail : failure)
@@ -120,7 +155,7 @@ export function DaysTab({
         setBusy(false)
       }
     },
-    [apply, onChanged],
+    [apply, onChanged, loadCrew],
   )
 
   const resize = React.useCallback(
@@ -305,6 +340,7 @@ export function DaysTab({
                 onMove={move}
                 onResize={(strip, start, end) => void resize(strip, start, end)}
                 onShowDay={setDayOpen}
+                crewCounts={crewCounts}
               />
               <div className="mt-3 min-w-0">
                 <BookedDays
@@ -339,7 +375,19 @@ export function DaysTab({
                 canEdit={canEdit}
                 actions={actions}
                 onClose={() => setSelectedId(null)}
-              />
+              >
+                {canSeeCrew && selected.kind === 'strip' && (
+                  <StripCrew
+                    projectId={project.id}
+                    strip={selected}
+                    crew={crew?.strips.find((entry) => entry.block_id === selected.id) ?? null}
+                    canEdit={canEdit}
+                    canSeeRates={canSeeRates}
+                    currency={active?.default_currency ?? 'EUR'}
+                    onChanged={loadCrew}
+                  />
+                )}
+              </StripPanel>
             )}
           </div>
 

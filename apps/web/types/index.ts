@@ -281,6 +281,25 @@ export type PartyCrewRoles = Schemas['PartyCrewRolesResponse']
 export type CrewRoleCreate = Schemas['CrewRoleCreate']
 export type CrewRoleUpdate = Schemas['CrewRoleUpdate']
 
+// ─── Crew on the calendar (B2c-1) ───────────────────────────────────────────
+//
+// A person on a strip, scheduled then booked. `day_rate` is null without
+// `budgets.view`; clashes are warnings with the sentence to show.
+
+export type CrewAssignment = Schemas['CrewAssignmentResponse']
+export type CrewAssignmentDay = Schemas['CrewAssignmentDayResponse']
+export type CrewClash = Schemas['CrewClashResponse']
+export type CrewStripCounts = Schemas['CrewStripCounts']
+export type ProjectCrew = Schemas['ProjectCrewResponse']
+export type ProjectCrewStrip = Schemas['ProjectCrewStrip']
+export type CrewAssignmentsCreated = Schemas['CrewAssignmentsCreated']
+export type CrewBulkStatusResult = Schemas['CrewBulkStatusResult']
+export type CrewAvailability = Schemas['AvailabilityResponse']
+export type CrewAvailabilityPerson = Schemas['AvailabilityPerson']
+export type CrewAvailabilityDay = Schemas['AvailabilityDay']
+export type CrewUnavailabilityList = Schemas['UnavailabilityList']
+export type CrewUnavailability = Schemas['UnavailabilityResponse']
+
 // ─── Gear (B2b) ─────────────────────────────────────────────────────────────
 //
 // A device holds the quantity owned (what planning uses); its units hold the

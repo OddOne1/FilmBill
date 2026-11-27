@@ -106,6 +106,9 @@ function mockApi() {
   vi.mocked(api.get).mockImplementation(async (path: string) => {
     if (path === '/projects/p1') return makeProject() as never
     if (path === '/projects/p1/calendar') return current as never
+    // B2c-1: the crew on the strips, in the API's own shape (none here).
+    if (path === '/projects/p1/crew') return { project_id: 'p1', rates_visible: true, strips: [] } as never
+    if (path === '/crew/roles') return { used: [], catalog: [], labor_items: [] } as never
     return [] as never
   })
 }

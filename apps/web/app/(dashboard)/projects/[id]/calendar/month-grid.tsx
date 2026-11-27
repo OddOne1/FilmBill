@@ -1,8 +1,8 @@
 'use client'
 
 import * as React from 'react'
-import { Plane } from 'lucide-react'
-import type { CalendarStrip } from '@/types'
+import { AlertTriangle, Plane } from 'lucide-react'
+import type { CalendarStrip, CrewStripCounts } from '@/types'
 import { cn } from '@/lib/utils'
 import {
   addDays,
@@ -16,6 +16,7 @@ import {
   type IsoDate,
 } from '@/lib/calendar-dates'
 import { dateAtPointer, dayByDate, stripName, typeColour, typeLabel, typeText } from './shared'
+import { crewCountsText } from './strip-crew'
 
 /**
  * The month grid: weeks as rows, Monday first, strips drawn as bars across
@@ -58,6 +59,9 @@ export interface MonthGridProps {
   onMove: (strip: CalendarStrip, start: IsoDate) => void
   onResize: (strip: CalendarStrip, start: IsoDate, end: IsoDate) => void
   onShowDay: (date: IsoDate) => void
+  /** B2c-1: crew per strip id, from `GET /projects/{id}/crew` — the badge
+   *  "4 booked · 2 scheduled" and a marker when somebody has a clash. */
+  crewCounts?: Record<string, CrewStripCounts>
 }
 
 export function MonthGrid(props: MonthGridProps) {
@@ -250,6 +254,7 @@ export function MonthGrid(props: MonthGridProps) {
                   week={week}
                   canEdit={canEdit && segment.strip.kind === 'strip'}
                   selected={props.selectedStripId === segment.strip.id}
+                  crew={props.crewCounts?.[segment.strip.id] ?? null}
                   dragging={draggingId === segment.strip.id}
                   onPointerDown={(event, kind) => {
                     if (event.button !== 0) return
@@ -284,6 +289,7 @@ function StripBar({
   week,
   canEdit,
   selected,
+  crew,
   dragging,
   onPointerDown,
   onOpen,
@@ -292,6 +298,7 @@ function StripBar({
   week: IsoDate[]
   canEdit: boolean
   selected: boolean
+  crew: CrewStripCounts | null
   dragging: boolean
   onPointerDown: (event: React.PointerEvent, kind: 'move' | 'start' | 'end') => void
   onOpen: (date: IsoDate | null) => void
@@ -367,6 +374,14 @@ function StripBar({
             {strip.location && <span className="font-normal opacity-90">{where}</span>}
           </span>
           {strip.kind === 'day' && <span className="sr-only"> ({typeLabel(strip.type)} day)</span>}
+          {crew && (crew.booked > 0 || crew.scheduled > 0) && (
+            <span data-testid="strip-crew-badge" className="ml-1.5 shrink-0 rounded bg-black/25 px-1 font-normal">
+              {crewCountsText(crew)}
+            </span>
+          )}
+          {crew && crew.with_clashes > 0 && (
+            <AlertTriangle data-testid="strip-crew-clash-marker" aria-label="Crew clash" className="ml-1 h-3 w-3 shrink-0" />
+          )}
         </span>
       )}
       {canEdit && !continuesLeft && (

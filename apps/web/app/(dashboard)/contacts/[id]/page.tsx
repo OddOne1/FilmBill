@@ -8,6 +8,7 @@ import { api, ApiError } from '@/lib/api'
 import { RolePicker } from '@/components/shared/role-picker'
 import { HierarchyTab } from '../hierarchy'
 import { CrewRolesSection } from './crew-roles'
+import { UnavailabilitySection } from './unavailability'
 import {
   PersonNameFields,
   personNamePayload,
@@ -242,6 +243,9 @@ export default function PartyDetailPage() {
               canEdit={canEdit}
               onChanged={() => void refresh()}
             />
+          )}
+          {tab === 'basics' && party.is_crew && (
+            <UnavailabilitySection partyId={party.id} partyName={party.name} canEdit={canEdit} />
           )}
           {tab === 'addresses' && (
             <AddressesTab party={party} resolved={resolved} canEdit={canEdit} onSaved={refresh} />

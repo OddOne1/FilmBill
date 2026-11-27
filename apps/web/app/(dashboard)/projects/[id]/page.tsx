@@ -17,20 +17,23 @@ import {
 } from '../projects-chrome'
 import { DaysTab } from './days-tab'
 import { BudgetsTab } from './budgets-tab'
+import { CrewTab } from './crew-tab'
 
 /**
- * One project: Overview · Days · Budgets.
+ * One project: Overview · Days · Crew · Budgets. The Crew tab is there for
+ * a role that may see contacts (D111: staff see the calendar, not the crew).
  *
  * The status has its own control because it has its own endpoint (and its
  * own audit action): "went active on the 3rd" is a different question from
  * "somebody corrected the name".
  */
 
-type Tab = 'overview' | 'days' | 'budgets'
+type Tab = 'overview' | 'days' | 'crew' | 'budgets'
 
-const TABS: { key: Tab; label: string }[] = [
+const TABS: { key: Tab; label: string; needsParties?: boolean }[] = [
   { key: 'overview', label: 'Overview' },
   { key: 'days', label: 'Days' },
+  { key: 'crew', label: 'Crew', needsParties: true },
   { key: 'budgets', label: 'Budgets' },
 ]
 
@@ -42,6 +45,7 @@ export default function ProjectDetailPage() {
   const [project, setProject] = React.useState<Project | null>(null)
   const [error, setError] = React.useState<string | null>(null)
   const [tab, setTab] = React.useState<Tab>('overview')
+  const [openStripId, setOpenStripId] = React.useState<string | null>(null)
 
   const load = React.useCallback(async () => {
     try {
@@ -100,7 +104,7 @@ export default function ProjectDetailPage() {
           {access.loaded && !access.canEdit && <ProjectsReadOnlyNotice />}
 
           <nav aria-label="Project" className="mt-5 flex gap-1 border-b border-border">
-            {TABS.map((entry) => (
+            {TABS.filter((entry) => !entry.needsParties || access.canViewParties).map((entry) => (
               <button
                 key={entry.key}
                 type="button"
@@ -127,7 +131,16 @@ export default function ProjectDetailPage() {
             />
           )}
           {tab === 'days' && (
-            <DaysTab project={project} canEdit={access.canEdit} onChanged={load} />
+            <DaysTab project={project} canEdit={access.canEdit} onChanged={load} openStripId={openStripId} />
+          )}
+          {tab === 'crew' && access.canViewParties && (
+            <CrewTab
+              project={project}
+              onOpenStrip={(stripId) => {
+                setOpenStripId(stripId)
+                setTab('days')
+              }}
+            />
           )}
           {tab === 'budgets' && <BudgetsTab project={project} />}
         </>

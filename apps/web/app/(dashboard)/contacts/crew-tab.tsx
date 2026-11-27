@@ -11,6 +11,7 @@ import { useCompanyStore } from '@/stores/company-store'
 import type { CrewMember, CrewPage, CrewRoleSuggestions } from '@/types'
 import { QuickAdd } from './quick-add'
 import { CrewImport } from './crew-import'
+import { CrewAvailabilityView } from './crew-availability'
 
 /**
  * Contacts → Crew: the people who can be booked on a production (UI-1
@@ -53,6 +54,9 @@ export function CrewTab({ search, includeInactive }: { search: string; includeIn
   const canEdit = can('parties.edit')
   const canSeeRates = can('budgets.view')
   const currency = active?.default_currency ?? 'EUR'
+  // B2c-1: the list, or the availability grid (needs projects.view too).
+  const canSeeAvailability = can('projects.view')
+  const [view, setView] = React.useState<'people' | 'availability'>('people')
   const [minRate, setMinRate] = React.useState('')
   const [maxRate, setMaxRate] = React.useState('')
 
@@ -119,6 +123,28 @@ export function CrewTab({ search, includeInactive }: { search: string; includeIn
 
   return (
     <div data-testid="crew-tab">
+      {canSeeAvailability && (
+        <div role="tablist" aria-label="Crew view" className="mt-4 inline-flex rounded-md border border-border p-0.5 text-xs">
+          {(['people', 'availability'] as const).map((entry) => (
+            <button
+              key={entry}
+              type="button"
+              role="tab"
+              aria-selected={view === entry}
+              data-testid={`crew-view-${entry}`}
+              onClick={() => setView(entry)}
+              className={view === entry ? 'rounded bg-bg-tertiary px-2 py-1 text-text-primary' : 'px-2 py-1 text-text-secondary'}
+            >
+              {entry === 'people' ? 'People' : 'Availability'}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {view === 'availability' && canSeeAvailability ? (
+        <CrewAvailabilityView laborItems={roles.labor_items ?? []} canSeeRates={canSeeRates} currency={currency} />
+      ) : (
+      <>
       <div role="toolbar" aria-label="Crew" className="mt-4 flex flex-wrap items-center gap-2">
         {canEdit && (
           <>
@@ -280,6 +306,8 @@ export function CrewTab({ search, includeInactive }: { search: string; includeIn
             {page.total} {page.total === 1 ? 'person' : 'people'}
           </p>
         </>
+      )}
+      </>
       )}
     </div>
   )
