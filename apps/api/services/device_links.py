@@ -30,6 +30,7 @@ from ..models.device import (
     ASSOCIATION_MODES,
     ASSOCIATION_PRICINGS,
     Device,
+    DeviceAlternative,
     DeviceAssociation,
 )
 from . import audit
@@ -326,4 +327,160 @@ def remove_dependency(db: Session, link: DeviceAssociation, *, actor: audit.Acto
         before,
         audit.snapshot(link, ASSOCIATION_AUDITED),
         fields=ASSOCIATION_AUDITED,
+    )
+
+
+# ─── Alternatives (B2b-2 part 4) ────────────────────────────────────────────
+#
+# One-directional and ordered. "Also add the reverse" is a separate,
+# explicit choice: adding B to A's list writes nothing on B unless asked.
+
+ALTERNATIVE_AUDITED = ("device_id", "alternative_device_id", "position", "note", "price_hint", "is_active")
+
+
+def alternatives_of(db: Session, device_id: uuid.UUID) -> list[DeviceAlternative]:
+    return (
+        db.query(DeviceAlternative)
+        .filter(DeviceAlternative.device_id == device_id, DeviceAlternative.is_active.is_(True))
+        .order_by(DeviceAlternative.position, DeviceAlternative.created_at, DeviceAlternative.id)
+        .all()
+    )
+
+
+def _clean(value: Optional[str]) -> Optional[str]:
+    return (value or "").strip() or None
+
+
+def _append_alternative(
+    db: Session,
+    device: Device,
+    alternative: Device,
+    *,
+    actor: audit.Actor,
+    note: Optional[str],
+    price_hint: Optional[str],
+) -> DeviceAlternative:
+    if device.id == alternative.id:
+        raise DeviceError(
+            f"{device.name} cannot be its own alternative. Pick a similar device, "
+            f"such as another camera."
+        )
+    existing = (
+        db.query(DeviceAlternative)
+        .filter(
+            DeviceAlternative.device_id == device.id,
+            DeviceAlternative.alternative_device_id == alternative.id,
+            DeviceAlternative.is_active.is_(True),
+        )
+        .first()
+    )
+    if existing is not None:
+        raise DeviceConflict(
+            f"{alternative.name} is already an alternative for {device.name}. Change its "
+            f"note in that row instead."
+        )
+    current = alternatives_of(db, device.id)
+    row = DeviceAlternative(
+        company_id=device.company_id,
+        device_id=device.id,
+        alternative_device_id=alternative.id,
+        position=(max((entry.position for entry in current), default=-1) + 1),
+        note=_clean(note),
+        price_hint=_clean(price_hint),
+        is_active=True,
+    )
+    db.add(row)
+    db.flush()
+    audit.record(
+        db,
+        actor,
+        row,
+        "device_alternative.created",
+        None,
+        audit.snapshot(row, ALTERNATIVE_AUDITED),
+        fields=ALTERNATIVE_AUDITED,
+    )
+    return row
+
+
+def add_alternative(
+    db: Session,
+    device: Device,
+    *,
+    actor: audit.Actor,
+    alternative_device_id: uuid.UUID,
+    note: Optional[str] = None,
+    price_hint: Optional[str] = None,
+    also_reverse: bool = False,
+) -> tuple[DeviceAlternative, Optional[DeviceAlternative]]:
+    """`(the link, the reverse link or None)`. The reverse is written only
+    when asked for, and skipped when it already exists."""
+    alternative = device_in_company(db, device.company_id, alternative_device_id)
+    if not alternative.is_active:
+        raise DeviceError(f"{alternative.name} is archived. Reactivate it before offering it as an alternative.")
+    row = _append_alternative(db, device, alternative, actor=actor, note=note, price_hint=price_hint)
+    reverse = None
+    if also_reverse:
+        has_reverse = (
+            db.query(DeviceAlternative)
+            .filter(
+                DeviceAlternative.device_id == alternative.id,
+                DeviceAlternative.alternative_device_id == device.id,
+                DeviceAlternative.is_active.is_(True),
+            )
+            .first()
+        )
+        if has_reverse is None:
+            reverse = _append_alternative(db, alternative, device, actor=actor, note=None, price_hint=None)
+    return row, reverse
+
+
+def update_alternative(db: Session, row: DeviceAlternative, *, actor: audit.Actor, changes: dict) -> None:
+    if not row.is_active:
+        raise DeviceError("This alternative was removed. Add it again instead.")
+    before = audit.snapshot(row, ALTERNATIVE_AUDITED)
+    for field in ("note", "price_hint"):
+        if field in changes:
+            setattr(row, field, _clean(changes[field]))
+    after = audit.snapshot(row, ALTERNATIVE_AUDITED)
+    if audit.diff(before, after, fields=ALTERNATIVE_AUDITED):
+        audit.record(db, actor, row, "device_alternative.updated", before, after, fields=ALTERNATIVE_AUDITED)
+
+
+def move_alternative(db: Session, device: Device, row: DeviceAlternative, *, actor: audit.Actor, direction: str) -> None:
+    """One place up or down. The order before and after is in the event."""
+    current = alternatives_of(db, device.id)
+    index = next(i for i, entry in enumerate(current) if entry.id == row.id)
+    target = index - 1 if direction == "up" else index + 1
+    if target < 0 or target >= len(current):
+        return
+    before = [str(entry.alternative_device_id) for entry in current]
+    current[index], current[target] = current[target], current[index]
+    for position, entry in enumerate(current):
+        entry.position = position
+    db.flush()
+    audit.record(
+        db,
+        actor,
+        row,
+        "device_alternative.reordered",
+        {"order": before},
+        {"order": [str(entry.alternative_device_id) for entry in current]},
+        fields=("order",),
+    )
+
+
+def remove_alternative(db: Session, row: DeviceAlternative, *, actor: audit.Actor) -> None:
+    if not row.is_active:
+        return
+    before = audit.snapshot(row, ALTERNATIVE_AUDITED)
+    row.is_active = False
+    audit.record(
+        db,
+        actor,
+        row,
+        "device_alternative.removed",
+        before,
+        audit.snapshot(row, ALTERNATIVE_AUDITED),
+        fields=ALTERNATIVE_AUDITED,
     )

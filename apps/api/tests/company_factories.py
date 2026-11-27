@@ -1055,3 +1055,19 @@ def make_device_association(db, company: Company, device, associated, *, quantit
     db.commit()
     db.refresh(row)
     return row
+
+
+def make_device_alternative(db, company: Company, device, alternative, *, position: int = 0):
+    """`alternative` can stand in for `device` (B2b-2), written directly."""
+    from apps.api.models.device import DeviceAlternative
+
+    row = DeviceAlternative(
+        company_id=company.id,
+        device_id=device.id,
+        alternative_device_id=alternative.id,
+        position=position,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row

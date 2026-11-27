@@ -317,3 +317,57 @@ class DeviceAssociation(CompanyScoped, Base):
         Index("ix_device_associations_associated", "associated_device_id"),
         Index("ix_device_associations_origin", "origin_association_id"),
     )
+
+
+class DeviceAlternative(CompanyScoped, Base):
+    """`alternative_device` can stand in for `device` — offered when the
+    device is overbooked or somebody wants something similar (SCOPE §4.4.5).
+
+    **One-directional**: the Alexa 35 listing the Venice 2 does not make the
+    Venice list the Alexa; the screen offers "also add the reverse". An
+    ordered list per device (`position`), each with an optional note
+    ("needs a different mount") and a free-text price hint ("about +150 per
+    day"). Used by B2c's overbooking popup; never booked automatically.
+
+    Removing sets `is_active` false; there is no DELETE.
+    """
+
+    __tablename__ = "device_alternatives"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    device_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("devices.id", ondelete="RESTRICT"), nullable=False
+    )
+    alternative_device_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("devices.id", ondelete="RESTRICT"), nullable=False
+    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    price_hint: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "device_id <> alternative_device_id", name="ck_device_alternatives_not_self"
+        ),
+        Index(
+            "uq_device_alternatives_pair_active",
+            "device_id",
+            "alternative_device_id",
+            unique=True,
+            postgresql_where=text("is_active"),
+        ),
+        Index("ix_device_alternatives_device", "device_id"),
+        Index("ix_device_alternatives_alternative", "alternative_device_id"),
+    )

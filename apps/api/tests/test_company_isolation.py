@@ -44,6 +44,7 @@ from .company_factories import (
     make_budget_line,
     make_budget_section,
     make_device,
+    make_device_alternative,
     make_device_association,
     make_device_unit,
     make_company,
@@ -575,6 +576,15 @@ CASES: dict[str, object] = {
     },
     "PATCH /devices/{device_id}/dependencies/{association_id}": {"body": {"note": "Stolen"}},
     "POST /devices/{device_id}/dependencies/{association_id}/remove": {"body": None},
+    # B2b-2 part 4. B's device and B's own alternative row.
+    "GET /devices/{device_id}/alternatives": {"body": None},
+    "POST /devices/{device_id}/alternatives": {
+        "body": {},
+        "body_rows": {"alternative_device_id": "second_device_in_b"},
+    },
+    "PATCH /devices/{device_id}/alternatives/{alternative_id}": {"body": {"note": "Stolen"}},
+    "POST /devices/{device_id}/alternatives/{alternative_id}/move": {"body": {"direction": "down"}},
+    "POST /devices/{device_id}/alternatives/{alternative_id}/remove": {"body": None},
     # Pure arithmetic, no stored row — and still a company endpoint.
     "POST /calc/preview": {
         "body": {
@@ -613,6 +623,7 @@ OTHER_COMPANY_ROWS = {
     "{device_id}": "device_in_b",
     "{device_unit_id}": "device_unit_in_b",
     "{association_id}": "association_in_b",
+    "{alternative_id}": "alternative_in_b",
 }
 
 
@@ -745,6 +756,7 @@ def two_companies(pg_db):
     # B2b-2: a second device of B's, which B's camera depends on.
     second_device_in_b = make_device(pg_db, company_b, name="Their battery")
     association_in_b = make_device_association(pg_db, company_b, device_in_b, second_device_in_b)
+    alternative_in_b = make_device_alternative(pg_db, company_b, device_in_b, second_device_in_b)
     check_in_b = PartyVatCheck(
         company_id=company_b.id,
         party_id=party_in_b.id,
@@ -789,6 +801,7 @@ def two_companies(pg_db):
         "device_unit_in_b": device_unit_in_b,
         "second_device_in_b": second_device_in_b,
         "association_in_b": association_in_b,
+        "alternative_in_b": alternative_in_b,
     }
 
 

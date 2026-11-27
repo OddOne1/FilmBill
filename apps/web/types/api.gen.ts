@@ -3148,6 +3148,87 @@ export interface paths {
         patch: operations["update_device_devices__device_id__patch"];
         trace?: never;
     };
+    "/devices/{device_id}/alternatives": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Alternatives
+         * @description This device's ordered alternatives, and the devices that offer it.
+         */
+        get: operations["list_alternatives_devices__device_id__alternatives_get"];
+        put?: never;
+        /**
+         * Add Alternative
+         * @description Append an alternative. One direction only, unless `also_reverse`.
+         */
+        post: operations["add_alternative_devices__device_id__alternatives_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/devices/{device_id}/alternatives/{alternative_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Alternative */
+        patch: operations["update_alternative_devices__device_id__alternatives__alternative_id__patch"];
+        trace?: never;
+    };
+    "/devices/{device_id}/alternatives/{alternative_id}/move": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move Alternative
+         * @description One place up or down; audited as `device_alternative.reordered`.
+         */
+        post: operations["move_alternative_devices__device_id__alternatives__alternative_id__move_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/devices/{device_id}/alternatives/{alternative_id}/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Remove Alternative
+         * @description The row goes inactive; no DELETE.
+         */
+        post: operations["remove_alternative_devices__device_id__alternatives__alternative_id__remove_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/devices/{device_id}/archive": {
         parameters: {
             query?: never;
@@ -4897,6 +4978,38 @@ export interface components {
              * @default false
              */
             two_factor_required: boolean;
+        };
+        /** AlternativeCreate */
+        AlternativeCreate: {
+            /**
+             * Also Reverse
+             * @default false
+             */
+            also_reverse: boolean;
+            /**
+             * Alternative Device Id
+             * Format: uuid
+             */
+            alternative_device_id: string;
+            /** Note */
+            note?: string | null;
+            /** Price Hint */
+            price_hint?: string | null;
+        };
+        /** AlternativeMove */
+        AlternativeMove: {
+            /**
+             * Direction
+             * @enum {string}
+             */
+            direction: "up" | "down";
+        };
+        /** AlternativeUpdate */
+        AlternativeUpdate: {
+            /** Note */
+            note?: string | null;
+            /** Price Hint */
+            price_hint?: string | null;
         };
         /**
          * AuditEventPage
@@ -7947,6 +8060,46 @@ export interface components {
             quantity_per_parent?: number | null;
             /** Show On Documents */
             show_on_documents?: boolean | null;
+        };
+        /** DeviceAlternativeResponse */
+        DeviceAlternativeResponse: {
+            alternative: components["schemas"]["DeviceRef"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            device: components["schemas"]["DeviceRef"];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Note */
+            note?: string | null;
+            /** Position */
+            position: number;
+            /** Price Hint */
+            price_hint?: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * DeviceAlternatives
+         * @description `alternatives`: this device's ordered list. `offered_by`: the devices
+         *     that list this one (the reverse lookup; not the same thing — links are
+         *     one-directional).
+         */
+        DeviceAlternatives: {
+            /** Alternatives */
+            alternatives: components["schemas"]["DeviceAlternativeResponse"][];
+            /** Offered By */
+            offered_by: components["schemas"]["DeviceAlternativeResponse"][];
+            /** Reverse Added */
+            reverse_added?: boolean | null;
         };
         /**
          * DeviceCounts
@@ -16980,6 +17133,186 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DeviceDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_alternatives_devices__device_id__alternatives_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceAlternatives"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_alternative_devices__device_id__alternatives_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlternativeCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceAlternatives"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_alternative_devices__device_id__alternatives__alternative_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                device_id: string;
+                alternative_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlternativeUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceAlternatives"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    move_alternative_devices__device_id__alternatives__alternative_id__move_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                device_id: string;
+                alternative_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlternativeMove"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceAlternatives"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_alternative_devices__device_id__alternatives__alternative_id__remove_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                device_id: string;
+                alternative_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceAlternatives"];
                 };
             };
             /** @description Validation Error */

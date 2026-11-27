@@ -295,6 +295,8 @@ export type DeviceRef = Schemas['DeviceRef']
 export type DeviceDependency = Schemas['DeviceDependencyResponse']
 export type DeviceDependencies = Schemas['DeviceDependencies']
 export type DependencyHint = Schemas['DependencyHint']
+export type DeviceAlternative = Schemas['DeviceAlternativeResponse']
+export type DeviceAlternatives = Schemas['DeviceAlternatives']
 /** `active` · `needs_check` · `in_repair` · `lost` · `retired` · `sold`. */
 export type UnitStatus = DeviceUnit['status']
 

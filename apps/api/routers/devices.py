@@ -31,7 +31,7 @@ from ..billing.resources.device_csv import (
 from ..database import get_db
 from ..middleware.company import Membership, require
 from ..models.catalog import Item, RentalFactorGroup
-from ..models.device import UNIT_REMOVED, Device, DeviceAssociation, DeviceUnit
+from ..models.device import UNIT_REMOVED, Device, DeviceAlternative, DeviceAssociation, DeviceUnit
 from ..models.party import Party
 from ..schemas.device import (
     DeviceCounts,
@@ -43,7 +43,12 @@ from ..schemas.device import (
     DevicePage,
     DeviceRentalPrices,
     DeviceRentalWrite,
+    AlternativeCreate,
+    AlternativeMove,
+    AlternativeUpdate,
     CatalogItemRef,
+    DeviceAlternativeResponse,
+    DeviceAlternatives,
     DependencyCreate,
     DependencyHint,
     DependencyHintRow,
@@ -991,3 +996,152 @@ def remove_dependency(
     device_links.remove_dependency(db, link, actor=audit.actor_from(request, membership=membership))
     db.commit()
     return _dependencies(db, device)
+
+
+# ─── Alternatives (B2b-2 part 4) ────────────────────────────────────────────
+
+
+def _alternative_rows(db: Session, rows: list[DeviceAlternative]) -> list[DeviceAlternativeResponse]:
+    refs = device_refs(db, {row.device_id for row in rows} | {row.alternative_device_id for row in rows})
+    return [
+        DeviceAlternativeResponse(
+            id=row.id,
+            device=refs[row.device_id],
+            alternative=refs[row.alternative_device_id],
+            position=row.position,
+            note=row.note,
+            price_hint=row.price_hint,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+        )
+        for row in rows
+    ]
+
+
+def _alternatives(db: Session, device: Device, reverse_added: Optional[bool] = None) -> DeviceAlternatives:
+    offered_by = (
+        db.query(DeviceAlternative)
+        .filter(DeviceAlternative.alternative_device_id == device.id, DeviceAlternative.is_active.is_(True))
+        .order_by(DeviceAlternative.created_at, DeviceAlternative.id)
+        .all()
+    )
+    return DeviceAlternatives(
+        alternatives=_alternative_rows(db, device_links.alternatives_of(db, device.id)),
+        offered_by=_alternative_rows(db, offered_by),
+        reverse_added=reverse_added,
+    )
+
+
+def _alternative_or_404(db: Session, membership: Membership, device: Device, alternative_id: uuid.UUID) -> DeviceAlternative:
+    row = (
+        scoped(db.query(DeviceAlternative), membership)
+        .filter(DeviceAlternative.id == alternative_id, DeviceAlternative.device_id == device.id)
+        .first()
+    )
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alternative not found")
+    return row
+
+
+@router.get("/devices/{device_id}/alternatives", response_model=DeviceAlternatives)
+def list_alternatives(
+    device_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    membership: Membership = Depends(require("devices.view")),
+):
+    """This device's ordered alternatives, and the devices that offer it."""
+    return _alternatives(db, _device_or_404(db, membership, device_id))
+
+
+@router.post(
+    "/devices/{device_id}/alternatives",
+    response_model=DeviceAlternatives,
+    status_code=status.HTTP_201_CREATED,
+)
+def add_alternative(
+    device_id: uuid.UUID,
+    body: AlternativeCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    membership: Membership = Depends(require("devices.edit")),
+):
+    """Append an alternative. One direction only, unless `also_reverse`."""
+    device = _device_or_404(db, membership, device_id)
+    try:
+        _, reverse = device_links.add_alternative(
+            db,
+            device,
+            actor=audit.actor_from(request, membership=membership),
+            alternative_device_id=body.alternative_device_id,
+            note=body.note,
+            price_hint=body.price_hint,
+            also_reverse=body.also_reverse,
+        )
+    except LookupError as error:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from None
+    except device_service.DeviceConflict as error:
+        db.rollback()
+        _refuse(error, status.HTTP_409_CONFLICT)
+    except device_service.DeviceError as error:
+        db.rollback()
+        _refuse(error, status.HTTP_422_UNPROCESSABLE_ENTITY)
+    db.commit()
+    return _alternatives(db, device, reverse_added=(reverse is not None) if body.also_reverse else None)
+
+
+@router.patch("/devices/{device_id}/alternatives/{alternative_id}", response_model=DeviceAlternatives)
+def update_alternative(
+    device_id: uuid.UUID,
+    alternative_id: uuid.UUID,
+    body: AlternativeUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    membership: Membership = Depends(require("devices.edit")),
+):
+    device = _device_or_404(db, membership, device_id)
+    row = _alternative_or_404(db, membership, device, alternative_id)
+    try:
+        device_links.update_alternative(
+            db, row, actor=audit.actor_from(request, membership=membership), changes=body.model_dump(exclude_unset=True)
+        )
+    except device_service.DeviceError as error:
+        db.rollback()
+        _refuse(error, status.HTTP_422_UNPROCESSABLE_ENTITY)
+    db.commit()
+    return _alternatives(db, device)
+
+
+@router.post("/devices/{device_id}/alternatives/{alternative_id}/move", response_model=DeviceAlternatives)
+def move_alternative(
+    device_id: uuid.UUID,
+    alternative_id: uuid.UUID,
+    body: AlternativeMove,
+    request: Request,
+    db: Session = Depends(get_db),
+    membership: Membership = Depends(require("devices.edit")),
+):
+    """One place up or down; audited as `device_alternative.reordered`."""
+    device = _device_or_404(db, membership, device_id)
+    row = _alternative_or_404(db, membership, device, alternative_id)
+    if not row.is_active:
+        _refuse(ValueError("This alternative was removed. Add it again instead."), status.HTTP_422_UNPROCESSABLE_ENTITY)
+    device_links.move_alternative(db, device, row, actor=audit.actor_from(request, membership=membership), direction=body.direction)
+    db.commit()
+    return _alternatives(db, device)
+
+
+@router.post("/devices/{device_id}/alternatives/{alternative_id}/remove", response_model=DeviceAlternatives)
+def remove_alternative(
+    device_id: uuid.UUID,
+    alternative_id: uuid.UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    membership: Membership = Depends(require("devices.edit")),
+):
+    """The row goes inactive; no DELETE."""
+    device = _device_or_404(db, membership, device_id)
+    row = _alternative_or_404(db, membership, device, alternative_id)
+    device_links.remove_alternative(db, row, actor=audit.actor_from(request, membership=membership))
+    db.commit()
+    return _alternatives(db, device)

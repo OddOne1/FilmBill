@@ -684,7 +684,7 @@ describe('the Dependencies tab', () => {
     fireEvent.click(await screen.findByTestId('dependency-add-open'))
     const dialog = await screen.findByTestId('dependency-dialog')
     expect(within(dialog).getByTestId('dependency-add-why')).toHaveTextContent('Pick the device it needs.')
-    const options = await within(dialog).findAllByTestId('dependency-option')
+    const options = await within(dialog).findAllByTestId('device-picker-option')
     expect(options.map((option) => option.textContent)).not.toContain(expect.stringContaining('Alexa 35'))
     fireEvent.click(within(dialog).getByRole('option', { name: /Battery V-Mount/ }))
     fireEvent.change(within(dialog).getByTestId('dependency-add-quantity'), { target: { value: '2' } })
@@ -752,5 +752,115 @@ describe('the Dependencies tab', () => {
     expect(row).toHaveTextContent('Always')
     expect(within(row).queryByTestId('dependency-mode')).not.toBeInTheDocument()
     expect(screen.queryByTestId('dependency-add-open')).not.toBeInTheDocument()
+  })
+})
+
+describe('the Alternatives tab', () => {
+  const ref = (id: string, name: string) => ({ id, name, category: null, is_active: true, thumbnail_url: null })
+  const row = (id: string, name: string, position: number, extra: Record<string, unknown> = {}) => ({
+    id,
+    device: ref('d1', 'Alexa 35'),
+    alternative: ref(`dev-${id}`, name),
+    position,
+    note: null,
+    price_hint: null,
+    created_at: '2026-11-26T10:00:00Z',
+    updated_at: '2026-11-26T10:00:00Z',
+    ...extra,
+  })
+
+  function routeAlternatives(alternatives: unknown) {
+    const base = vi.mocked(api.get).getMockImplementation()!
+    vi.mocked(api.get).mockImplementation(async (path: string) => {
+      if (path === '/devices/d1/alternatives') return alternatives
+      if (path.startsWith('/devices?')) {
+        return {
+          devices: [
+            { ...device(), units: undefined },
+            { ...device({ id: 'm1', name: 'Alexa Mini LF' }), units: undefined },
+          ],
+          total: 2,
+          categories: [],
+        }
+      }
+      return base(path)
+    })
+  }
+
+  async function openTab() {
+    render(<DevicePage />)
+    fireEvent.click(await screen.findByTestId('device-tab-alternatives'))
+  }
+
+  it('shows the list in order, moves send the direction, and the first cannot go up', async () => {
+    routeAlternatives({
+      alternatives: [row('r1', 'Alexa Mini LF', 0, { note: 'needs a different mount' }), row('r2', 'Sony Venice 2', 1)],
+      offered_by: [row('r9', 'Alexa 35', 0, { device: ref('v1', 'Sony Venice 2') })],
+      reverse_added: null,
+    })
+    vi.mocked(api.post).mockResolvedValue({
+      alternatives: [row('r2', 'Sony Venice 2', 0), row('r1', 'Alexa Mini LF', 1)],
+      offered_by: [],
+      reverse_added: null,
+    })
+    await openTab()
+    const rows = await screen.findAllByTestId('alternative-row')
+    expect(rows.map((entry) => entry.textContent)).toEqual([
+      expect.stringContaining('Alexa Mini LF'),
+      expect.stringContaining('Sony Venice 2'),
+    ])
+    expect(within(rows[0]).getByTestId('alternative-note')).toHaveValue('needs a different mount')
+    expect(within(rows[0]).getByTestId('alternative-up')).toBeDisabled()
+    expect(within(rows[1]).getByTestId('alternative-down')).toBeDisabled()
+    expect(screen.getByTestId('offered-by')).toHaveTextContent('Sony Venice 2')
+    fireEvent.click(within(rows[1]).getByTestId('alternative-up'))
+    await waitFor(() =>
+      expect(vi.mocked(api.post)).toHaveBeenCalledWith('/devices/d1/alternatives/r2/move', { direction: 'up' }),
+    )
+    await waitFor(() =>
+      expect(screen.getAllByTestId('alternative-row')[0]).toHaveTextContent('Sony Venice 2'),
+    )
+  })
+
+  it('adding sends one direction unless the reverse is ticked, and says what happened', async () => {
+    routeAlternatives({ alternatives: [], offered_by: [], reverse_added: null })
+    vi.mocked(api.post).mockResolvedValue({
+      alternatives: [row('r1', 'Alexa Mini LF', 0)],
+      offered_by: [],
+      reverse_added: true,
+    })
+    await openTab()
+    fireEvent.click(await screen.findByTestId('alternative-add-open'))
+    const dialog = await screen.findByTestId('alternative-dialog')
+    expect(within(dialog).getByTestId('alternative-add-reverse')).not.toBeChecked()
+    fireEvent.click(await within(dialog).findByRole('option', { name: /Alexa Mini LF/ }))
+    expect(within(dialog).getByTestId('alternative-add-reverse').parentElement).toHaveTextContent(
+      'Also add the reverse — Alexa 35 as an alternative for Alexa Mini LF',
+    )
+    fireEvent.click(within(dialog).getByTestId('alternative-add-reverse'))
+    fireEvent.change(within(dialog).getByTestId('alternative-add-hint'), { target: { value: 'about -200 per day' } })
+    fireEvent.click(within(dialog).getByTestId('alternative-add-save'))
+    await waitFor(() =>
+      expect(vi.mocked(api.post)).toHaveBeenCalledWith('/devices/d1/alternatives', {
+        alternative_device_id: 'm1',
+        note: null,
+        price_hint: 'about -200 per day',
+        also_reverse: true,
+      }),
+    )
+    expect(await screen.findByTestId('alternatives-notice')).toHaveTextContent(
+      'Alexa 35 is now an alternative for Alexa Mini LF too.',
+    )
+  })
+
+  it('staff see the alternatives and cannot change them', async () => {
+    seed(STAFF)
+    routeGets(device({ purchase_price: null, price_visible: false }))
+    routeAlternatives({ alternatives: [row('r1', 'Alexa Mini LF', 0, { note: 'PL mount' })], offered_by: [], reverse_added: null })
+    await openTab()
+    const entry = (await screen.findAllByTestId('alternative-row'))[0]
+    expect(entry).toHaveTextContent('PL mount')
+    expect(within(entry).queryByTestId('alternative-up')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('alternative-add-open')).not.toBeInTheDocument()
   })
 })

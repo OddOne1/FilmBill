@@ -371,3 +371,54 @@ class DependencyUpdate(BaseModel):
     pricing: Optional[Pricing] = None
     show_on_documents: Optional[bool] = None
     note: Optional[str] = Field(default=None, max_length=2000)
+
+
+# ─── Alternatives (B2b-2 part 4) ────────────────────────────────────────────
+
+
+class DeviceAlternativeResponse(BaseModel):
+    id: uuid.UUID
+    #: The device whose list this row is on.
+    device: DeviceRef
+    #: The device offered in its place.
+    alternative: DeviceRef
+    position: int
+    note: Optional[str] = None
+    price_hint: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class DeviceAlternatives(BaseModel):
+    """`alternatives`: this device's ordered list. `offered_by`: the devices
+    that list this one (the reverse lookup; not the same thing — links are
+    one-directional)."""
+
+    alternatives: list[DeviceAlternativeResponse]
+    offered_by: list[DeviceAlternativeResponse]
+    #: Set by an add with `also_reverse`: whether the reverse was written
+    #: (`false` when it already existed).
+    reverse_added: Optional[bool] = None
+
+
+class AlternativeCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    alternative_device_id: uuid.UUID
+    note: Optional[str] = Field(default=None, max_length=2000)
+    price_hint: Optional[str] = Field(default=None, max_length=255)
+    #: "Also add the reverse" — unticked by default.
+    also_reverse: bool = False
+
+
+class AlternativeUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    note: Optional[str] = Field(default=None, max_length=2000)
+    price_hint: Optional[str] = Field(default=None, max_length=255)
+
+
+class AlternativeMove(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    direction: Literal["up", "down"]

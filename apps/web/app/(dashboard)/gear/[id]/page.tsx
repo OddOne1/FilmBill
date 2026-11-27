@@ -12,6 +12,7 @@ import type { DeviceDetail } from '@/types'
 import { RentalPrices } from './rental-prices'
 import { UnitsTab } from './units-tab'
 import { DependenciesTab } from './dependencies-tab'
+import { AlternativesTab } from './alternatives-tab'
 import {
   AMBIGUOUS_AMOUNT,
   amountForApi,
@@ -192,18 +193,20 @@ export default function DevicePage() {
           )}
 
           {tab === 'dependencies' && <DependenciesTab device={device} canEdit={canEdit} />}
+          {tab === 'alternatives' && <AlternativesTab device={device} canEdit={canEdit} />}
         </>
       )}
     </div>
   )
 }
 
-type TabKey = 'details' | 'units' | 'dependencies'
+type TabKey = 'details' | 'units' | 'dependencies' | 'alternatives'
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: 'details', label: 'Details' },
   { key: 'units', label: 'Units' },
   { key: 'dependencies', label: 'Dependencies' },
+  { key: 'alternatives', label: 'Alternatives' },
 ]
 
 // ─── The form ────────────────────────────────────────────────────────────────

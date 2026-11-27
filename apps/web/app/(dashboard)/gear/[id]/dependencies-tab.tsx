@@ -4,8 +4,9 @@ import * as React from 'react'
 import Link from 'next/link'
 import * as Dialog from '@radix-ui/react-dialog'
 import { api, ApiError } from '@/lib/api'
-import type { DependencyHint, DeviceDependencies, DeviceDependency, DeviceDetail, DevicePage } from '@/types'
+import type { DependencyHint, DeviceDependencies, DeviceDependency, DeviceDetail } from '@/types'
 import { DeviceThumb } from '../gear-chrome'
+import { DevicePicker, useOtherDevices } from './device-picker'
 
 /**
  * The Dependencies tab (B2b-2, SCOPE §4.4.3 "associated items"): what this
@@ -267,8 +268,7 @@ function AddDependencyDialog({
   taken: Set<string>
   onAdded: (next: DeviceDependencies) => void
 }) {
-  const [devices, setDevices] = React.useState<DevicePage['devices']>([])
-  const [search, setSearch] = React.useState('')
+  const devices = useOtherDevices(open, device.id)
   const [chosen, setChosen] = React.useState<string | null>(null)
   const [quantity, setQuantity] = React.useState('1')
   const [mode, setMode] = React.useState<'always' | 'ask'>('always')
@@ -282,7 +282,6 @@ function AddDependencyDialog({
 
   React.useEffect(() => {
     if (!open) return
-    setSearch('')
     setChosen(null)
     setQuantity('1')
     setMode('always')
@@ -292,10 +291,6 @@ function AddDependencyDialog({
     setHint(null)
     setChoices({})
     setError(null)
-    api
-      .get<DevicePage>('/devices?limit=2000')
-      .then((page) => setDevices(page.devices))
-      .catch(() => setDevices([]))
   }, [open])
 
   const count = Number.parseInt(quantity, 10)
@@ -331,12 +326,6 @@ function AddDependencyDialog({
     }
   }, [chosen, count, quantityValid, device.id])
 
-  const candidates = devices.filter(
-    (row) =>
-      row.id !== device.id &&
-      row.is_active &&
-      (!search.trim() || row.name.toLowerCase().includes(search.trim().toLowerCase())),
-  )
   const chosenName = devices.find((row) => row.id === chosen)?.name
   const why = !chosen
     ? 'Pick the device it needs.'
@@ -394,35 +383,7 @@ function AddDependencyDialog({
             A device that goes out with {device.name}, such as its batteries.
           </Dialog.Description>
 
-          <input
-            aria-label="Find a device"
-            data-testid="dependency-search"
-            value={search}
-            placeholder="Find a device"
-            onChange={(event) => setSearch(event.target.value)}
-            className={`${field} mt-4 w-full`}
-          />
-          <ul role="listbox" aria-label="Devices" className="mt-2 max-h-48 overflow-y-auto rounded-md border border-border">
-            {candidates.map((row) => (
-              <li key={row.id}>
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={chosen === row.id}
-                  data-testid="dependency-option"
-                  onClick={() => setChosen(row.id)}
-                  className={`flex w-full items-center gap-2 px-2 py-1.5 text-left text-sm ${
-                    chosen === row.id ? 'bg-accent/10 text-text-primary' : 'text-text-secondary hover:bg-bg-tertiary'
-                  }`}
-                >
-                  <DeviceThumb url={row.thumbnail_url} name={row.name} size={24} />
-                  {row.name}
-                  {row.category && <span className="text-xs text-text-tertiary">{row.category}</span>}
-                </button>
-              </li>
-            ))}
-            {candidates.length === 0 && <li className="px-2 py-1.5 text-sm text-text-tertiary">No device matches.</li>}
-          </ul>
+          <DevicePicker devices={devices} chosen={chosen} onChoose={setChosen} />
 
           <div className="mt-4 flex flex-wrap items-end gap-3 text-xs text-text-secondary">
             <label>
