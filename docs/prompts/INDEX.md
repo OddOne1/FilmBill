@@ -35,7 +35,7 @@ from them. `docs/SCOPE.md` is where the product is decided.
 | B2b-2 | Gear completion: rental prices on the device, add-units popup, dependencies, alternatives, size, weight and a picture | [`34-filmbill-B2b2-gear-completion.md`](34-filmbill-B2b2-gear-completion.md) | `0fc9ab9`…closing commit | done — see notes |
 | R1 + B2c-1 | Crew roles and rates; crew assignments on the calendar (scheduled, then booked) | [`35-filmbill-R1-B2c1-crew-roles-rates-assignments.md`](35-filmbill-R1-B2c1-crew-roles-rates-assignments.md) | `4ccab1e`…closing commit | done — see notes |
 | B2c-2 | Gear bookings on strips: availability, overbooking with alternatives, dependencies | [`36-filmbill-B2c2-gear-bookings.md`](36-filmbill-B2c2-gear-bookings.md) | `4015a84`…closing commit | done — see notes |
-| R2 | Team members (people with a login) can also be crew | [`37-filmbill-R2-team-members-as-crew.md`](37-filmbill-R2-team-members-as-crew.md) | — | in progress |
+| R2 | Team members (people with a login) can also be crew | [`37-filmbill-R2-team-members-as-crew.md`](37-filmbill-R2-team-members-as-crew.md) | `a4707d1`…closing commit | done — see notes |
 | P0b | Foundations: companies, roles, number series, audit, money, codegen | [`03-filmbill-P0b-foundations.md`](03-filmbill-P0b-foundations.md) | — | superseded — split into P0b-0, P0b-1, P0b-2 |
 
 ---
@@ -1683,4 +1683,36 @@ the planner grid now shared with crew, the device's Bookings tab.
 - Not built (D141): specific units, check-out and return, packing lists,
   kits, sub-renting, prices and documents, revenue and ROI, the
   "dependencies changed, review?" notice, budget lines from bookings.
+- Not checked: the screens in a real browser.
+
+## R2 — team members (people with a login) can also be crew
+
+Full report: [`docs/reports/R2-report.md`](../reports/R2-report.md).
+
+**Built.** A login is linked to at most one person contact per company
+(`parties.user_id`, migration 0032); linking never merges anything (D142).
+Settings → Team (the members page, renamed) gets a Crew column: Not crew /
+Crew with role chips / Needs link; **Works as crew** links the one contact
+with the login's primary email only when the admin confirms it, or creates
+a crew contact from the login (tag "Team"); several matches are a choice
+(D143). Members switch themselves on under the new user menu → **My crew
+profile** and choose roles, never rates; their roles are self-reported
+until an admin confirms (D144). A member whose email is already a contact
+gets "A contact with your email already exists. An admin has to connect it
+to your login." and the admins a notification (type `team`). Team members
+are ordinary crew with a **Team** chip and a Team / Freelance filter (D145);
+**My schedule** shows their own bookings only (D146).
+
+**Numbers.** API 3427 passed, 30 skipped (3371 / 30 before); `-m realdb`
+1957 (1902); web 1025 / 86 files (1002 / 83). CI floors **3270 → 3325** and
+**1845 → 1899**.
+
+**Flagged.**
+- "Stop working as crew" is `POST /team/{user_id}/crew/stop`, not the
+  prompt's DELETE: the existing no-DELETE guard for crew paths refused it.
+- "Needs link" is derived (no link + a primary-email match), not stored.
+- The tax advisor has no crew profile (`/me/crew…` is a 404).
+- Not built (D147): own "not available" periods, name/email sync, members
+  confirming bookings, confirmation by link, pay or timesheets, automatic
+  unlink on revoke.
 - Not checked: the screens in a real browser.
