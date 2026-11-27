@@ -51,6 +51,7 @@ from .company_factories import (
     make_crew_assignment,
     make_crew_role,
     make_crew_unavailability,
+    make_gear_booking,
     make_item,
     make_item_category,
     make_number_series,
@@ -109,8 +110,10 @@ _SCOPED_PREFIXES = (
     # sixth time, named here for the same reason as the four above.
     "/crew",
     "/devices",
+    # B2c-2. The gear planner's availability — a seventh top-level path.
+    "/gear",
 )
-_SCOPED_EXACT = ("/companies", "/company", "/parties", "/projects", "/crew", "/devices")
+_SCOPED_EXACT = ("/companies", "/company", "/parties", "/projects", "/crew", "/devices", "/gear")
 
 
 def _is_company_scoped(path: str) -> bool:
@@ -571,6 +574,24 @@ CASES: dict[str, object] = {
         "body": {"status": "booked", "assignment_ids": ["00000000-0000-0000-0000-000000000000"]}
     },
     "GET /crew/availability": {"query": {"from": "2026-07-06", "to": "2026-07-12"}},
+    # B2c-2. Gear on B's calendar: B's project, strip, device and booking.
+    # Bodies name nil device ids: the project in the PATH is the boundary.
+    "GET /projects/{project_id}/gear": {"body": None},
+    "POST /projects/{project_id}/blocks/{block_id}/gear": {
+        "body": {"bookings": [{"device_id": "00000000-0000-0000-0000-000000000000"}]}
+    },
+    "POST /projects/{project_id}/blocks/{block_id}/gear/preview": {
+        "body": {"bookings": [{"device_id": "00000000-0000-0000-0000-000000000000"}]}
+    },
+    "PATCH /projects/{project_id}/gear/{booking_id}": {"body": {"quantity": 2}},
+    "POST /projects/{project_id}/gear/{booking_id}/status": {"body": {"status": "booked"}},
+    "POST /projects/{project_id}/gear/{booking_id}/remove": {"body": {"dependents": "cancel"}},
+    "POST /projects/{project_id}/gear/status": {
+        "body": {"status": "booked", "booking_ids": ["00000000-0000-0000-0000-000000000000"]}
+    },
+    "GET /devices/{device_id}/availability": {"query": {"from": "2026-07-06", "to": "2026-07-12"}},
+    "GET /devices/{device_id}/bookings": {"body": None},
+    "GET /gear/availability": {"query": {"from": "2026-07-06", "to": "2026-07-12"}},
     "GET /parties/{party_id}/unavailability": {"body": None},
     "POST /parties/{party_id}/unavailability": {
         "body": {"start_date": "2026-07-01", "end_date": "2026-07-02"}
@@ -673,6 +694,7 @@ OTHER_COMPANY_ROWS = {
     "{role_id}": "crew_role_in_b",
     "{assignment_id}": "crew_assignment_in_b",
     "{unavailability_id}": "unavailability_in_b",
+    "{booking_id}": "gear_booking_in_b",
 }
 
 
@@ -817,6 +839,10 @@ def two_companies(pg_db):
     unavailability_in_b = make_crew_unavailability(
         pg_db, company_b, party_in_b, block_in_b.start_date, block_in_b.start_date
     )
+    # B2c-2: B's camera booked on B's strip.
+    gear_booking_in_b = make_gear_booking(
+        pg_db, company_b, project_in_b, block_in_b, device_in_b, dates=[block_in_b.start_date]
+    )
     check_in_b = PartyVatCheck(
         company_id=company_b.id,
         party_id=party_in_b.id,
@@ -866,6 +892,7 @@ def two_companies(pg_db):
         "crew_role_in_b": crew_role_in_b,
         "crew_assignment_in_b": crew_assignment_in_b,
         "unavailability_in_b": unavailability_in_b,
+        "gear_booking_in_b": gear_booking_in_b,
     }
 
 

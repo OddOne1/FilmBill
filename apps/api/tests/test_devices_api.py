@@ -675,6 +675,10 @@ def _every_device_request(device_id, unit_id):
         ("patch", unit, {"notes": "staff"}, None),
         ("post", f"{unit}/remove", {"status": "retired", "reason": "staff"}, None),
         ("post", f"{unit}/reactivate", {}, None),
+        # B2c-2: where the device is booked, and how many are free. Staff
+        # read both (projects.view and devices.view); neither has a price.
+        ("get", f"{base}/availability?from=2026-07-06&to=2026-07-08", None, None),
+        ("get", f"{base}/bookings", None, None),
     ]
 
 
@@ -729,6 +733,12 @@ def test_staff_see_devices_and_counts_but_no_price_and_can_change_nothing(
             # The positive marker first: the API says the price is withheld…
             if url.endswith(".csv"):
                 assert response.content.decode("utf-8-sig").splitlines()[1].startswith("Alexa 35;Camera;3;;AX-1")
+            elif "/availability" in url or "/bookings" in url:
+                # A positive marker that it is the booking/availability
+                # answer; it has no price field at all.
+                body_json = response.json()
+                assert body_json["device_id"] == device["id"]
+                assert "owned" in body_json or "bookings" in body_json
             elif "dependencies" in url or "alternatives" in url:
                 # Link lists carry no price at all; the secrets check below
                 # is the whole assertion — after a positive marker that the

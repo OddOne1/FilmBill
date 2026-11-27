@@ -3279,6 +3279,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/devices/{device_id}/availability": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Device Availability
+         * @description Per day: owned, scheduled, booked, available (may be negative) and
+         *     who holds it; over the range the lowest day governs. At most 92 days.
+         */
+        get: operations["device_availability_devices__device_id__availability_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/devices/{device_id}/bookings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Device Bookings
+         * @description The device's open bookings in date order (first day), by project and
+         *     strip, with status.
+         */
+        get: operations["device_bookings_devices__device_id__bookings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/devices/{device_id}/dependencies": {
         parameters: {
             query?: never;
@@ -3641,6 +3683,27 @@ export interface paths {
          *     would restart from byte 0.
          */
         get: operations["serve_object_files_object__path__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/gear/availability": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Gear Availability
+         * @description Many devices at once, for the picker and the planner. Active devices
+         *     only, at most 500, by name.
+         */
+        get: operations["gear_availability_gear_availability_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4514,6 +4577,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{project_id}/blocks/{block_id}/gear": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Gear
+         * @description Several devices on a strip at once, `scheduled`, each with a quantity
+         *     and days (default: every day of the strip that is not `off`), their
+         *     `always` dependencies and the chosen `ask` ones. All or none.
+         *     Overbooking is listed in `warnings`, never refused.
+         */
+        post: operations["add_gear_projects__project_id__blocks__block_id__gear_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}/blocks/{block_id}/gear/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Gear
+         * @description What booking these devices would add — the devices, their `always`
+         *     dependencies with quantities, the chosen `ask` ones — with the numbers
+         *     before and after, and the `ask` dependencies still to choose. Nothing
+         *     is stored.
+         */
+        post: operations["preview_gear_projects__project_id__blocks__block_id__gear_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{project_id}/blocks/{block_id}/move": {
         parameters: {
             query?: never;
@@ -4825,6 +4934,114 @@ export interface paths {
          *     disappearing with it.
          */
         post: operations["remove_day_projects__project_id__days__day_id__remove_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}/gear": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Project Gear
+         * @description Per strip: the bookings with their warnings, counts in pieces and the
+         *     total weight. Removed (`cancelled`) bookings are not listed. No prices.
+         */
+        get: operations["project_gear_projects__project_id__gear_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}/gear/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set Gear Status Bulk
+         * @description "Mark selected as booked" for several bookings. The ones that cannot
+         *     take the change are listed and left alone.
+         */
+        post: operations["set_gear_status_bulk_projects__project_id__gear_status_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}/gear/{booking_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Gear
+         * @description Quantity, days, the device (a swap, e.g. to an alternative) and the
+         *     overbooking note. A parent's new quantity recalculates the dependents
+         *     that still follow it; a dependent changed by hand stops following.
+         */
+        patch: operations["update_gear_projects__project_id__gear__booking_id__patch"];
+        trace?: never;
+    };
+    "/projects/{project_id}/gear/{booking_id}/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Remove Gear
+         * @description Take the device off the strip: `cancelled` with an optional note,
+         *     never deleted. A parent with open dependents is removed only once
+         *     `dependents` says `cancel` (them too) or `keep` (as bookings of their
+         *     own); without it nothing changes and the answer lists them.
+         */
+        post: operations["remove_gear_projects__project_id__gear__booking_id__remove_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}/gear/{booking_id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set Gear Status
+         * @description scheduled → booked (by hand, the note says how), or back to scheduled
+         *     with a note. Cancelling is Remove.
+         */
+        post: operations["set_gear_status_projects__project_id__gear__booking_id__status_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -8936,6 +9153,52 @@ export interface components {
             reverse_added?: boolean | null;
         };
         /**
+         * DeviceAvailability
+         * @description A device over a range: the lowest day governs (SCOPE §4.4.7).
+         */
+        DeviceAvailability: {
+            /** Booked */
+            booked: number;
+            /** Category */
+            category?: string | null;
+            /**
+             * Days
+             * @default []
+             */
+            days: components["schemas"]["GearDay"][];
+            /**
+             * Device Id
+             * Format: uuid
+             */
+            device_id: string;
+            /** Min Available */
+            min_available: number;
+            /** Name */
+            name: string;
+            /** Overbooked */
+            overbooked: boolean;
+            /** Owned */
+            owned: number;
+            /** Scheduled */
+            scheduled: number;
+            /** Shortage */
+            shortage: number;
+            /** Thumbnail Url */
+            thumbnail_url?: string | null;
+            /** Worst Day */
+            worst_day?: string | null;
+        };
+        /** DeviceBookingsResponse */
+        DeviceBookingsResponse: {
+            /** Bookings */
+            bookings: components["schemas"]["GearBookingResponse"][];
+            /**
+             * Device Id
+             * Format: uuid
+             */
+            device_id: string;
+        };
+        /**
          * DeviceCounts
          * @description The two numbers and how they relate. Never an error, never corrected.
          *
@@ -9720,6 +9983,506 @@ export interface components {
              * @default false
              */
             confirm_open_commitment: boolean;
+        };
+        /**
+         * GearAlternativeOffer
+         * @description An alternative of an overbooked device, with its availability on the
+         *     same days.
+         */
+        GearAlternativeOffer: {
+            /**
+             * Alternative Id
+             * Format: uuid
+             */
+            alternative_id: string;
+            /**
+             * Device Id
+             * Format: uuid
+             */
+            device_id: string;
+            /** Enough */
+            enough: boolean;
+            /** Min Available */
+            min_available: number;
+            /** Name */
+            name: string;
+            /** Note */
+            note?: string | null;
+            /** Owned */
+            owned: number;
+            /** Position */
+            position: number;
+            /** Price Hint */
+            price_hint?: string | null;
+            /** Thumbnail Url */
+            thumbnail_url?: string | null;
+            /** Worst Day */
+            worst_day?: string | null;
+        };
+        /** GearAvailabilityResponse */
+        GearAvailabilityResponse: {
+            /** Devices */
+            devices: components["schemas"]["DeviceAvailability"][];
+            /**
+             * Range End
+             * Format: date
+             */
+            range_end: string;
+            /**
+             * Range Start
+             * Format: date
+             */
+            range_start: string;
+        };
+        /** GearBookingResponse */
+        GearBookingResponse: {
+            /** Added Via Booking Id */
+            added_via_booking_id?: string | null;
+            /** Added Via Device Name */
+            added_via_device_name?: string | null;
+            /** Association Id */
+            association_id?: string | null;
+            /**
+             * Block Id
+             * Format: uuid
+             */
+            block_id: string;
+            /** Booked By Name */
+            booked_by_name?: string | null;
+            /** Booked On */
+            booked_on?: string | null;
+            /** Category */
+            category?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Dates
+             * @default []
+             */
+            dates: string[];
+            /**
+             * Device Id
+             * Format: uuid
+             */
+            device_id: string;
+            /** Device Name */
+            device_name: string;
+            /**
+             * Follows Parent
+             * @default false
+             */
+            follows_parent: boolean;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Overbooking Note */
+            overbooking_note?: string | null;
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /** Project Name */
+            project_name: string;
+            /** Project Number */
+            project_number: string;
+            /** Quantity */
+            quantity: number;
+            /** Quantity Per Parent */
+            quantity_per_parent?: number | null;
+            /** Removal Note */
+            removal_note?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "scheduled" | "booked" | "cancelled";
+            /** Status Note */
+            status_note?: string | null;
+            /** Strip Name */
+            strip_name: string;
+            /** Thumbnail Url */
+            thumbnail_url?: string | null;
+            warning?: components["schemas"]["GearWarning"] | null;
+            /** Weight Kg */
+            weight_kg?: string | null;
+        };
+        /**
+         * GearBookingUpdate
+         * @description Only the fields sent change. `dates` replaces the ticked days;
+         *     `device_id` swaps the device (days and status kept).
+         */
+        GearBookingUpdate: {
+            /** Dates */
+            dates?: string[] | null;
+            /** Device Id */
+            device_id?: string | null;
+            /** Overbooking Note */
+            overbooking_note?: string | null;
+            /** Quantity */
+            quantity?: number | null;
+        };
+        /** GearBookingUpdated */
+        GearBookingUpdated: {
+            booking: components["schemas"]["GearBookingResponse"];
+            /** Message */
+            message?: string | null;
+            /**
+             * Recalculated
+             * @default []
+             */
+            recalculated: components["schemas"]["GearBookingResponse"][];
+            /**
+             * Stopped Following
+             * @default false
+             */
+            stopped_following: boolean;
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: components["schemas"]["GearWarning"][];
+        };
+        /** GearBookingsCreate */
+        GearBookingsCreate: {
+            /** Bookings */
+            bookings: components["schemas"]["GearNewBooking"][];
+        };
+        /** GearBookingsCreated */
+        GearBookingsCreated: {
+            /** Bookings */
+            bookings: components["schemas"]["GearBookingResponse"][];
+            /**
+             * Suggestions
+             * @default []
+             */
+            suggestions: components["schemas"]["GearSuggestion"][];
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: components["schemas"]["GearWarning"][];
+        };
+        /** GearBookingsPreview */
+        GearBookingsPreview: {
+            /** Bookings */
+            bookings: components["schemas"]["GearPlannedBooking"][];
+            /**
+             * Suggestions
+             * @default []
+             */
+            suggestions: components["schemas"]["GearSuggestion"][];
+        };
+        /** GearBulkSkipped */
+        GearBulkSkipped: {
+            /**
+             * Booking Id
+             * Format: uuid
+             */
+            booking_id: string;
+            /** Device Name */
+            device_name: string;
+            /** Reason */
+            reason: string;
+        };
+        /** GearBulkStatusChange */
+        GearBulkStatusChange: {
+            /** Booking Ids */
+            booking_ids: string[];
+            /** Note */
+            note?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "scheduled" | "booked";
+        };
+        /** GearBulkStatusResult */
+        GearBulkStatusResult: {
+            /**
+             * Bookings
+             * @default []
+             */
+            bookings: components["schemas"]["GearBookingResponse"][];
+            /** Changed */
+            changed: number;
+            /**
+             * Skipped
+             * @default []
+             */
+            skipped: components["schemas"]["GearBulkSkipped"][];
+        };
+        /** GearChosenDependency */
+        GearChosenDependency: {
+            /**
+             * Association Id
+             * Format: uuid
+             */
+            association_id: string;
+            /** Quantity */
+            quantity?: number | null;
+        };
+        /** GearDay */
+        GearDay: {
+            /** Available */
+            available: number;
+            /** Booked */
+            booked: number;
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /**
+             * Holders
+             * @default []
+             */
+            holders: components["schemas"]["GearHolder"][];
+            /** Overbooked */
+            overbooked: boolean;
+            /** Owned */
+            owned: number;
+            /** Scheduled */
+            scheduled: number;
+            /** Shortage */
+            shortage: number;
+        };
+        /**
+         * GearHolder
+         * @description A booking that holds the device: which project, which strip.
+         */
+        GearHolder: {
+            /**
+             * Block Id
+             * Format: uuid
+             */
+            block_id: string;
+            /**
+             * Booking Id
+             * Format: uuid
+             */
+            booking_id: string;
+            /**
+             * Dates
+             * @default []
+             */
+            dates: string[];
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /** Project Name */
+            project_name: string;
+            /** Project Number */
+            project_number: string;
+            /** Quantity */
+            quantity: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "scheduled" | "booked" | "cancelled";
+            /** Strip Name */
+            strip_name: string;
+        };
+        /** GearNewBooking */
+        GearNewBooking: {
+            /**
+             * Chosen Dependencies
+             * @default []
+             */
+            chosen_dependencies: components["schemas"]["GearChosenDependency"][];
+            /** Dates */
+            dates?: string[] | null;
+            /**
+             * Device Id
+             * Format: uuid
+             */
+            device_id: string;
+            /** Overbooking Note */
+            overbooking_note?: string | null;
+            /**
+             * Quantity
+             * @default 1
+             */
+            quantity: number;
+        };
+        /**
+         * GearPlannedBooking
+         * @description What a create would write: the device, or one of its dependencies.
+         */
+        GearPlannedBooking: {
+            /** Association Id */
+            association_id?: string | null;
+            /** Available After */
+            available_after: number;
+            /**
+             * Dates
+             * @default []
+             */
+            dates: string[];
+            /**
+             * Device Id
+             * Format: uuid
+             */
+            device_id: string;
+            /** Device Name */
+            device_name: string;
+            /** Min Available */
+            min_available: number;
+            /** Owned */
+            owned: number;
+            /** Parent Device Id */
+            parent_device_id?: string | null;
+            /** Quantity */
+            quantity: number;
+            /** Thumbnail Url */
+            thumbnail_url?: string | null;
+            /**
+             * Via
+             * @enum {string}
+             */
+            via: "direct" | "always" | "ask";
+        };
+        /** GearRemove */
+        GearRemove: {
+            /** Dependents */
+            dependents?: ("cancel" | "keep") | null;
+            /** Note */
+            note?: string | null;
+        };
+        /** GearRemoveResult */
+        GearRemoveResult: {
+            booking: components["schemas"]["GearBookingResponse"];
+            /**
+             * Dependents
+             * @default []
+             */
+            dependents: components["schemas"]["GearBookingResponse"][];
+            /** Dependents Choice */
+            dependents_choice?: ("cancel" | "keep") | null;
+            /** Question */
+            question?: string | null;
+            /** Removed */
+            removed: boolean;
+        };
+        /** GearStatusChange */
+        GearStatusChange: {
+            /** Note */
+            note?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "scheduled" | "booked";
+        };
+        /**
+         * GearStripCounts
+         * @description Pieces, not bookings: 2 cameras and 4 batteries are 6.
+         */
+        GearStripCounts: {
+            /**
+             * Booked
+             * @default 0
+             */
+            booked: number;
+            /**
+             * Overbooked
+             * @default 0
+             */
+            overbooked: number;
+            /**
+             * Scheduled
+             * @default 0
+             */
+            scheduled: number;
+        };
+        /**
+         * GearSuggestion
+         * @description An `ask` dependency: offered with its pre-calculated quantity, added
+         *     only when chosen.
+         */
+        GearSuggestion: {
+            /**
+             * Association Id
+             * Format: uuid
+             */
+            association_id: string;
+            /**
+             * Device Id
+             * Format: uuid
+             */
+            device_id: string;
+            /** Device Name */
+            device_name: string;
+            /** Note */
+            note?: string | null;
+            /**
+             * Parent Device Id
+             * Format: uuid
+             */
+            parent_device_id: string;
+            /** Parent Device Name */
+            parent_device_name: string;
+            /** Quantity */
+            quantity: number;
+            /** Quantity Per Parent */
+            quantity_per_parent: number;
+            /** Thumbnail Url */
+            thumbnail_url?: string | null;
+        };
+        /** GearWarning */
+        GearWarning: {
+            /**
+             * Alternatives
+             * @default []
+             */
+            alternatives: components["schemas"]["GearAlternativeOffer"][];
+            /**
+             * Booking Id
+             * Format: uuid
+             */
+            booking_id: string;
+            /** Dates */
+            dates: string[];
+            /**
+             * Device Id
+             * Format: uuid
+             */
+            device_id: string;
+            /** Device Name */
+            device_name: string;
+            /**
+             * Held By
+             * @default []
+             */
+            held_by: components["schemas"]["GearHolder"][];
+            /**
+             * Kind
+             * @default overbooked
+             * @constant
+             * @enum {string}
+             */
+            kind: "overbooked";
+            /** Message */
+            message: string;
+            /** Owned */
+            owned: number;
+            /** Quantity */
+            quantity: number;
+            /** Shortage */
+            shortage: number;
+            /**
+             * Worst Day
+             * Format: date
+             */
+            worst_day: string;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -11527,6 +12290,53 @@ export interface components {
             type: "prep" | "shoot" | "travel" | "wrap" | "post" | "office" | "off";
             /** Wrap Time */
             wrap_time?: string | null;
+        };
+        /** ProjectGearResponse */
+        ProjectGearResponse: {
+            counts: components["schemas"]["GearStripCounts"];
+            /** Items Without Weight */
+            items_without_weight: number;
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /** Strips */
+            strips: components["schemas"]["ProjectGearStrip"][];
+            /** Total Weight Kg */
+            total_weight_kg: string;
+        };
+        /** ProjectGearStrip */
+        ProjectGearStrip: {
+            /**
+             * Block Id
+             * Format: uuid
+             */
+            block_id: string;
+            /**
+             * Bookings
+             * @default []
+             */
+            bookings: components["schemas"]["GearBookingResponse"][];
+            counts: components["schemas"]["GearStripCounts"];
+            /**
+             * End Date
+             * Format: date
+             */
+            end_date: string;
+            /** Items Without Weight */
+            items_without_weight: number;
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /** Strip Name */
+            strip_name: string;
+            /** Total Weight Kg */
+            total_weight_kg: string;
+            /** Type */
+            type: string;
         };
         /** ProjectPage */
         ProjectPage: {
@@ -18416,6 +19226,75 @@ export interface operations {
             };
         };
     };
+    device_availability_devices__device_id__availability_get: {
+        parameters: {
+            query: {
+                from: string;
+                to: string;
+            };
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceAvailability"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    device_bookings_devices__device_id__bookings_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceBookingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_dependencies_devices__device_id__dependencies_get: {
         parameters: {
             query?: never;
@@ -19058,6 +19937,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    gear_availability_gear_availability_get: {
+        parameters: {
+            query: {
+                from: string;
+                to: string;
+                category?: string | null;
+                q?: string | null;
+            };
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GearAvailabilityResponse"];
                 };
             };
             /** @description Validation Error */
@@ -20666,6 +21581,82 @@ export interface operations {
             };
         };
     };
+    add_gear_projects__project_id__blocks__block_id__gear_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+                block_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GearBookingsCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GearBookingsCreated"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_gear_projects__project_id__blocks__block_id__gear_preview_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+                block_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GearBookingsCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GearBookingsPreview"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     move_block_projects__project_id__blocks__block_id__move_post: {
         parameters: {
             query?: never;
@@ -21264,6 +22255,190 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProjectDayResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    project_gear_projects__project_id__gear_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectGearResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_gear_status_bulk_projects__project_id__gear_status_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GearBulkStatusChange"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GearBulkStatusResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_gear_projects__project_id__gear__booking_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+                booking_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GearBookingUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GearBookingUpdated"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_gear_projects__project_id__gear__booking_id__remove_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+                booking_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["GearRemove"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GearRemoveResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_gear_status_projects__project_id__gear__booking_id__status_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+                booking_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GearStatusChange"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GearBookingResponse"];
                 };
             };
             /** @description Validation Error */

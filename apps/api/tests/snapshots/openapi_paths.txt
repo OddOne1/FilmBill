@@ -44,11 +44,14 @@ GET /devices
 GET /devices/export.csv
 GET /devices/{device_id}
 GET /devices/{device_id}/alternatives
+GET /devices/{device_id}/availability
+GET /devices/{device_id}/bookings
 GET /devices/{device_id}/dependencies
 GET /devices/{device_id}/dependencies/hint
 GET /email-settings
 GET /events/me
 GET /files/object/{path}
+GET /gear/availability
 GET /health
 GET /health/pdf
 GET /me/notifications
@@ -67,6 +70,7 @@ GET /projects/{project_id}/budgets
 GET /projects/{project_id}/calendar
 GET /projects/{project_id}/crew
 GET /projects/{project_id}/days
+GET /projects/{project_id}/gear
 GET /setup/status
 GET /site-settings
 GET /site-settings/logo-image
@@ -110,6 +114,7 @@ PATCH /projects/{project_id}
 PATCH /projects/{project_id}/blocks/{block_id}
 PATCH /projects/{project_id}/crew/{assignment_id}
 PATCH /projects/{project_id}/days/{day_id}
+PATCH /projects/{project_id}/gear/{booking_id}
 PATCH /site-settings
 PATCH /users/{user_id}
 PATCH /users/{user_id}/deactivate
@@ -230,6 +235,8 @@ POST /projects
 POST /projects/{project_id}/blocks
 POST /projects/{project_id}/blocks/{block_id}/crew
 POST /projects/{project_id}/blocks/{block_id}/duplicate
+POST /projects/{project_id}/blocks/{block_id}/gear
+POST /projects/{project_id}/blocks/{block_id}/gear/preview
 POST /projects/{project_id}/blocks/{block_id}/move
 POST /projects/{project_id}/blocks/{block_id}/remove
 POST /projects/{project_id}/blocks/{block_id}/resize
@@ -241,6 +248,9 @@ POST /projects/{project_id}/crew/{assignment_id}/status
 POST /projects/{project_id}/days
 POST /projects/{project_id}/days/range
 POST /projects/{project_id}/days/{day_id}/remove
+POST /projects/{project_id}/gear/status
+POST /projects/{project_id}/gear/{booking_id}/remove
+POST /projects/{project_id}/gear/{booking_id}/status
 POST /projects/{project_id}/status
 POST /setup/create-superadmin
 POST /site-settings/favicon-upload
