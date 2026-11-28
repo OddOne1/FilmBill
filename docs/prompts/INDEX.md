@@ -36,7 +36,7 @@ from them. `docs/SCOPE.md` is where the product is decided.
 | R1 + B2c-1 | Crew roles and rates; crew assignments on the calendar (scheduled, then booked) | [`35-filmbill-R1-B2c1-crew-roles-rates-assignments.md`](35-filmbill-R1-B2c1-crew-roles-rates-assignments.md) | `4ccab1e`…closing commit | done — see notes |
 | B2c-2 | Gear bookings on strips: availability, overbooking with alternatives, dependencies | [`36-filmbill-B2c2-gear-bookings.md`](36-filmbill-B2c2-gear-bookings.md) | `4015a84`…closing commit | done — see notes |
 | R2 | Team members (people with a login) can also be crew | [`37-filmbill-R2-team-members-as-crew.md`](37-filmbill-R2-team-members-as-crew.md) | `a4707d1`…closing commit | done — see notes |
-| L1 | Locations, hotels and hospitals as records, used on strips, days and crew | [`38-filmbill-L1-locations-and-hotels.md`](38-filmbill-L1-locations-and-hotels.md) | — | in progress |
+| L1 | Locations, hotels and hospitals as records, used on strips, days and crew | [`38-filmbill-L1-locations-and-hotels.md`](38-filmbill-L1-locations-and-hotels.md) | `5aa1e88`…closing commit | done — see notes |
 | P0b | Foundations: companies, roles, number series, audit, money, codegen | [`03-filmbill-P0b-foundations.md`](03-filmbill-P0b-foundations.md) | — | superseded — split into P0b-0, P0b-1, P0b-2 |
 
 ---
@@ -1717,3 +1717,38 @@ are ordinary crew with a **Team** chip and a Team / Freelance filter (D145);
   confirming bookings, confirmation by link, pay or timesheets, automatic
   unlink on revoke.
 - Not checked: the screens in a real browser.
+
+## L1 — locations, hotels and hospitals as records
+
+Full report: [`docs/reports/L1-report.md`](../reports/L1-report.md).
+
+**Built.** One `locations` table of four kinds — shoot, hotel, hospital,
+other — with an address (B1.2 country dropdown), pasted coordinates (both
+or neither, six decimals), phone, email, website, emergency phone, access
+notes, notes and an on-site contact; archived, never deleted (D148,
+migration 0033). Links to maps and directions are built by the API without
+a key or a network call (`billing/planning/map_links.py`, D152). A strip has
+a location, a day may have its own (effective = the day's, else the
+strip's), a strip holds hotels and each crew person's hotel is picked from
+them, with a **Route** link (D149, migration 0034). Hotels only for roles
+that see crew (D150). A hospital's verification is cleared by an address or
+phone change (D151). The old free text stays as "Old text" with **Create
+location from this text** (D153). Sidebar **Locations** after Gear.
+
+**Numbers.** API 3564 passed, 30 skipped (3427 / 30 before); `-m realdb`
+2056 (1957); web 1050 / 87 files (1025 / 86). CI floors **3325 → 3458** and
+**1899 → 1995**.
+
+**Flagged.**
+- A strip's or a day's location must be shoot or other; a hotel or a
+  hospital there is refused with a sentence.
+- With no hotels listed on a strip any hotel is accepted; taking one off
+  the list leaves the people already sleeping there unchanged.
+- The on-site contact's name is shown only with `parties.view`.
+- `POST /locations/coordinates` reads a pasted pair without saving (what
+  the form shows back); not in the prompt's list, added so the web never
+  parses.
+- Not built (D154): weather, nearest hospital, geocoding, static maps,
+  several locations per day, call sheet and PDF, CSV import, copying a
+  contact's address, travel time, gate codes (never stored).
+- Not checked: the screens and the map links in a real browser.
