@@ -37,7 +37,7 @@ from them. `docs/SCOPE.md` is where the product is decided.
 | B2c-2 | Gear bookings on strips: availability, overbooking with alternatives, dependencies | [`36-filmbill-B2c2-gear-bookings.md`](36-filmbill-B2c2-gear-bookings.md) | `4015a84`…closing commit | done — see notes |
 | R2 | Team members (people with a login) can also be crew | [`37-filmbill-R2-team-members-as-crew.md`](37-filmbill-R2-team-members-as-crew.md) | `a4707d1`…closing commit | done — see notes |
 | L1 | Locations, hotels and hospitals as records, used on strips, days and crew | [`38-filmbill-L1-locations-and-hotels.md`](38-filmbill-L1-locations-and-hotels.md) | `5aa1e88`…closing commit | done — see notes |
-| L1b | Locations inside the project, map links, hotel stays with confirmations, hospitals via OpenStreetMap | [`39-filmbill-L1b-project-locations-hotel-stays-hospitals.md`](39-filmbill-L1b-project-locations-hotel-stays-hospitals.md) | — | open — spec written, not built |
+| L1b | Locations inside the project, map links, hotel stays with confirmations, hospitals via OpenStreetMap | [`39-filmbill-L1b-project-locations-hotel-stays-hospitals.md`](39-filmbill-L1b-project-locations-hotel-stays-hospitals.md) | `19c921d`…closing commit | done — see notes |
 | P0b | Foundations: companies, roles, number series, audit, money, codegen | [`03-filmbill-P0b-foundations.md`](03-filmbill-P0b-foundations.md) | — | superseded — split into P0b-0, P0b-1, P0b-2 |
 
 ---
@@ -1753,3 +1753,31 @@ location from this text** (D153). Sidebar **Locations** after Gear.
   several locations per day, call sheet and PDF, CSV import, copying a
   contact's address, travel time, gate codes (never stored).
 - Not checked: the screens and the map links in a real browser.
+
+## L1b — locations inside the project, map links, hotel guests, hospitals
+
+Full report: [`docs/reports/L1b-report.md`](../reports/L1b-report.md).
+
+**Built** (Mathias's review of L1, 2026-11-28). Locations live in each
+project's **Locations** tab and are re-picked across projects; no sidebar
+item (D155). A place has a set of uses — shooting location, hotel, hospital,
+restaurant, other — and a strip or day needs the shooting use (D156). Pasted
+Google/Apple Maps links fill position, name and address; short share links
+are opened once; an OpenStreetMap map view (D157). Hotels list their guests
+with their own dates, replacing L1's strip hotels and crew hotel (D158);
+booking confirmations as a file or pasted text (D159). Hospitals are found
+on OpenStreetMap per group of shooting locations within 30 km and added with
+a click (D160). Migration 0035.
+
+**Numbers.** API 3658 passed, 30 skipped (3564 / 30); `-m realdb` 2116
+(2056); web 1051 / 87 files (1050 / 87). CI floors **3458 → 3549** and
+**1995 → 2053**.
+
+**Flagged.**
+- API and web are one commit (`5c90c55`): the regenerated types tie them.
+- The server needs outbound HTTPS to the short-link hosts and
+  `overpass-api.de`; without it those two say so in a sentence.
+- Not checked: the real Google/Apple short links and the real Overpass API
+  (local stand-ins only), the screens in a browser.
+- Not built (D161): geocoding, confirmation emails forwarded in, reading
+  booking details, room prices, static maps for the PDF, travel times.
