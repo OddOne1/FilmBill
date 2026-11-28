@@ -157,6 +157,25 @@ describe('the Gear entry (B2b)', () => {
   })
 })
 
+describe('the Locations entry (L1)', () => {
+  it('is shown to staff, who hold locations.view, right after Gear', () => {
+    seed(['company.view', 'projects.view', 'devices.view', 'locations.view'], 'staff')
+    render(<Sidebar collapsed={false} onToggle={() => {}} />)
+
+    const link = screen.getByRole('link', { name: /Locations/ })
+    expect(link).toHaveAttribute('href', '/locations')
+    const labels = screen.getAllByRole('link').map((a) => a.textContent?.trim())
+    expect(labels.indexOf('Locations')).toBe(labels.indexOf('Gear') + 1)
+  })
+
+  it('is hidden from a tax advisor', () => {
+    seed(['company.view', 'archive.view'], 'tax_advisor')
+    render(<Sidebar collapsed={false} onToggle={() => {}} />)
+
+    expect(screen.queryByText('Locations')).not.toBeInTheDocument()
+  })
+})
+
 describe('no Crew entry (UI-1)', () => {
   beforeEach(() => {
     useNotificationStore.setState({ unreadCount: 0, fetchNotifications: vi.fn() } as never)

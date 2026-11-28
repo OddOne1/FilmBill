@@ -11,6 +11,7 @@ import { datesBetween, dayLabel, weekdayLetter, type IsoDate } from '@/lib/calen
 import type { BlockChange, BlockUpdate, CalendarDay, CalendarStrip, ProjectDayUpdate } from '@/types'
 import { DAY_TYPES } from '../../projects-chrome'
 import { countsSentence, dayByDate, stripName, typeColour, typeLabel, typeText } from './shared'
+import { DayLocation, StripHotels, StripLocationSection } from './strip-locations'
 
 /**
  * The side panel for one strip: its fields, its days as chips, and the
@@ -184,14 +185,6 @@ export function StripPanel({
               <span>{typeLabel(strip.type)}</span>
             )}
           </Field>
-          <Field label="Location">
-            <TextInput
-              label="Strip location"
-              value={strip.location ?? ''}
-              canEdit={canEdit}
-              onSave={(value) => patch({ location: value || null })}
-            />
-          </Field>
           <Field label="Start">
             <TextInput
               label="Strip start"
@@ -237,6 +230,13 @@ export function StripPanel({
             />
           </Field>
         </div>
+      )}
+
+      {isStrip && (
+        <>
+          <StripLocationSection strip={strip} base={base} canEdit={canEdit} actions={actions} selected={selected} />
+          <StripHotels strip={strip} base={base} canEdit={canEdit} actions={actions} />
+        </>
       )}
 
       <div className="mt-4">
@@ -588,13 +588,7 @@ function DayDetails({
             )}
           </Field>
           <Field label="Location" className="col-span-2">
-            <TextInput
-              label={`Location ${day.date}`}
-              value={day.location ?? ''}
-              placeholder={strip.location ?? undefined}
-              canEdit={canEdit}
-              onSave={(value) => save({ location: value || null })}
-            />
+            <DayLocation projectId={projectId} day={day} canEdit={canEdit} actions={actions} />
           </Field>
           <Field label="Start time">
             <TextInput
@@ -624,7 +618,7 @@ function DayDetails({
               onSave={(value) => save({ notes: value || null })}
             />
           </Field>
-          {(!day.call_time && day.effective_call_time) || (!day.location && day.effective_location) ? (
+          {!day.call_time && day.effective_call_time ? (
             <p className="col-span-2 text-[11px] text-text-tertiary">Empty fields show the strip&rsquo;s default.</p>
           ) : null}
         </div>

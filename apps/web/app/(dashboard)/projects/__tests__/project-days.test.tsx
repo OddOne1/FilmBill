@@ -421,17 +421,20 @@ describe('the strip panel', () => {
     )
   })
 
-  it('shows a day’s own details with the strip’s default as the placeholder', async () => {
+  it('shows the strip’s old location text read-only, and a day’s location is a pick, not text (L1)', async () => {
     vi.mocked(api.patch).mockResolvedValue({} as never)
     await openDays()
     fireEvent.click(bar('b-main'))
     const panel = await screen.findByTestId('strip-panel')
+    // The B2a free text stays, shown as "Old text" with the manual conversion.
+    expect(within(panel).getByTestId('strip-location-old-text')).toHaveTextContent('Old text: Kaprun')
+    expect(within(panel).getByTestId('strip-location-from-text')).toHaveTextContent('Create location from this text')
     fireEvent.click(within(panel).getByLabelText('3 March 2026, Shoot'))
-    const location = within(screen.getByTestId('day-details')).getByLabelText('Location 2026-03-03') as HTMLInputElement
-    expect(location.placeholder).toBe('Kaprun')
-    fireEvent.change(location, { target: { value: 'Zell am See' } })
-    fireEvent.blur(location)
-    await waitFor(() => expect(api.patch).toHaveBeenCalledWith('/projects/p1/days/b-main-2026-03-03', { location: 'Zell am See' }))
+    const details = within(screen.getByTestId('day-details'))
+    // No free-text field any more: the day picks a location record.
+    expect(details.queryByLabelText('Location 2026-03-03')).toBeNull()
+    expect(details.getByLabelText('Different location for 2026-03-03')).toBeInTheDocument()
+    expect(api.patch).not.toHaveBeenCalled()
   })
 })
 

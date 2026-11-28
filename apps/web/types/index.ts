@@ -563,3 +563,20 @@ export type GearAvailability = Schemas['GearAvailabilityResponse']
 export type DeviceAvailability = Schemas['DeviceAvailability']
 export type GearDay = Schemas['GearDay']
 export type DeviceBookings = Schemas['DeviceBookingsResponse']
+
+// ─── Locations (L1) ─────────────────────────────────────────────────────────
+//
+// Shoot, hotel, hospital, other. Map and directions links are the API's and
+// are only rendered; coordinates are read by the API (`/locations/coordinates`).
+// A hotel reaches only a caller who may see crew.
+
+export type Location = Schemas['LocationResponse']
+export type LocationKind = Location['kind']
+export type LocationRef = Schemas['LocationRef']
+export type LocationList = Schemas['LocationList']
+export type LocationChange = Schemas['LocationChange']
+export type LocationCreate = Schemas['LocationCreate']
+export type LocationUpdate = Schemas['LocationUpdate']
+export type LocationUsage = Schemas['LocationUsage']
+export type LocationUse = Schemas['LocationUse']
+export type CoordinatesParsed = Schemas['CoordinatesParsed']

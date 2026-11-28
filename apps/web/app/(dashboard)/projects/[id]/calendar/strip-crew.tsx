@@ -18,6 +18,8 @@ import type {
   CrewClash,
   CrewRoleSuggestions,
   CrewStripCounts,
+  LocationList,
+  LocationRef,
   PartyPage,
   ProjectCrewStrip,
 } from '@/types'
@@ -101,6 +103,21 @@ export function StripCrew({
   }, [])
 
   const assignments = crew?.assignments ?? []
+
+  // L1. With no hotels listed on the strip, any hotel may be picked: load
+  // them once, only when somebody here may see hotels and the list is empty.
+  const [otherHotels, setOtherHotels] = React.useState<LocationRef[]>([])
+  const wantsOthers = canEdit && assignments.some((a) => a.hotel_visible) && (strip.hotels ?? []).length === 0
+  React.useEffect(() => {
+    if (!wantsOthers) {
+      setOtherHotels([])
+      return
+    }
+    api
+      .get<LocationList>('/locations?kind=hotel')
+      .then((list) => setOtherHotels(list.locations))
+      .catch(() => setOtherHotels([]))
+  }, [wantsOthers, strip.id])
 
   const act = async <T,>(call: () => Promise<T>, failure: string): Promise<T | null> => {
     setBusy(true)
@@ -243,6 +260,16 @@ export function StripCrew({
                 {assignment.status}
               </span>
             </div>
+            {assignment.hotel_visible && (
+              <CrewHotel
+                projectId={projectId}
+                strip={strip}
+                assignment={assignment}
+                canEdit={canEdit}
+                otherHotels={otherHotels}
+                act={act}
+              />
+            )}
             {openId === assignment.id && (
               <AssignmentEditor
                 projectId={projectId}
@@ -284,6 +311,81 @@ export function StripCrew({
         </div>
       )}
     </section>
+  )
+}
+
+/** L1. Where this person sleeps, and the Route from there to the location
+ *  of their first day — the API's `route_link`, rendered as it came. */
+function CrewHotel({
+  projectId,
+  strip,
+  assignment,
+  canEdit,
+  otherHotels,
+  act,
+}: {
+  projectId: string
+  strip: CalendarStrip
+  assignment: CrewAssignment
+  canEdit: boolean
+  otherHotels: LocationRef[]
+  act: <T>(call: () => Promise<T>, failure: string) => Promise<T | null>
+}) {
+  const listed = strip.hotels ?? []
+  const choices = listed.length > 0 ? listed : otherHotels
+  const current = assignment.hotel
+  const options = current && !choices.some((h) => h.id === current.id) ? [current, ...choices] : choices
+  return (
+    <div data-testid="strip-crew-hotel" className="mt-1 flex flex-wrap items-center gap-2 text-xs text-text-secondary">
+      <span>Hotel</span>
+      {canEdit ? (
+        <select
+          aria-label={`Hotel of ${assignment.party_name}`}
+          value={current?.id ?? ''}
+          onChange={(event) =>
+            void act(
+              () =>
+                api.put(`/projects/${projectId}/crew/${assignment.id}/hotel`, {
+                  location_id: event.target.value || null,
+                }),
+              'The hotel could not be saved. Try again.',
+            )
+          }
+          className="h-7 rounded-md border border-border bg-bg-primary px-1.5 text-xs text-text-primary"
+        >
+          <option value="">No hotel</option>
+          {options.map((hotel) => (
+            <option key={hotel.id} value={hotel.id}>
+              {hotel.name}
+              {hotel.is_active ? '' : ' (archived)'}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <span data-testid="strip-crew-hotel-name" className="text-text-primary">
+          {current ? `${current.name}${current.is_active ? '' : ' (archived)'}` : 'No hotel'}
+        </span>
+      )}
+      {current && !current.is_active && canEdit && (
+        <span data-testid="strip-crew-hotel-archived" className="rounded bg-bg-tertiary px-1 text-2xs text-text-tertiary">
+          archived
+        </span>
+      )}
+      {assignment.route_link && (
+        <a
+          data-testid="strip-crew-route"
+          href={assignment.route_link}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-accent hover:underline"
+        >
+          Route
+        </a>
+      )}
+      {canEdit && listed.length === 0 && choices.length === 0 && (
+        <span className="text-2xs text-text-tertiary">No hotels yet. Add one under Locations, then pick it here.</span>
+      )}
+    </div>
   )
 }
 
