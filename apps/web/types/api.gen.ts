@@ -3755,6 +3755,145 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/locations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Locations
+         * @description Search finds the name, the city, the street and the zip.
+         */
+        get: operations["list_locations_locations_get"];
+        put?: never;
+        /** Create Location */
+        post: operations["create_location_locations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/locations/coordinates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Parse Coordinates
+         * @description Read a pasted pair the way a save would, without saving anything:
+         *     what the Coordinates field shows back while somebody types.
+         */
+        post: operations["parse_coordinates_locations_coordinates_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/locations/{location_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Location */
+        get: operations["read_location_locations__location_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Location
+         * @description A change to the address, coordinates, phone or emergency phone of a
+         *     verified hospital clears its verification, and the answer says so.
+         */
+        patch: operations["update_location_locations__location_id__patch"];
+        trace?: never;
+    };
+    "/locations/{location_id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Archive Location */
+        post: operations["archive_location_locations__location_id__archive_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/locations/{location_id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restore Location */
+        post: operations["restore_location_locations__location_id__restore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/locations/{location_id}/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Location Usage
+         * @description Every strip, day, strip hotel list and crew row that uses it, with
+         *     the project — what archiving it warns about.
+         */
+        get: operations["location_usage_locations__location_id__usage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/locations/{location_id}/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Verify Location
+         * @description Hospitals only: the caller, today, and an optional note.
+         */
+        post: operations["verify_location_locations__location_id__verify_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/crew": {
         parameters: {
             query?: never;
@@ -8483,6 +8622,28 @@ export interface components {
             /** Website */
             website?: string | null;
         };
+        /** CoordinatesParse */
+        CoordinatesParse: {
+            /** Text */
+            text: string;
+        };
+        /**
+         * CoordinatesParsed
+         * @description Either both numbers and `display` ("Latitude 48.2082, Longitude
+         *     16.3738"), or `refusal` with the sentence why not.
+         */
+        CoordinatesParsed: {
+            /** Display */
+            display?: string | null;
+            /** Latitude */
+            latitude?: string | null;
+            /** Longitude */
+            longitude?: string | null;
+            /** Ok */
+            ok: boolean;
+            /** Refusal */
+            refusal?: string | null;
+        };
         /**
          * CostEntryDuplicate
          * @description An entry that looks like the one just written. **Not** a refusal.
@@ -11151,6 +11312,234 @@ export interface components {
             variance: string;
             /** Variance Percent */
             variance_percent?: string | null;
+        };
+        /**
+         * LocationChange
+         * @description What a write answers: the location, and whether this write cleared a
+         *     hospital's verification (with the sentence that says so).
+         */
+        LocationChange: {
+            location: components["schemas"]["LocationResponse"];
+            /** Message */
+            message?: string | null;
+            /**
+             * Verification Cleared
+             * @default false
+             */
+            verification_cleared: boolean;
+        };
+        /** LocationCreate */
+        LocationCreate: {
+            /** Access Notes */
+            access_notes?: string | null;
+            /** City */
+            city?: string | null;
+            /** Contact Party Id */
+            contact_party_id?: string | null;
+            /** Contact Text */
+            contact_text?: string | null;
+            /** Coordinates */
+            coordinates?: string | null;
+            /** Country */
+            country?: string | null;
+            /** Email */
+            email?: string | null;
+            /** Emergency Phone */
+            emergency_phone?: string | null;
+            /**
+             * Kind
+             * @default shoot
+             * @enum {string}
+             */
+            kind: "shoot" | "hotel" | "hospital" | "other";
+            /** Latitude */
+            latitude?: number | string | null;
+            /** Longitude */
+            longitude?: number | string | null;
+            /** Name */
+            name: string;
+            /** Notes */
+            notes?: string | null;
+            /** Phone */
+            phone?: string | null;
+            /** Street */
+            street?: string | null;
+            /** Street2 */
+            street2?: string | null;
+            /** Website */
+            website?: string | null;
+            /** Zip */
+            zip?: string | null;
+        };
+        /** LocationList */
+        LocationList: {
+            /** Hotels Visible */
+            hotels_visible: boolean;
+            /** Locations */
+            locations: components["schemas"]["LocationResponse"][];
+        };
+        /** LocationResponse */
+        LocationResponse: {
+            /** Access Notes */
+            access_notes?: string | null;
+            /** City */
+            city?: string | null;
+            /** Contact Party Id */
+            contact_party_id?: string | null;
+            /** Contact Party Name */
+            contact_party_name?: string | null;
+            /** Contact Text */
+            contact_text?: string | null;
+            /** Coordinates Display */
+            coordinates_display?: string | null;
+            /** Country */
+            country?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Email */
+            email?: string | null;
+            /** Emergency Phone */
+            emergency_phone?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * In Use
+             * @default 0
+             */
+            in_use: number;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "shoot" | "hotel" | "hospital" | "other";
+            /** Latitude */
+            latitude?: string | null;
+            /** Longitude */
+            longitude?: string | null;
+            /** Map Link */
+            map_link?: string | null;
+            /** Name */
+            name: string;
+            /** Notes */
+            notes?: string | null;
+            /** Phone */
+            phone?: string | null;
+            /** Street */
+            street?: string | null;
+            /** Street2 */
+            street2?: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Verification Note */
+            verification_note?: string | null;
+            /**
+             * Verified
+             * @default false
+             */
+            verified: boolean;
+            /** Verified By Name */
+            verified_by_name?: string | null;
+            /** Verified On */
+            verified_on?: string | null;
+            /** Website */
+            website?: string | null;
+            /** Zip */
+            zip?: string | null;
+        };
+        /** LocationUpdate */
+        LocationUpdate: {
+            /** Access Notes */
+            access_notes?: string | null;
+            /** City */
+            city?: string | null;
+            /** Contact Party Id */
+            contact_party_id?: string | null;
+            /** Contact Text */
+            contact_text?: string | null;
+            /** Coordinates */
+            coordinates?: string | null;
+            /** Country */
+            country?: string | null;
+            /** Email */
+            email?: string | null;
+            /** Emergency Phone */
+            emergency_phone?: string | null;
+            /** Kind */
+            kind?: ("shoot" | "hotel" | "hospital" | "other") | null;
+            /** Latitude */
+            latitude?: number | string | null;
+            /** Longitude */
+            longitude?: number | string | null;
+            /** Name */
+            name?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Phone */
+            phone?: string | null;
+            /** Street */
+            street?: string | null;
+            /** Street2 */
+            street2?: string | null;
+            /** Website */
+            website?: string | null;
+            /** Zip */
+            zip?: string | null;
+        };
+        /** LocationUsage */
+        LocationUsage: {
+            /** Count */
+            count: number;
+            /**
+             * Location Id
+             * Format: uuid
+             */
+            location_id: string;
+            /** Uses */
+            uses: components["schemas"]["LocationUse"][];
+        };
+        /** LocationUse */
+        LocationUse: {
+            /** Block Id */
+            block_id?: string | null;
+            /** Date */
+            date?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "strip" | "day" | "strip_hotel" | "crew_hotel";
+            /** Party Name */
+            party_name?: string | null;
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /** Project Name */
+            project_name: string;
+            /** Project Number */
+            project_number?: string | null;
+            /** Strip Name */
+            strip_name?: string | null;
+        };
+        /** LocationVerify */
+        LocationVerify: {
+            /** Note */
+            note?: string | null;
         };
         /** LoginRequest */
         LoginRequest: {
@@ -20500,6 +20889,317 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+        };
+    };
+    list_locations_locations_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                kind?: ("shoot" | "hotel" | "hospital" | "other") | null;
+                include_archived?: boolean;
+            };
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocationList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_location_locations_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LocationCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocationChange"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    parse_coordinates_locations_coordinates_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CoordinatesParse"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CoordinatesParsed"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_location_locations__location_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                location_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_location_locations__location_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                location_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LocationUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocationChange"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    archive_location_locations__location_id__archive_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                location_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocationChange"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_location_locations__location_id__restore_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                location_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocationChange"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    location_usage_locations__location_id__usage_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                location_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocationUsage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    verify_location_locations__location_id__verify_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                location_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LocationVerify"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocationChange"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

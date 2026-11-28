@@ -1168,3 +1168,39 @@ def make_gear_booking(
     db.commit()
     db.refresh(row)
     return row
+
+
+def make_location(
+    db,
+    company: Company,
+    *,
+    name: str = "Studio Wien",
+    kind: str = "shoot",
+    city: Optional[str] = "Wien",
+    latitude: Optional[str] = None,
+    longitude: Optional[str] = None,
+    phone: Optional[str] = None,
+    is_active: bool = True,
+    **fields,
+):
+    """L1: one location, written directly."""
+    from decimal import Decimal
+
+    from apps.api.models.location import Location
+
+    row = Location(
+        company_id=company.id,
+        name=name,
+        name_key=" ".join(name.split()).lower(),
+        kind=kind,
+        city=city,
+        latitude=Decimal(latitude) if latitude is not None else None,
+        longitude=Decimal(longitude) if longitude is not None else None,
+        phone=phone,
+        is_active=is_active,
+        **fields,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row

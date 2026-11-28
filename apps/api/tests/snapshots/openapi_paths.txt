@@ -54,6 +54,9 @@ GET /files/object/{path}
 GET /gear/availability
 GET /health
 GET /health/pdf
+GET /locations
+GET /locations/{location_id}
+GET /locations/{location_id}/usage
 GET /me/crew
 GET /me/notifications
 GET /me/schedule
@@ -109,6 +112,7 @@ PATCH /devices/{device_id}/alternatives/{alternative_id}
 PATCH /devices/{device_id}/dependencies/{association_id}
 PATCH /devices/{device_id}/units/{device_unit_id}
 PATCH /email-settings
+PATCH /locations/{location_id}
 PATCH /parties/{party_id}
 PATCH /parties/{party_id}/crew-roles/{role_id}
 PATCH /parties/{party_id}/tax-ids/{tax_id_id}
@@ -213,6 +217,11 @@ POST /devices/{device_id}/units
 POST /devices/{device_id}/units/{device_unit_id}/reactivate
 POST /devices/{device_id}/units/{device_unit_id}/remove
 POST /email-settings/test
+POST /locations
+POST /locations/coordinates
+POST /locations/{location_id}/archive
+POST /locations/{location_id}/restore
+POST /locations/{location_id}/verify
 POST /me/notifications/read-all
 POST /me/notifications/{notification_id}/read
 POST /parties

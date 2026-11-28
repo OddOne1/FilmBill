@@ -39,6 +39,7 @@ from .project import (
 from .crew import CrewAssignment, CrewAssignmentDay, CrewUnavailability, PartyCrewRole
 from .device import Device, DeviceAlternative, DeviceAssociation, DeviceUnit
 from .gear import GearBooking, GearBookingDay
+from .location import Location
 from .party import (
     Party,
     PartyAddress,
@@ -59,6 +60,7 @@ __all__ = [
     "DeviceUnit",
     "GearBooking",
     "GearBookingDay",
+    "Location",
     "User",
     "ActivityLog",
     "Notification",

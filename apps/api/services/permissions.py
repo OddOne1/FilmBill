@@ -93,6 +93,10 @@ _CATALOG_VIEW: set[CompanyRole] = _PRODUCTION | {CompanyRole.staff}
 #: `_CATALOG_VIEW` have theirs: the same list today, a different decision.
 _DEVICE_VIEW: set[CompanyRole] = _PRODUCTION | {CompanyRole.staff}
 
+#: L1. Who may READ locations: the same list as `_PROJECT_VIEW`, its own
+#: name for the same reason the three above have theirs.
+_LOCATION_VIEW: set[CompanyRole] = _PRODUCTION | {CompanyRole.staff}
+
 #: Every permission this system knows about, and which roles hold it.
 #:
 #: Keys are dotted and read noun-first (`company.settings.edit`, not
@@ -245,6 +249,20 @@ PERMISSIONS: dict[str, set[CompanyRole]] = {
     #: [Guessing] — the B2b prompt's proposal, not yet confirmed by Mathias.
     "devices.view": _DEVICE_VIEW,
     "devices.edit": _PARTY_EDIT,
+    #: L1. Locations: where a day is shot, where crew sleep, the emergency
+    #: hospital.
+    #:
+    #: **View is `_LOCATION_VIEW`** — everybody who can see projects, staff
+    #: included: a gaffer has to know where the shoot is. **Except hotels**:
+    #: a hotel says where a crew member sleeps, so a location of kind
+    #: `hotel` additionally needs the permission that shows crew today
+    #: (`parties.view`, D111 — `services/location_service.HOTEL_PERMISSION`).
+    #: A hotel the caller may not see is absent from lists and answers 404.
+    #:
+    #: **Edit is `_PARTY_EDIT`** — owner, admin, producer, the people who
+    #: plan a production.
+    "locations.view": _LOCATION_VIEW,
+    "locations.edit": _PARTY_EDIT,
     "budgets.view": _PRODUCTION,
     "budgets.edit": _PARTY_EDIT,
     #: P5. The archive of finalized documents. The tax advisor's entire

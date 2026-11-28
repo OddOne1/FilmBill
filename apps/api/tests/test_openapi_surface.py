@@ -87,6 +87,10 @@ EXPECTED_TAGS = {
     "events",
     "files",
     "health",
+    #: L1. Locations: shoot, hotel, hospital, other. Its own tag because it
+    #: is its own permission (`locations.*`), and because "what can tell
+    #: somebody where the crew sleeps" should be answerable from one tag.
+    "locations",
     "notifications",
     #: P0b-3. Settings → Company → Number series. A tag of its own rather
     #: than `companies`, because this is one subject with four endpoints and

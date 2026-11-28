@@ -53,6 +53,7 @@ from .company_factories import (
     make_crew_unavailability,
     make_gear_booking,
     make_item,
+    make_location,
     make_item_category,
     make_number_series,
     make_party,
@@ -118,8 +119,10 @@ _SCOPED_PREFIXES = (
     "/team",
     "/me/crew",
     "/me/schedule",
+    # L1. Locations — an eighth top-level path, for the same reason.
+    "/locations",
 )
-_SCOPED_EXACT = ("/companies", "/company", "/parties", "/projects", "/crew", "/devices", "/gear", "/team")
+_SCOPED_EXACT = ("/companies", "/company", "/parties", "/projects", "/crew", "/devices", "/gear", "/team", "/locations")
 
 
 def _is_company_scoped(path: str) -> bool:
@@ -671,6 +674,18 @@ CASES: dict[str, object] = {
         "files": {"file": ("photo.png", _TINY_PNG, "image/png")}
     },
     "POST /devices/{device_id}/image/remove": {"body": None},
+    # L1. B's location: a lookup by id alone would find it, and a 200 on
+    # `/archive` would be A archiving B's studio. The parse endpoint reads
+    # no row and still takes a company context.
+    "GET /locations": {"body": None},
+    "POST /locations": {"body": {"name": "Stolen studio"}},
+    "POST /locations/coordinates": {"body": {"text": "48.2082, 16.3738"}},
+    "GET /locations/{location_id}": {"body": None},
+    "PATCH /locations/{location_id}": {"body": {"notes": "Stolen"}},
+    "GET /locations/{location_id}/usage": {"body": None},
+    "POST /locations/{location_id}/verify": {"body": {}},
+    "POST /locations/{location_id}/archive": {"body": None},
+    "POST /locations/{location_id}/restore": {"body": None},
     # Pure arithmetic, no stored row — and still a company endpoint.
     "POST /calc/preview": {
         "body": {
@@ -715,6 +730,7 @@ OTHER_COMPANY_ROWS = {
     "{unavailability_id}": "unavailability_in_b",
     "{booking_id}": "gear_booking_in_b",
     "{user_id}": "user_in_b",
+    "{location_id}": "location_in_b",
 }
 
 
@@ -883,7 +899,11 @@ def two_companies(pg_db):
     ada_contact_in_a = make_party(pg_db, company_a, type="person", name="Ada Crew", is_crew=True)
     ada_contact_in_a.user_id = ada.id
     pg_db.commit()
+    # L1: a hospital of B's — a kind every role in A that sees locations
+    # sees, so a 404 is about the company and not about the hotel rule.
+    location_in_b = make_location(pg_db, company_b, name="Their hospital", kind="hospital")
     return {
+        "location_in_b": location_in_b,
         "user_in_b": bo,
         "ada": ada,
         "bo": bo,

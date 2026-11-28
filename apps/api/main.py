@@ -19,6 +19,7 @@ from .routers import (
     events,
     files,
     gear_bookings,
+    locations,
     health,
     notifications,
     number_series,
@@ -102,6 +103,7 @@ app.include_router(crew_assignments.router)
 app.include_router(team.router)
 app.include_router(devices.router)
 app.include_router(gear_bookings.router)
+app.include_router(locations.router)
 app.include_router(projects.router)
 app.include_router(project_calendar.router)
 app.include_router(budgets.router)
