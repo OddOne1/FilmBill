@@ -69,22 +69,27 @@ class CrewAssignmentResponse(BaseModel):
     booked_by_name: Optional[str] = None
     days: list[CrewAssignmentDayResponse] = []
     clashes: list[CrewClashResponse] = []
-    #: L1. Where this person sleeps — only for a caller who may see hotels
-    #: (`hotel_visible`); null and false otherwise.
+    #: L1b. Where this person sleeps during this strip — their hotel stays
+    #: in the project that overlap the strip's days, each with a Route link;
+    #: only for a caller who may see hotels (`hotel_visible`).
     hotel_visible: bool = False
-    hotel: Optional[LocationRef] = None
-    #: L1. Directions from the hotel to the effective location of the
-    #: person's first day — a link built by the server; nothing is fetched.
-    route_link: Optional[str] = None
+    hotel_stays: list["CrewHotelStay"] = []
     created_at: dt.datetime
 
 
-class CrewHotelSet(BaseModel):
-    """L1. A person's hotel on this strip; null clears it."""
+class CrewHotelStay(BaseModel):
+    """L1b. A stay as a crew row shows it. `route_link`: directions from the
+    hotel to the effective location of the person's first day on this strip
+    inside the stay — a link built by the server; nothing is fetched."""
 
-    model_config = ConfigDict(extra="forbid")
+    stay_id: uuid.UUID
+    hotel: LocationRef
+    check_in: dt.date
+    check_out: dt.date
+    route_link: Optional[str] = None
 
-    location_id: Optional[uuid.UUID] = None
+
+CrewAssignmentResponse.model_rebuild()
 
 
 class CrewStripCounts(BaseModel):

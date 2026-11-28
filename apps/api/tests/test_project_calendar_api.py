@@ -549,10 +549,8 @@ def _every_calendar_request(project_id, block_id):
         ("put", f"{base}/blocks/{block_id}/days", {"days": [{"date": "2027-03-01", "type": "off"}]}),
         ("post", f"{base}/blocks/{block_id}/duplicate", {"start_date": "2027-05-01"}),
         ("post", f"{base}/blocks/{block_id}/remove", None),
-        # L1. A location for selected days, and the strip's hotels.
+        # L1. A location for selected days.
         ("post", f"{base}/blocks/{block_id}/days/location", {"dates": ["2027-03-01"], "location_id": None}),
-        ("post", f"{base}/blocks/{block_id}/hotels", {"location_id": "00000000-0000-0000-0000-000000000000"}),
-        ("post", f"{base}/blocks/{block_id}/hotels/00000000-0000-0000-0000-000000000000/remove", None),
     ]
 
 

@@ -1175,7 +1175,8 @@ def make_location(
     company: Company,
     *,
     name: str = "Studio Wien",
-    kind: str = "shoot",
+    kind: Optional[str] = None,
+    uses=None,
     city: Optional[str] = "Wien",
     latitude: Optional[str] = None,
     longitude: Optional[str] = None,
@@ -1183,7 +1184,8 @@ def make_location(
     is_active: bool = True,
     **fields,
 ):
-    """L1: one location, written directly."""
+    """L1/L1b: one location, written directly. `kind` is shorthand for a
+    single use; `uses` gives several."""
     from decimal import Decimal
 
     from apps.api.models.location import Location
@@ -1192,13 +1194,51 @@ def make_location(
         company_id=company.id,
         name=name,
         name_key=" ".join(name.split()).lower(),
-        kind=kind,
+        uses=list(uses) if uses is not None else [kind or "shoot"],
         city=city,
         latitude=Decimal(latitude) if latitude is not None else None,
         longitude=Decimal(longitude) if longitude is not None else None,
         phone=phone,
         is_active=is_active,
         **fields,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def make_project_location(db, company: Company, project, location):
+    """L1b: a location on a project's list."""
+    from apps.api.models.location import ProjectLocation
+
+    row = ProjectLocation(company_id=company.id, project_id=project.id, location_id=location.id)
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def make_hotel_stay(db, company: Company, project, location, party, *, check_in, check_out):
+    """L1b: a crew member at a hotel."""
+    from apps.api.models.location import HotelStay
+
+    row = HotelStay(
+        company_id=company.id, project_id=project.id, location_id=location.id, party_id=party.id,
+        check_in=check_in, check_out=check_out,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def make_location_attachment(db, company: Company, project, location, *, title: str = "Booking", text: str = "Confirmed."):
+    """L1b: a pasted booking confirmation."""
+    from apps.api.models.location import LocationAttachment
+
+    row = LocationAttachment(
+        company_id=company.id, project_id=project.id, location_id=location.id, kind="text", title=title, body_text=text,
     )
     db.add(row)
     db.commit()

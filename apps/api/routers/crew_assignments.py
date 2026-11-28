@@ -37,6 +37,7 @@ from ..models.crew import (
     CrewAssignment,
     CrewUnavailability,
 )
+from ..models.location import HotelStay
 from ..models.party import Party
 from ..models.project import Project, ProjectBlock, ProjectDay
 from ..models.user import User
@@ -54,7 +55,7 @@ from ..schemas.crew_assignments import (
     CrewBulkStatusChange,
     CrewBulkStatusResult,
     CrewClashResponse,
-    CrewHotelSet,
+    CrewHotelStay,
     CrewStatusChange,
     CrewStripCounts,
     ProjectCrewResponse,
@@ -203,20 +204,53 @@ def responses(db: Session, membership: Membership, rows: list[CrewAssignment]) -
             ProjectDay.is_active.is_(True),
         )
     }
-    # L1. Hotels, and the location each person's first day happens at —
-    # the day's own, else the strip's — for the Route link.
+    # L1b. Each person's hotel stays in the project that overlap this
+    # strip's days, and for each the Route: hotel → the location of the
+    # person's first day on the strip inside the stay (the day's own, else
+    # the strip's).
     hotels_visible = location_service.can_see_hotels(membership)
-    first_place: dict[uuid.UUID, Optional[uuid.UUID]] = {}
-    for r in rows:
+    stays_by_person: dict[tuple, list[HotelStay]] = {}
+    if hotels_visible:
+        for stay in db.query(HotelStay).filter(
+            HotelStay.company_id == company_id,
+            HotelStay.project_id.in_({r.project_id for r in rows}),
+            HotelStay.party_id.in_({r.party_id for r in rows}),
+            HotelStay.is_active.is_(True),
+        ).order_by(HotelStay.check_in, HotelStay.id):
+            stays_by_person.setdefault((stay.project_id, stay.party_id), []).append(stay)
+
+    def place_of(r, when) -> Optional[uuid.UUID]:
         block = blocks.get(r.block_id)
-        first = days[r.id][0].date if days[r.id] else None
-        pday = project_days.get((r.block_id, first)) if first else None
-        first_place[r.id] = (pday.location_id if pday else None) or (block.location_id if block else None)
-    places = location_service.by_id(
-        db,
-        company_id,
-        list(first_place.values()) + ([r.hotel_location_id for r in rows] if hotels_visible else []),
-    )
+        pday = project_days.get((r.block_id, when))
+        return (pday.location_id if pday else None) or (block.location_id if block else None)
+
+    wanted_places: set = set()
+    for r in rows:
+        for stay in stays_by_person.get((r.project_id, r.party_id), []):
+            wanted_places.add(stay.location_id)
+        wanted_places.update(place_of(r, d.date) for d in days[r.id])
+    places = location_service.by_id(db, company_id, wanted_places)
+
+    def crew_stays(r) -> list[CrewHotelStay]:
+        out = []
+        dates = [d.date for d in days[r.id]]
+        for stay in stays_by_person.get((r.project_id, r.party_id), []):
+            inside = [d for d in dates if stay.check_in <= d < stay.check_out]
+            if dates and not inside:
+                continue
+            target = places.get(place_of(r, inside[0])) if inside else None
+            hotel = places.get(stay.location_id)
+            out.append(
+                CrewHotelStay(
+                    stay_id=stay.id,
+                    hotel=location_ref(hotel),
+                    check_in=stay.check_in,
+                    check_out=stay.check_out,
+                    route_link=map_links.directions_link(hotel, target) if target is not None else None,
+                )
+            )
+        return out
+
     clashes = service.clashes_for(
         db,
         company_id,
@@ -264,12 +298,7 @@ def responses(db: Session, membership: Membership, rows: list[CrewAssignment]) -
                 days=day_rows,
                 clashes=[_clash(c) for c in clashes.get(row.id, [])],
                 hotel_visible=hotels_visible,
-                hotel=location_ref(places.get(row.hotel_location_id)) if hotels_visible and row.hotel_location_id else None,
-                route_link=(
-                    map_links.directions_link(places.get(row.hotel_location_id), places.get(first_place[row.id]))
-                    if hotels_visible and row.hotel_location_id and first_place[row.id]
-                    else None
-                ),
+                hotel_stays=crew_stays(row) if hotels_visible else [],
                 created_at=row.created_at,
             )
         )
@@ -514,44 +543,6 @@ def set_crew_status_bulk(
         ],
         assignments=responses(db, membership, [row for row, _ in rows]),
     )
-
-
-@router.put(
-    "/projects/{project_id}/crew/{assignment_id}/hotel",
-    response_model=CrewAssignmentResponse,
-    tags=["projects"],
-)
-def set_crew_hotel(
-    project_id: uuid.UUID,
-    assignment_id: uuid.UUID,
-    body: CrewHotelSet,
-    request: Request,
-    db: Session = Depends(get_db),
-    membership: Membership = Depends(can_change),
-):
-    """L1. Where this person sleeps on this strip: a hotel from the strip's
-    hotels, or any hotel when the strip lists none; null clears it. Needs
-    to see hotels; without that this is a 404."""
-    project = _project(db, membership, project_id)
-    row = _assignment(db, membership, project, assignment_id)
-    if not location_service.can_see_hotels(membership):
-        _not_found()
-    hotel = None
-    try:
-        if body.location_id is not None:
-            hotel = location_service.hotel(db, membership, body.location_id, current=row.hotel_location_id)
-            location_service.check_hotel_for_strip(
-                db, db.get(ProjectBlock, row.block_id), hotel, current=row.hotel_location_id
-            )
-        location_service.set_crew_hotel(db, row, hotel, actor=audit.actor_from(request, membership=membership))
-    except LookupError:
-        db.rollback()
-        _not_found()
-    except location_service.LocationError as error:
-        db.rollback()
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)) from None
-    db.commit()
-    return _one(db, membership, row)
 
 
 @router.post(

@@ -202,3 +202,175 @@ def directions_link(origin: Optional[Place], destination: Optional[Place]) -> Op
     if start is None or end is None:
         return None
     return f"{MAP_DIRECTIONS_URL}&origin={_encode(start)}&destination={_encode(end)}"
+
+
+# ─── Pasted Google / Apple Maps links (L1b) ─────────────────────────────────
+
+#: Share links that only redirect: the server may open these once to learn
+#: where they point (`services/map_link_resolver.py`). Nothing else is ever
+#: fetched.
+SHORT_LINK_HOSTS: frozenset[str] = frozenset({"maps.app.goo.gl", "goo.gl", "maps.apple"})
+#: Hosts whose full links carry a position and are read without a request.
+MAP_HOSTS: frozenset[str] = frozenset(
+    {
+        "google.com",
+        "www.google.com",
+        "maps.google.com",
+        "google.at",
+        "www.google.at",
+        "google.de",
+        "www.google.de",
+        "maps.apple.com",
+        "maps.apple",
+        "consent.google.com",
+    }
+)
+
+_PIN = re.compile(rf"!3d({_NUMBER.replace('[.,]', '[.]')})!4d({_NUMBER.replace('[.,]', '[.]')})")
+_AT = re.compile(r"/@([+-]?\d+(?:\.\d+)?),([+-]?\d+(?:\.\d+)?)")
+_POINT_PARAMS: tuple[str, ...] = ("q", "query", "ll", "sll", "coordinate", "center", "destination", "daddr")
+_TEXT_PARAMS: tuple[str, ...] = ("q", "query", "address", "daddr", "destination")
+
+
+@dataclass(frozen=True)
+class MapLinkInfo:
+    """What a pasted map link says. Either a position (and perhaps a name or
+    an address text), or `short = True` (it must be opened once to learn
+    more), or a `refusal` sentence."""
+
+    latitude: Optional[Decimal] = None
+    longitude: Optional[Decimal] = None
+    name: Optional[str] = None
+    address: Optional[str] = None
+    provider: Optional[str] = None
+    short: bool = False
+    refusal: Optional[str] = None
+
+    @property
+    def has_position(self) -> bool:
+        return self.latitude is not None and self.longitude is not None
+
+
+def _host(url: str) -> str:
+    from urllib.parse import urlsplit
+
+    return (urlsplit(url).hostname or "").lower()
+
+
+def _point(text: Optional[str]) -> Optional[ParsedCoordinates]:
+    if not text:
+        return None
+    parsed = parse_coordinates(text.replace("+", " "))
+    return parsed if parsed.ok else None
+
+
+def parse_map_url(url: Optional[str]) -> MapLinkInfo:
+    """Read a pasted Google or Apple Maps link without any request.
+
+    Position, in this order: the place pin `!3d…!4d…` (where the place IS),
+    then the view centre `/@lat,lng` (where the map was LOOKING), then a
+    coordinate in `q`, `query`, `ll`, `sll`, `coordinate`, `center`,
+    `destination` or `daddr`, then a pair in the path (`/search/48.2,16.3`).
+    A name comes from `/place/<name>/`, an address text from a `q`/`address`
+    that is not a coordinate. A consent page's `continue` link is read
+    instead of the page.
+    """
+    from urllib.parse import parse_qs, unquote, unquote_plus, urlsplit
+
+    if url is None or not url.strip():
+        return MapLinkInfo(refusal="There is no link here. Paste a link from Google Maps or Apple Maps.")
+    url = url.strip()
+    if not re.match(r"^https?://", url, re.IGNORECASE):
+        url = "https://" + url
+    parts = urlsplit(url)
+    host = (parts.hostname or "").lower()
+    query = parse_qs(parts.query)
+    if host == "consent.google.com" and query.get("continue"):
+        return parse_map_url(query["continue"][0])
+    if host in SHORT_LINK_HOSTS:
+        if host == "goo.gl" and not parts.path.startswith("/maps"):
+            return MapLinkInfo(refusal="This short link is not a map link. Paste a link from Google Maps or Apple Maps.")
+        return MapLinkInfo(short=True, provider="apple" if "apple" in host else "google")
+    if host not in MAP_HOSTS and host not in SHORT_LINK_HOSTS:
+        return MapLinkInfo(
+            refusal=f"“{host or url}” is not a Google Maps or Apple Maps link. Paste a link from one of the two, or the coordinates."
+        )
+    provider = "apple" if "apple" in host else "google"
+    if provider == "google" and not parts.path.startswith("/maps") and host != "maps.google.com":
+        return MapLinkInfo(refusal="This Google link is not a map. Open the place in Google Maps and copy that link.")
+    path = unquote(parts.path)
+
+    name = None
+    place = re.search(r"/place/([^/@]+)", parts.path)
+    if place:
+        candidate = unquote_plus(place.group(1)).strip()
+        if candidate and _point(candidate) is None:
+            name = candidate
+
+    latitude = longitude = None
+    pin = _PIN.search(url)
+    at = _AT.search(path)
+    if pin:
+        found = _point(f"{pin.group(1)}, {pin.group(2)}")
+    elif at:
+        found = _point(f"{at.group(1)}, {at.group(2)}")
+    else:
+        found = None
+        for key in _POINT_PARAMS:
+            for value in query.get(key, []):
+                found = _point(value)
+                if found:
+                    break
+            if found:
+                break
+        if found is None:
+            tail = re.search(r"/(?:search|place|dir)/([+-]?\d+(?:\.\d+)?),\+?\s*([+-]?\d+(?:\.\d+)?)", path)
+            if tail:
+                found = _point(f"{tail.group(1)}, {tail.group(2)}")
+    if found is not None:
+        latitude, longitude = found.latitude, found.longitude
+
+    def _text(key: str) -> Optional[str]:
+        for value in query.get(key, []):
+            if value.strip() and _point(value) is None:
+                return " ".join(value.split())
+        return None
+
+    address = None
+    if provider == "apple":
+        # Apple: `q` is the place's NAME, `address` its address.
+        name = name or _text("q")
+        address = _text("address") or _text("daddr")
+    else:
+        for key in _TEXT_PARAMS:
+            address = _text(key)
+            if address:
+                break
+
+    if latitude is None and name is None and address is None:
+        return MapLinkInfo(
+            provider=provider,
+            refusal="This map link does not say where the place is. Open the place itself in the map and copy that link.",
+        )
+    return MapLinkInfo(latitude=latitude, longitude=longitude, name=name, address=address, provider=provider)
+
+
+#: Half the width of the map view around a pin, in degrees (about 500 m).
+EMBED_SPAN = Decimal("0.005")
+
+
+def embed_link(latitude: Optional[Decimal], longitude: Optional[Decimal]) -> Optional[str]:
+    """An OpenStreetMap view of the pin, for an iframe — no key, no account.
+    None without both coordinates."""
+    if latitude is None or longitude is None:
+        return None
+    lat, lng = Decimal(latitude), Decimal(longitude)
+    box = ",".join(
+        _plain(v) for v in (lng - EMBED_SPAN, lat - EMBED_SPAN, lng + EMBED_SPAN, lat + EMBED_SPAN)
+    )
+    return (
+        "https://www.openstreetmap.org/export/embed.html?bbox="
+        + quote(box, safe="")
+        + "&layer=mapnik&marker="
+        + quote(f"{_plain(lat)},{_plain(lng)}", safe="")
+    )

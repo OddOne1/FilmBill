@@ -34,13 +34,12 @@ from .project import (
     BudgetSection,
     Project,
     ProjectBlock,
-    ProjectBlockHotel,
     ProjectDay,
 )
 from .crew import CrewAssignment, CrewAssignmentDay, CrewUnavailability, PartyCrewRole
 from .device import Device, DeviceAlternative, DeviceAssociation, DeviceUnit
 from .gear import GearBooking, GearBookingDay
-from .location import Location
+from .location import HotelStay, Location, LocationAttachment, ProjectLocation
 from .party import (
     Party,
     PartyAddress,
@@ -61,7 +60,10 @@ __all__ = [
     "DeviceUnit",
     "GearBooking",
     "GearBookingDay",
+    "HotelStay",
     "Location",
+    "LocationAttachment",
+    "ProjectLocation",
     "User",
     "ActivityLog",
     "Notification",
@@ -87,7 +89,6 @@ __all__ = [
     "PartyVatCheck",
     "Project",
     "ProjectBlock",
-    "ProjectBlockHotel",
     "ProjectDay",
     "Budget",
     "BudgetSection",

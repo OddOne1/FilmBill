@@ -34,7 +34,9 @@ STDLIB = {
     "errno", "fnmatch", "importlib", "sysconfig", "weakref",
     "decimal", "difflib", "email", "enum", "functools", "glob", "gzip",
     "hashlib",
-    "hmac", "html", "inspect", "io", "itertools", "json", "logging", "math",
+    # `http.server`: the tests' local stand-ins for OpenStreetMap and a
+    # short-link host (L1b).
+    "hmac", "html", "http", "inspect", "io", "itertools", "json", "logging", "math",
     "mimetypes", "operator", "os", "pathlib", "platform", "posixpath",
     "pprint", "queue", "random", "re", "secrets", "shlex", "shutil", "signal",
     "smtplib", "socket", "ssl", "statistics", "string", "struct",

@@ -157,21 +157,12 @@ describe('the Gear entry (B2b)', () => {
   })
 })
 
-describe('the Locations entry (L1)', () => {
-  it('is shown to staff, who hold locations.view, right after Gear', () => {
-    seed(['company.view', 'projects.view', 'devices.view', 'locations.view'], 'staff')
+describe('no Locations entry (L1b)', () => {
+  it('locations live in the project, so the sidebar has none, even with locations.view', () => {
+    seed(['company.view', 'projects.view', 'devices.view', 'locations.view'], 'owner')
     render(<Sidebar collapsed={false} onToggle={() => {}} />)
 
-    const link = screen.getByRole('link', { name: /Locations/ })
-    expect(link).toHaveAttribute('href', '/locations')
-    const labels = screen.getAllByRole('link').map((a) => a.textContent?.trim())
-    expect(labels.indexOf('Locations')).toBe(labels.indexOf('Gear') + 1)
-  })
-
-  it('is hidden from a tax advisor', () => {
-    seed(['company.view', 'archive.view'], 'tax_advisor')
-    render(<Sidebar collapsed={false} onToggle={() => {}} />)
-
+    expect(screen.getByText('Projects')).toBeInTheDocument()
     expect(screen.queryByText('Locations')).not.toBeInTheDocument()
   })
 })

@@ -11,10 +11,11 @@ import type {
   CoordinatesParsed,
   Location,
   LocationChange,
-  LocationKind,
   LocationUsage,
+  MapLinkResolved,
   Party,
   PartyPage,
+  PlaceUse,
 } from '@/types'
 
 /**
@@ -29,18 +30,24 @@ import type {
  * `/locations/{id}/usage`.
  */
 
-export const KIND_LABEL: Record<LocationKind, string> = {
-  shoot: 'Shoot',
+export const USE_LABEL: Record<PlaceUse, string> = {
+  shoot: 'Shooting location',
   hotel: 'Hotel',
   hospital: 'Hospital',
+  restaurant: 'Restaurant',
   other: 'Other',
 }
 
-export const ALL_KINDS: LocationKind[] = ['shoot', 'hotel', 'hospital', 'other']
+export const ALL_USES: PlaceUse[] = ['shoot', 'hotel', 'hospital', 'restaurant', 'other']
+
+export function usesText(uses: PlaceUse[]): string {
+  return uses.map((use) => USE_LABEL[use]).join(' · ')
+}
 
 interface Draft {
   name: string
-  kind: LocationKind
+  uses: PlaceUse[]
+  source_link: string
   street: string
   street2: string
   zip: string
@@ -58,10 +65,11 @@ interface Draft {
   contact_text: string
 }
 
-function draftFrom(location: Location | null, initialName: string, initialKind: LocationKind): Draft {
+function draftFrom(location: Location | null, initialName: string, initialUses: PlaceUse[]): Draft {
   return {
     name: location?.name ?? initialName,
-    kind: location?.kind ?? initialKind,
+    uses: location?.uses ?? initialUses,
+    source_link: location?.source_link ?? '',
     street: location?.street ?? '',
     street2: location?.street2 ?? '',
     zip: location?.zip ?? '',
@@ -81,6 +89,7 @@ function draftFrom(location: Location | null, initialName: string, initialKind: 
 }
 
 const TEXT_FIELDS = [
+  'source_link',
   'street',
   'street2',
   'zip',
@@ -97,7 +106,7 @@ const TEXT_FIELDS = [
 /** What a save sends: every field, empty text as null, the pasted pair as
  *  text for the API to read. */
 function payload(draft: Draft, original: Location | null): Record<string, unknown> {
-  const body: Record<string, unknown> = { name: draft.name.trim(), kind: draft.kind, country: draft.country }
+  const body: Record<string, unknown> = { name: draft.name.trim(), uses: draft.uses, country: draft.country }
   for (const field of TEXT_FIELDS) body[field] = draft[field].trim() || null
   const originalPair = original?.latitude && original?.longitude ? `${original.latitude}, ${original.longitude}` : ''
   if (!original || draft.coordinates.trim() !== originalPair) body.coordinates = draft.coordinates.trim()
@@ -108,8 +117,9 @@ function payload(draft: Draft, original: Location | null): Record<string, unknow
 export function LocationForm({
   location = null,
   initialName = '',
-  initialKind = 'shoot',
-  kinds = ALL_KINDS,
+  initialUses = ['shoot'],
+  uses = ALL_USES,
+  projectId = null,
   canEdit,
   canSeeContacts = false,
   onClose,
@@ -118,15 +128,19 @@ export function LocationForm({
   /** Null for a new location. */
   location?: Location | null
   initialName?: string
-  initialKind?: LocationKind
-  /** The kinds this form may create (a strip's picker offers shoot and other). */
-  kinds?: LocationKind[]
+  initialUses?: PlaceUse[]
+  /** The uses this form offers (Hotel only for who may see crew). */
+  uses?: PlaceUse[]
+  /** A new location is also added to this project's list. */
+  projectId?: string | null
   canEdit: boolean
   canSeeContacts?: boolean
   onClose: () => void
   onSaved: (location: Location, message: string | null) => void | Promise<void>
 }) {
-  const [draft, setDraft] = React.useState<Draft>(() => draftFrom(location, initialName, initialKind))
+  const [draft, setDraft] = React.useState<Draft>(() => draftFrom(location, initialName, initialUses))
+  const [linkReading, setLinkReading] = React.useState<MapLinkResolved | null>(null)
+  const [reading, setReading] = React.useState(false)
   const [parsed, setParsed] = React.useState<CoordinatesParsed | null>(null)
   const [error, setError] = React.useState<string | null>(null)
   const [notice, setNotice] = React.useState<string | null>(null)
@@ -138,12 +152,14 @@ export function LocationForm({
 
   React.useEffect(() => {
     setCurrent(location)
-    setDraft(draftFrom(location, initialName, initialKind))
+    setDraft(draftFrom(location, initialName, initialUses))
+    setLinkReading(null)
     setParsed(null)
     setError(null)
     setNotice(null)
     setUsage(null)
-  }, [location, initialName, initialKind])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location, initialName])
 
   React.useEffect(() => {
     if (!current) return
@@ -167,6 +183,36 @@ export function LocationForm({
     }
   }
 
+  /** A pasted Google / Apple Maps link: the API reads it (opening a short
+   *  link once) and the form takes what it carries — the position always,
+   *  the name and the address only into empty fields. */
+  const readLink = async (url: string) => {
+    if (!url.trim()) {
+      setLinkReading(null)
+      return
+    }
+    setReading(true)
+    try {
+      const answer = await api.post<MapLinkResolved>('/locations/resolve-link', { url })
+      setLinkReading(answer)
+      if (answer.ok) {
+        setDraft((d) => ({
+          ...d,
+          coordinates: answer.latitude && answer.longitude ? `${answer.latitude}, ${answer.longitude}` : d.coordinates,
+          name: d.name.trim() ? d.name : answer.name ?? d.name,
+          street: d.street.trim() || d.city.trim() ? d.street : answer.address ?? d.street,
+        }))
+        if (answer.display) {
+          setParsed({ ok: true, latitude: answer.latitude, longitude: answer.longitude, display: answer.display, refusal: null })
+        }
+      }
+    } catch {
+      setLinkReading(null)
+    } finally {
+      setReading(false)
+    }
+  }
+
   const save = async () => {
     setSaving(true)
     setError(null)
@@ -175,7 +221,7 @@ export function LocationForm({
       const body = payload(draft, current)
       const change = current
         ? await api.patch<LocationChange>(`/locations/${current.id}`, body)
-        : await api.post<LocationChange>('/locations', body)
+        : await api.post<LocationChange>('/locations', projectId ? { ...body, project_id: projectId } : body)
       setCurrent(change.location)
       setNotice(change.message ?? null)
       await onSaved(change.location, change.message ?? null)
@@ -199,7 +245,7 @@ export function LocationForm({
 
   const nameMissing = !draft.name.trim()
   const title = current ? current.name : 'New location'
-  const isHospital = draft.kind === 'hospital'
+  const isHospital = draft.uses.includes('hospital')
 
   return (
     <div
@@ -247,25 +293,58 @@ export function LocationForm({
           <Input aria-label="Location name" value={draft.name} onChange={(e) => set('name', e.target.value)} />
         </label>
         <div className="col-span-2 text-xs text-text-secondary">
-          Kind
-          <div role="radiogroup" aria-label="Kind" className="mt-1 flex flex-wrap gap-1">
-            {kinds.map((kind) => (
-              <button
-                key={kind}
-                type="button"
-                role="radio"
-                aria-checked={draft.kind === kind}
-                onClick={() => set('kind', kind)}
-                className={cn(
-                  'rounded-md border px-2 py-1 text-xs',
-                  draft.kind === kind ? 'border-accent bg-accent/10 text-text-primary' : 'border-border text-text-secondary',
-                )}
-              >
-                {KIND_LABEL[kind]}
-              </button>
-            ))}
+          Used as
+          <div role="group" aria-label="Used as" className="mt-1 flex flex-wrap gap-1">
+            {uses.map((use) => {
+              const on = draft.uses.includes(use)
+              return (
+                <button
+                  key={use}
+                  type="button"
+                  role="checkbox"
+                  aria-checked={on}
+                  onClick={() =>
+                    set('uses', on ? draft.uses.filter((u) => u !== use) : ALL_USES.filter((u) => u === use || draft.uses.includes(u)))
+                  }
+                  className={cn(
+                    'rounded-md border px-2 py-1 text-xs',
+                    on ? 'border-accent bg-accent/10 text-text-primary' : 'border-border text-text-secondary',
+                  )}
+                >
+                  {USE_LABEL[use]}
+                </button>
+              )
+            })}
           </div>
+          <span className="mt-0.5 block text-2xs text-text-tertiary">
+            A hotel or hospital is a shooting location only when “Shooting location” is ticked too.
+          </span>
         </div>
+        <label className="col-span-2 text-xs text-text-secondary">
+          Map link
+          <Input
+            aria-label="Map link"
+            placeholder="Paste a link from Google Maps or Apple Maps"
+            value={draft.source_link}
+            onChange={(e) => {
+              set('source_link', e.target.value)
+              setLinkReading(null)
+            }}
+            onBlur={(e) => void readLink(e.target.value)}
+          />
+          {reading && <span className="mt-0.5 block text-2xs text-text-tertiary">Reading the link…</span>}
+          {linkReading && (
+            <span
+              data-testid="location-link-answer"
+              role={linkReading.ok ? 'status' : 'alert'}
+              className={cn('mt-0.5 block text-2xs', linkReading.ok ? 'text-text-secondary' : 'text-status-error')}
+            >
+              {linkReading.ok
+                ? [linkReading.name, linkReading.address, linkReading.display].filter(Boolean).join(' · ') || 'Read.'
+                : linkReading.refusal}
+            </span>
+          )}
+        </label>
         <label className="col-span-2 text-xs text-text-secondary">
           Street
           <Input aria-label="Street" value={draft.street} onChange={(e) => set('street', e.target.value)} />
@@ -369,6 +448,16 @@ export function LocationForm({
           </span>
         </label>
       </fieldset>
+
+      {(linkReading?.embed_link || current?.embed_link) && (
+        <iframe
+          title={`Map of ${draft.name || 'the location'}`}
+          data-testid="location-map-view"
+          src={(linkReading?.embed_link ?? current?.embed_link) as string}
+          className="mt-3 h-48 w-full rounded-md border border-border"
+          loading="lazy"
+        />
+      )}
 
       {isHospital && current && (
         <div data-testid="location-verified" className="mt-3 rounded-md border border-border p-2 text-xs">
@@ -494,10 +583,10 @@ export function usageText(use: LocationUsage['uses'][number]): string {
       return `${where}: the strip's location`
     case 'day':
       return `${where}: ${use.date}`
-    case 'strip_hotel':
-      return `${where}: one of the strip's hotels`
-    case 'crew_hotel':
-      return `${where}: ${use.party_name ?? 'a crew member'} sleeps here`
+    case 'project':
+      return `${where}: on the project's list`
+    case 'hotel_stay':
+      return `${where}: ${use.party_name ?? 'a crew member'} from ${use.date}`
   }
 }
 

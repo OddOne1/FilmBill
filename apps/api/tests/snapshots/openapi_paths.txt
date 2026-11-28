@@ -71,11 +71,14 @@ GET /parties/{party_id}/unavailability
 GET /parties/{party_id}/vat-checks
 GET /projects
 GET /projects/{project_id}
+GET /projects/{project_id}/attachments/{attachment_id}/download
 GET /projects/{project_id}/budgets
 GET /projects/{project_id}/calendar
 GET /projects/{project_id}/crew
 GET /projects/{project_id}/days
 GET /projects/{project_id}/gear
+GET /projects/{project_id}/hospital-suggestions
+GET /projects/{project_id}/locations
 GET /setup/status
 GET /site-settings
 GET /site-settings/logo-image
@@ -122,6 +125,7 @@ PATCH /projects/{project_id}/blocks/{block_id}
 PATCH /projects/{project_id}/crew/{assignment_id}
 PATCH /projects/{project_id}/days/{day_id}
 PATCH /projects/{project_id}/gear/{booking_id}
+PATCH /projects/{project_id}/stays/{stay_id}
 PATCH /site-settings
 PATCH /users/{user_id}
 PATCH /users/{user_id}/deactivate
@@ -219,6 +223,7 @@ POST /devices/{device_id}/units/{device_unit_id}/remove
 POST /email-settings/test
 POST /locations
 POST /locations/coordinates
+POST /locations/resolve-link
 POST /locations/{location_id}/archive
 POST /locations/{location_id}/restore
 POST /locations/{location_id}/verify
@@ -244,14 +249,13 @@ POST /parties/{party_id}/tax-preview
 POST /parties/{party_id}/unavailability
 POST /parties/{party_id}/unavailability/{unavailability_id}/remove
 POST /projects
+POST /projects/{project_id}/attachments/{attachment_id}/remove
 POST /projects/{project_id}/blocks
 POST /projects/{project_id}/blocks/{block_id}/crew
 POST /projects/{project_id}/blocks/{block_id}/days/location
 POST /projects/{project_id}/blocks/{block_id}/duplicate
 POST /projects/{project_id}/blocks/{block_id}/gear
 POST /projects/{project_id}/blocks/{block_id}/gear/preview
-POST /projects/{project_id}/blocks/{block_id}/hotels
-POST /projects/{project_id}/blocks/{block_id}/hotels/{location_id}/remove
 POST /projects/{project_id}/blocks/{block_id}/move
 POST /projects/{project_id}/blocks/{block_id}/remove
 POST /projects/{project_id}/blocks/{block_id}/resize
@@ -266,7 +270,14 @@ POST /projects/{project_id}/days/{day_id}/remove
 POST /projects/{project_id}/gear/status
 POST /projects/{project_id}/gear/{booking_id}/remove
 POST /projects/{project_id}/gear/{booking_id}/status
+POST /projects/{project_id}/hospital-suggestions/add
+POST /projects/{project_id}/locations
+POST /projects/{project_id}/locations/{location_id}/attachments
+POST /projects/{project_id}/locations/{location_id}/attachments/text
+POST /projects/{project_id}/locations/{location_id}/remove
+POST /projects/{project_id}/locations/{location_id}/stays
 POST /projects/{project_id}/status
+POST /projects/{project_id}/stays/{stay_id}/remove
 POST /setup/create-superadmin
 POST /site-settings/favicon-upload
 POST /site-settings/logo-upload
@@ -285,4 +296,3 @@ PUT /devices/{device_id}/rental
 PUT /me/crew
 PUT /me/crew/roles
 PUT /projects/{project_id}/blocks/{block_id}/days
-PUT /projects/{project_id}/crew/{assignment_id}/hotel

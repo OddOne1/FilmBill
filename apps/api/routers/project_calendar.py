@@ -40,7 +40,6 @@ from ..schemas.project import (
     CalendarDayResponse,
     CalendarStripResponse,
     ProjectCalendarResponse,
-    StripHotelAdd,
 )
 from ..services import audit, calendar_service, location_service
 from ..services.permissions import scoped
@@ -99,17 +98,6 @@ def _place_or_refuse(db: Session, membership: Membership, location_id, *, curren
         _unprocessable(error)
 
 
-def _hotel_or_refuse(db: Session, membership: Membership, location_id) -> Location:
-    if not membership.can("locations.view"):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Location not found")
-    try:
-        return location_service.hotel(db, membership, location_id)
-    except LookupError:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Location not found") from None
-    except location_service.LocationError as error:
-        _unprocessable(error)
-
-
 def _actor(request: Request, membership: Membership) -> audit.Actor:
     return audit.actor_from(request, membership=membership)
 
@@ -124,24 +112,21 @@ class Book:
     hotels — the same rule as the locations list."""
 
     locations: dict[uuid.UUID, Location] = field(default_factory=dict)
-    hotels: dict[uuid.UUID, list[Location]] = field(default_factory=dict)
-    hotels_visible: bool = False
+    membership: Optional[Membership] = None
 
     def get(self, location_id: Optional[uuid.UUID]) -> Optional[Location]:
         row = self.locations.get(location_id) if location_id else None
-        if row is not None and row.kind == "hotel" and not self.hotels_visible:
+        if row is not None and self.membership is not None and not location_service.visible_uses(self.membership, row):
             return None
         return row
 
+    def ref(self, row: Optional[Location]):
+        return location_ref(row, self.membership)
+
 
 def book_for(db: Session, membership: Membership, blocks: list[ProjectBlock], days: list[ProjectDay]) -> Book:
-    visible = location_service.can_see_hotels(membership)
     ids = [b.location_id for b in blocks] + [d.location_id for d in days]
-    return Book(
-        locations=location_service.by_id(db, membership.company_id, ids),
-        hotels=location_service.strip_hotels(db, membership.company_id, [b.id for b in blocks]) if visible else {},
-        hotels_visible=visible,
-    )
+    return Book(locations=location_service.by_id(db, membership.company_id, ids), membership=membership)
 
 
 def _day(day: ProjectDay, block: Optional[ProjectBlock], book: Optional[Book] = None) -> CalendarDayResponse:
@@ -159,8 +144,8 @@ def _day(day: ProjectDay, block: Optional[ProjectBlock], book: Optional[Book] = 
         notes=day.notes,
         effective_location=day.location or (block.location if block else None),
         location_id=own.id if own else None,
-        location_ref=location_ref(own),
-        effective_location_ref=location_ref(effective.location),
+        location_ref=book.ref(own),
+        effective_location_ref=book.ref(effective.location),
         effective_location_source=effective.source,
         effective_call_time=day.call_time or (block.default_call_time if block else None),
         effective_wrap_time=day.wrap_time or (block.default_wrap_time if block else None),
@@ -182,9 +167,7 @@ def _strip(block: ProjectBlock, days: list[ProjectDay], book: Optional[Book] = N
         end_date=block.end_date,
         location=block.location,
         location_id=place.id if place else None,
-        location_ref=location_ref(place),
-        hotels=[location_ref(h) for h in book.hotels.get(block.id, [])],
-        hotels_visible=book.hotels_visible,
+        location_ref=book.ref(place),
         default_call_time=block.default_call_time,
         default_wrap_time=block.default_wrap_time,
         notes=block.notes,
@@ -203,7 +186,6 @@ def _loose(day: ProjectDay, book: Optional[Book] = None) -> CalendarStripRespons
         start_date=day.date,
         end_date=day.date,
         location=day.location,
-        hotels_visible=(book or Book()).hotels_visible,
         days=[_day(day, None, book)],
         counts={day.type: 1},
     )
@@ -320,10 +302,12 @@ def update_block(
     project = _project_or_404(db, membership, project_id)
     block = _block_or_404(db, membership, project, block_id)
     changes = body.model_dump(exclude_unset=True)
+    place = None
     if "location_id" in changes:
-        _place_or_refuse(db, membership, changes["location_id"], current=block.location_id)
+        place = _place_or_refuse(db, membership, changes["location_id"], current=block.location_id)
     try:
         change = calendar_service.update_block(db, block, changes, actor=_actor(request, membership))
+        location_service.ensure_in_project(db, project, place, actor=_actor(request, membership))
     except ProjectError as error:
         _unprocessable(error)
     db.commit()
@@ -455,7 +439,7 @@ def remove_block(
     return _change(db, project, block, change, membership)
 
 
-# ─── Locations on a strip (L1 part 2) ───────────────────────────────────────
+# ─── Locations on a strip (L1 part 2; L1b: they join the project's list) ────
 
 
 @router.post(
@@ -470,7 +454,7 @@ def set_days_location(
     membership: Membership = Depends(require("projects.edit")),
 ):
     """"Set for selected days": these days of the strip get this location
-    of their own (shoot or other); null gives them back the strip's. Each
+    of their own (a shooting location); null gives them back the strip's. Each
     changed day is audited as `project_day.updated`."""
     project = _project_or_404(db, membership, project_id)
     block = _block_or_404(db, membership, project, block_id)
@@ -509,56 +493,10 @@ def set_days_location(
             fields=project_service.PROJECT_DAY_AUDITED,
         )
         changed += 1
+    location_service.ensure_in_project(db, project, place, actor=actor)
     db.commit()
     detail = (
         f"{changed} {'day' if changed == 1 else 'days'} "
         + (f"set to {place.name}." if place else "back to the strip's location.")
     )
     return _change(db, project, block, calendar_service.Change(detail=detail, changed=changed), membership)
-
-
-@router.post("/projects/{project_id}/blocks/{block_id}/hotels", response_model=BlockChangeResponse)
-def add_strip_hotel(
-    project_id: uuid.UUID,
-    block_id: uuid.UUID,
-    body: StripHotelAdd,
-    request: Request,
-    db: Session = Depends(get_db),
-    membership: Membership = Depends(require("projects.edit")),
-):
-    """A hotel in use on this strip — what a person's hotel is picked
-    from. Needs to see hotels (`parties.view`, D111)."""
-    project = _project_or_404(db, membership, project_id)
-    block = _block_or_404(db, membership, project, block_id)
-    hotel = _hotel_or_refuse(db, membership, body.location_id)
-    added = location_service.add_strip_hotel(db, membership, block, hotel, actor=_actor(request, membership))
-    db.commit()
-    detail = f"{hotel.name} added to the strip's hotels." if added else f"{hotel.name} is already one of the strip's hotels."
-    return _change(db, project, block, calendar_service.Change(detail=detail), membership)
-
-
-@router.post(
-    "/projects/{project_id}/blocks/{block_id}/hotels/{location_id}/remove",
-    response_model=BlockChangeResponse,
-)
-def remove_strip_hotel(
-    project_id: uuid.UUID,
-    block_id: uuid.UUID,
-    location_id: uuid.UUID,
-    request: Request,
-    db: Session = Depends(get_db),
-    membership: Membership = Depends(require("projects.edit")),
-):
-    """Takes the hotel off the strip's list. People already sleeping there
-    keep it on their row."""
-    project = _project_or_404(db, membership, project_id)
-    block = _block_or_404(db, membership, project, block_id)
-    if not location_service.can_see_hotels(membership):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Location not found")
-    hotel = location_service.visible(db, membership, location_id)
-    if hotel is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Location not found")
-    removed = location_service.remove_strip_hotel(db, block, hotel, actor=_actor(request, membership))
-    db.commit()
-    detail = f"{hotel.name} removed from the strip's hotels." if removed else f"{hotel.name} was not one of the strip's hotels."
-    return _change(db, project, block, calendar_service.Change(detail=detail), membership)

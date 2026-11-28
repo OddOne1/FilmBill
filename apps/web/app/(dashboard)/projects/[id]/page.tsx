@@ -19,6 +19,8 @@ import { DaysTab } from './days-tab'
 import { BudgetsTab } from './budgets-tab'
 import { CrewTab } from './crew-tab'
 import { GearTab } from './gear-tab'
+import { LocationsTab } from './locations-tab'
+import { usePermissions } from '@/hooks/use-permissions'
 
 /**
  * One project: Overview · Days · Crew · Gear · Budgets. The Crew tab is there
@@ -30,13 +32,15 @@ import { GearTab } from './gear-tab'
  * "somebody corrected the name".
  */
 
-type Tab = 'overview' | 'days' | 'crew' | 'gear' | 'budgets'
+type Tab = 'overview' | 'days' | 'crew' | 'gear' | 'locations' | 'budgets'
 
-const TABS: { key: Tab; label: string; needsParties?: boolean; needsDevices?: boolean }[] = [
+const TABS: { key: Tab; label: string; needsParties?: boolean; needsDevices?: boolean; needsLocations?: boolean }[] = [
   { key: 'overview', label: 'Overview' },
   { key: 'days', label: 'Days' },
   { key: 'crew', label: 'Crew', needsParties: true },
   { key: 'gear', label: 'Gear', needsDevices: true },
+  // L1b. Where the project happens, where the crew sleep, the hospitals.
+  { key: 'locations', label: 'Locations', needsLocations: true },
   { key: 'budgets', label: 'Budgets' },
 ]
 
@@ -45,6 +49,7 @@ export default function ProjectDetailPage() {
   const projectId = params.id
   const activeCompanyId = useCompanyStore((state) => state.activeCompanyId)
   const access = useProjectAccess()
+  const { can } = usePermissions()
   const [project, setProject] = React.useState<Project | null>(null)
   const [error, setError] = React.useState<string | null>(null)
   const [tab, setTab] = React.useState<Tab>('overview')
@@ -108,7 +113,10 @@ export default function ProjectDetailPage() {
 
           <nav aria-label="Project" className="mt-5 flex gap-1 border-b border-border">
             {TABS.filter(
-              (entry) => (!entry.needsParties || access.canViewParties) && (!entry.needsDevices || access.canViewDevices),
+              (entry) =>
+                (!entry.needsParties || access.canViewParties) &&
+                (!entry.needsDevices || access.canViewDevices) &&
+                (!entry.needsLocations || can('locations.view')),
             ).map((entry) => (
               <button
                 key={entry.key}
@@ -157,6 +165,9 @@ export default function ProjectDetailPage() {
                 setTab('days')
               }}
             />
+          )}
+          {tab === 'locations' && can('locations.view') && (
+            <LocationsTab project={project} canEdit={access.canEdit} />
           )}
           {tab === 'budgets' && <BudgetsTab project={project} />}
         </>

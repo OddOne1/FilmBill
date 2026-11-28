@@ -294,35 +294,6 @@ class ProjectBlock(CompanyScoped, Base):
     )
 
 
-class ProjectBlockHotel(CompanyScoped, Base):
-    """L1. A hotel in use on a strip — the list a person's hotel is picked
-    from. One row per strip and hotel (`uq_project_block_hotels_pair`);
-    removing it sets `is_active` false and adding it again reactivates the
-    same row, so nothing is ever deleted."""
-
-    __tablename__ = "project_block_hotels"
-
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    block_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("project_blocks.id", ondelete="RESTRICT"), nullable=False
-    )
-    location_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("locations.id", ondelete="RESTRICT"), nullable=False
-    )
-    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
-    )
-
-    __table_args__ = (
-        UniqueConstraint("block_id", "location_id", name="uq_project_block_hotels_pair"),
-        Index("ix_project_block_hotels_location", "location_id"),
-    )
-
-
 class ProjectDay(CompanyScoped, Base):
     """One production day (SCOPE §11.3).
 

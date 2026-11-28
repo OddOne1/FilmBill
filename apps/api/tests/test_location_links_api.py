@@ -1,9 +1,11 @@
-"""Where a location attaches: strips, days, strip hotels, crew (L1 part 2).
-Real PostgreSQL.
+"""Where a location attaches: strips, days, crew rows (L1 part 2, L1b).
+Real PostgreSQL. L1b moved hotels to the project (stays), so the crew row
+shows the person's stays with a Route; `test_project_locations_api.py` has
+the project's list, guests and confirmations.
 
 The world: project "1000m" has a strip "Shoot" Mon 6 – Fri 10 July 2026
-with the old free text "Studio, Hof 2". Locations: **Studio Wien** (shoot,
-Hauptstraße 1, 2340 Mödling, AT, no coordinates), **Barn Tulln** (other,
+with the old free text "Studio, Hof 2". Locations: **Studio Wien** (shooting,
+Hauptstraße 1, 2340 Mödling, AT, no coordinates), **Barn Tulln** (shooting,
 48.3297, 16.0542), **AKH Wien** (hospital), **Hotel Test** (hotel, 48.1986,
 16.3417) and **Hotel Zwei** (hotel, Wien). **Anna Kern** (crew) is on the
 strip on 7, 8 and 9 July.
@@ -16,7 +18,7 @@ import pytest
 from apps.api.models.audit import AuditEvent
 from apps.api.models.company import CompanyRole
 from apps.api.models.crew import CrewAssignment
-from apps.api.models.project import ProjectBlockHotel, ProjectDay
+from apps.api.models.project import ProjectDay
 from apps.api.models.site_settings import SiteSettings
 from apps.api.services import permissions
 
@@ -54,7 +56,7 @@ def world(pg_db):
     pg_db.commit()
     studio = make_location(pg_db, company, name="Studio Wien", kind="shoot", city="Mödling",
                            street="Hauptstraße 1", zip="2340", country="AT")
-    barn = make_location(pg_db, company, name="Barn Tulln", kind="other", city="Tulln",
+    barn = make_location(pg_db, company, name="Barn Tulln", kind="shoot", city="Tulln",
                          latitude="48.3297", longitude="16.0542")
     akh = make_location(pg_db, company, name="AKH Wien", kind="hospital")
     hotel = make_location(pg_db, company, name="Hotel Test", kind="hotel", latitude="48.1986", longitude="16.3417")
@@ -131,15 +133,15 @@ def _crew(pg_client, world, user=None):
 
 
 def _set_hotel(pg_client, world, location, user=None):
-    return pg_client.put(
-        f"/projects/{world['film'].id}/crew/{world['assignment'].id}/hotel",
-        headers=_h(world, user),
-        json={"location_id": str(location.id) if location else None},
-    )
+    """L1b: Anna gets a stay at `location` (default dates)."""
+    return _stay(pg_client, world, location, user=user)
 
 
 def _add_hotel(pg_client, world, location, user=None):
-    return pg_client.post(f"{_base(world)}/hotels", headers=_h(world, user), json={"location_id": str(location.id)})
+    """L1b: the location joins the project's list."""
+    return pg_client.post(
+        f"/projects/{world['film'].id}/locations", headers=_h(world, user), json={"location_id": str(location.id)}
+    )
 
 
 # ─── The strip and its days ─────────────────────────────────────────────────
@@ -223,8 +225,8 @@ def test_moving_and_resizing_the_strip_do_not_touch_locations(pg_client, pg_db, 
 @pytest.mark.parametrize(
     "which, sentence",
     [
-        ("akh", "“AKH Wien” is a hospital. A strip's or a day's location is where it is shot: pick a shoot location, or change this location's kind first."),
-        ("hotel", "“Hotel Test” is a hotel. A strip's or a day's location is where it is shot: pick a shoot location, or add the hotel under Hotels."),
+        ("akh", "“AKH Wien” is not marked as a shooting location. Tick “Shooting location” on it first, or pick another location."),
+        ("hotel", "“Hotel Test” is not marked as a shooting location. Tick “Shooting location” on it first, or pick another location."),
     ],
 )
 def test_a_kind_that_does_not_fit_is_refused_on_strip_and_day(pg_client, pg_db, world, which, sentence):
@@ -250,94 +252,65 @@ def test_an_archived_location_still_shows_and_cannot_be_newly_picked(pg_client, 
     assert _set_strip(pg_client, world, world["studio"]).status_code == 200
     new_pick = _bulk(pg_client, world, [9], world["studio"])
     assert (new_pick.status_code, new_pick.json()["detail"]) == (
-        422, "“Studio Wien” is archived. Restore it under Locations, or pick another location.",
+        422, "“Studio Wien” is archived. Restore it under the project's Locations, or pick another location.",
     )
 
 
-# ─── Hotels ─────────────────────────────────────────────────────────────────
+# ─── Hotel stays on the crew row (L1b) ──────────────────────────────────────
 
 
-def test_strip_hotels_add_remove_and_kind(pg_client, pg_db, world):
-    added = _add_hotel(pg_client, world, world["hotel"])
-    assert added.status_code == 200, added.text
-    assert [h["name"] for h in added.json()["strip"]["hotels"]] == ["Hotel Test"]
-    assert added.json()["detail"] == "Hotel Test added to the strip's hotels."
-    assert _add_hotel(pg_client, world, world["hotel"]).json()["detail"] == "Hotel Test is already one of the strip's hotels."
-    hospital = _add_hotel(pg_client, world, world["akh"])
-    assert (hospital.status_code, hospital.json()["detail"]) == (
-        422, "“AKH Wien” is a hospital, not a hotel. Pick a hotel, or change this location's kind to Hotel first.",
+def _stay(pg_client, world, hotel, check_in=None, check_out=None, user=None):
+    body = {"party_id": str(world["anna"].id)}
+    if check_in:
+        body["check_in"] = ISO(check_in)
+    if check_out:
+        body["check_out"] = ISO(check_out)
+    return pg_client.post(
+        f"/projects/{world['film'].id}/locations/{hotel.id}/stays", headers=_h(world, user), json=body
     )
-    removed = pg_client.post(f"{_base(world)}/hotels/{world['hotel'].id}/remove", headers=_h(world))
-    assert removed.json()["strip"]["hotels"] == []
-    readded = _add_hotel(pg_client, world, world["hotel"])
-    assert [h["name"] for h in readded.json()["strip"]["hotels"]] == ["Hotel Test"]
-    pg_db.expire_all()
-    assert pg_db.query(ProjectBlockHotel).count() == 1
-    assert [e.action for e in pg_db.query(AuditEvent).filter(AuditEvent.action.like("project_block.hotel_%")).order_by(AuditEvent.created_at, AuditEvent.id)] == [
-        "project_block.hotel_added", "project_block.hotel_removed", "project_block.hotel_added",
-    ]
 
 
-def test_a_persons_hotel_and_the_route_from_it(pg_client, pg_db, world):
+def test_the_crew_row_shows_the_stay_and_the_route_from_it(pg_client, pg_db, world):
     _set_strip(pg_client, world, world["studio"])
-    set_ = _set_hotel(pg_client, world, world["hotel"])
-    assert set_.status_code == 200, set_.text
-    row = set_.json()
-    assert (row["hotel_visible"], row["hotel"]["name"]) == (True, "Hotel Test")
-    # From the hotel's coordinates to the effective location of 7 July —
-    # Anna's first day — which is the strip's Studio Wien.
-    assert row["route_link"] == (
+    assert _stay(pg_client, world, world["hotel"]).status_code == 200
+    row = _crew(pg_client, world)
+    assert row["hotel_visible"] is True
+    stays = row["hotel_stays"]
+    # Default dates: Anna's first day (7 July) to the day after her last (10).
+    assert [(s["hotel"]["name"], s["check_in"], s["check_out"]) for s in stays] == [("Hotel Test", ISO(7), ISO(10))]
+    # From the hotel's coordinates to where 7 July happens: Studio Wien.
+    assert stays[0]["route_link"] == (
         "https://www.google.com/maps/dir/?api=1&origin=48.1986%2C16.3417"
         "&destination=Hauptstra%C3%9Fe%201%2C%202340%20M%C3%B6dling%2C%20AT"
     )
-    # Her first day moves to the barn: the route follows.
     _bulk(pg_client, world, [7], world["barn"])
-    assert _crew(pg_client, world)["route_link"] == (
+    assert _crew(pg_client, world)["hotel_stays"][0]["route_link"] == (
         "https://www.google.com/maps/dir/?api=1&origin=48.1986%2C16.3417&destination=48.3297%2C16.0542"
     )
-    cleared = _set_hotel(pg_client, world, None).json()
-    assert (cleared["hotel"], cleared["route_link"]) == (None, None)
-    actions = [e.changes for e in pg_db.query(AuditEvent).filter(AuditEvent.action == "crew_assignment.hotel_set").order_by(AuditEvent.created_at, AuditEvent.id)]
-    assert actions == [
-        {"hotel_location_id": [None, str(world["hotel"].id)]},
-        {"hotel_location_id": [str(world["hotel"].id), None]},
+
+
+def test_two_hotels_the_route_starts_inside_each_stay(pg_client, pg_db, world):
+    _set_strip(pg_client, world, world["studio"])
+    _bulk(pg_client, world, [9], world["barn"])
+    _stay(pg_client, world, world["hotel"], 7, 9)
+    _stay(pg_client, world, world["hotel_two"], 9, 10)
+    stays = _crew(pg_client, world)["hotel_stays"]
+    assert [(s["hotel"]["name"], s["route_link"].split("destination=")[1]) for s in stays] == [
+        ("Hotel Test", "Hauptstra%C3%9Fe%201%2C%202340%20M%C3%B6dling%2C%20AT"),
+        ("Hotel Zwei", "48.3297%2C16.0542"),
     ]
 
 
 def test_no_route_without_a_location(pg_client, world):
-    row = _set_hotel(pg_client, world, world["hotel"]).json()
-    assert (row["hotel"]["name"], row["route_link"]) == ("Hotel Test", None)
-
-
-def test_a_hospital_is_refused_as_a_hotel(pg_client, pg_db, world):
-    refused = _set_hotel(pg_client, world, world["akh"])
-    assert (refused.status_code, refused.json()["detail"]) == (
-        422, "“AKH Wien” is a hospital, not a hotel. Pick a hotel, or change this location's kind to Hotel first.",
-    )
-    pg_db.expire_all()
-    assert pg_db.get(CrewAssignment, world["assignment"].id).hotel_location_id is None
-
-
-def test_a_hotel_outside_a_non_empty_strip_list_is_refused(pg_client, pg_db, world):
-    # Empty list: any hotel.
-    assert _set_hotel(pg_client, world, world["hotel_two"]).status_code == 200
-    _add_hotel(pg_client, world, world["hotel"])
-    # The one already set stays allowed; a new one outside the list is not.
-    assert _set_hotel(pg_client, world, world["hotel_two"]).status_code == 200
-    _set_hotel(pg_client, world, None)
-    refused = _set_hotel(pg_client, world, world["hotel_two"])
-    assert (refused.status_code, refused.json()["detail"]) == (
-        422,
-        "“Hotel Zwei” is not one of this strip's hotels (Hotel Test). Pick one of them, or add it to the "
-        "strip's hotels first. (A strip with no hotels listed accepts any hotel.)",
-    )
-    assert _set_hotel(pg_client, world, world["hotel"]).status_code == 200
+    _stay(pg_client, world, world["hotel"])
+    stay = _crew(pg_client, world)["hotel_stays"][0]
+    assert (stay["hotel"]["name"], stay["route_link"]) == ("Hotel Test", None)
 
 
 def test_an_archived_hotel_stays_on_the_crew_row(pg_client, world):
-    _set_hotel(pg_client, world, world["hotel"])
+    _stay(pg_client, world, world["hotel"])
     pg_client.post(f"/locations/{world['hotel'].id}/archive", headers=_h(world))
-    assert _shown(_crew(pg_client, world)["hotel"]) == ("Hotel Test", False)
+    assert _shown(_crew(pg_client, world)["hotel_stays"][0]["hotel"]) == ("Hotel Test", False)
 
 
 # ─── Where it is used ───────────────────────────────────────────────────────
@@ -346,23 +319,32 @@ def test_an_archived_hotel_stays_on_the_crew_row(pg_client, world):
 def test_usage_lists_every_place_and_archiving_keeps_them(pg_client, pg_db, world):
     _set_strip(pg_client, world, world["studio"])
     _bulk(pg_client, world, [8], world["studio"])
-    _add_hotel(pg_client, world, world["hotel"])
-    _set_hotel(pg_client, world, world["hotel"])
+    _stay(pg_client, world, world["hotel"])
     studio = pg_client.get(f"/locations/{world['studio'].id}/usage", headers=_h(world)).json()
-    assert studio["count"] == 2
     assert [(u["kind"], u["project_name"], u["strip_name"], u["date"]) for u in studio["uses"]] == [
+        ("project", "1000m", None, None),
         ("strip", "1000m", "Shoot", None),
         ("day", "1000m", "Shoot", ISO(8)),
     ]
     hotel = pg_client.get(f"/locations/{world['hotel'].id}/usage", headers=_h(world)).json()
-    assert [(u["kind"], u["party_name"]) for u in hotel["uses"]] == [("strip_hotel", None), ("crew_hotel", "Anna Kern")]
+    assert [(u["kind"], u["party_name"]) for u in hotel["uses"]] == [("project", None), ("hotel_stay", "Anna Kern")]
     listed = {row["name"]: row["in_use"] for row in pg_client.get("/locations", headers=_h(world)).json()["locations"]}
-    assert (listed["Studio Wien"], listed["Hotel Test"], listed["Barn Tulln"]) == (2, 2, 0)
+    assert (listed["Studio Wien"], listed["Hotel Test"], listed["Barn Tulln"]) == (3, 2, 0)
     pg_client.post(f"/locations/{world['studio'].id}/archive", headers=_h(world))
     after = pg_client.get(f"/locations/{world['studio'].id}/usage", headers=_h(world)).json()
-    assert after["count"] == 2
+    assert after["count"] == 3
     pg_db.expire_all()
     assert world["shoot"].location_id == world["studio"].id
+
+
+def test_a_location_used_on_the_calendar_joins_the_projects_list(pg_client, world):
+    _set_strip(pg_client, world, world["studio"])
+    _bulk(pg_client, world, [8], world["barn"])
+    listed = pg_client.get(f"/projects/{world['film'].id}/locations", headers=_h(world)).json()["locations"]
+    assert [(e["location"]["name"], e["strip_names"], e["day_dates"]) for e in listed] == [
+        ("Barn Tulln", [], [ISO(8)]),
+        ("Studio Wien", ["Shoot"], []),
+    ]
 
 
 # ─── Who may ────────────────────────────────────────────────────────────────
@@ -372,12 +354,19 @@ def test_staff_see_the_strip_location_and_no_hotels(pg_client, pg_db, world):
     _set_strip(pg_client, world, world["studio"])
     _add_hotel(pg_client, world, world["hotel"])
     staff = _user(pg_db, world, CompanyRole.staff)
+    _set_hotel(pg_client, world, world["hotel"])
     strip = _calendar_strip(pg_client, world, staff)
     assert strip["location_ref"]["name"] == "Studio Wien"
-    assert (strip["hotels"], strip["hotels_visible"]) == ([], False)
     assert "Hotel Test" not in pg_client.get(f"/projects/{world['film'].id}/calendar", headers=_h(world, staff)).text
-    # Control: the owner sees the hotel on the same strip.
-    assert [h["name"] for h in _calendar_strip(pg_client, world)["hotels"]] == ["Hotel Test"]
+    listed = pg_client.get(f"/projects/{world['film'].id}/locations", headers=_h(world, staff)).json()
+    assert ([e["location"]["name"] for e in listed["locations"]], listed["hotels_visible"]) == (["Studio Wien"], False)
+    assert "Anna Kern" not in str(listed)
+    # Control: the owner sees the hotel and its guest on the same project.
+    owner = pg_client.get(f"/projects/{world['film'].id}/locations", headers=_h(world)).json()
+    assert [(e["location"]["name"], [g["party_name"] for g in e["stays"]]) for e in owner["locations"]] == [
+        ("Hotel Test", ["Anna Kern"]),
+        ("Studio Wien", []),
+    ]
     assert _set_strip(pg_client, world, world["barn"], staff).status_code == 404
     assert _add_hotel(pg_client, world, world["hotel"], staff).status_code == 404
     assert _set_hotel(pg_client, world, world["hotel"], staff).status_code == 404
@@ -416,7 +405,7 @@ def test_without_locations_view_nothing_can_be_attached(pg_client, pg_db, world,
     assert _set_hotel(pg_client, world, world["hotel"], producer).status_code == 404
     # The crew row itself is still theirs to read: without hotels.
     row = _crew(pg_client, world, producer)
-    assert (row["party_name"], row["hotel_visible"], row["hotel"]) == ("Anna Kern", False, None)
+    assert (row["party_name"], row["hotel_visible"], row["hotel_stays"]) == ("Anna Kern", False, [])
     # Control: the owner, same world.
     assert _set_hotel(pg_client, world, world["hotel"]).status_code == 200
 
@@ -442,6 +431,5 @@ def test_another_companys_strip_is_not_found(pg_client, pg_db, world):
     pg_db.commit()
     url = f"/projects/{world['film'].id}/blocks/{their_block.id}"
     assert pg_client.patch(url, headers=_h(world), json={"location_id": str(world["studio"].id)}).status_code == 404
-    assert pg_client.post(f"{url}/hotels", headers=_h(world), json={"location_id": str(world["hotel"].id)}).status_code == 404
     pg_db.expire_all()
     assert their_block.location_id is None

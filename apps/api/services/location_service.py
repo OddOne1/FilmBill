@@ -1,4 +1,13 @@
-"""Locations (L1): the rules, the writes and their audit events.
+"""Locations (L1, L1b): the rules, the writes and their audit events.
+
+**L1b.** A location has a set of USES (shoot, hotel, hospital, restaurant,
+other). It belongs to projects through `project_locations` (what a
+project's Locations tab lists; a location used on a strip or day is added
+there by that use). Hotels hold STAYS (a crew member of the production,
+check-in to check-out) and every location in a project can hold booking
+CONFIRMATIONS (a file or pasted text). A location whose only use is hotel is
+crew information exactly as an L1 hotel was; one that is also a shooting
+location is visible as one, without its hotel use, stays or confirmations.
 
 **Hotels are crew information.** `can_see_hotels` is `locations.view` AND
 `HOTEL_PERMISSION` (`parties.view`, the permission that shows crew today,
@@ -30,9 +39,10 @@ from sqlalchemy.orm import Session
 from ..billing.planning import map_links
 from ..core.countries import normalise_country
 from ..models.location import (
-    LOCATION_HOSPITAL,
-    LOCATION_HOTEL,
-    LOCATION_KINDS,
+    LOCATION_USES,
+    USE_HOSPITAL,
+    USE_HOTEL,
+    USE_SHOOT,
     Location,
 )
 from ..models.party import Party
@@ -59,7 +69,8 @@ VERIFICATION_FIELDS: tuple[str, ...] = (
 #: Every field an audit entry may record, in a fixed order.
 AUDIT_FIELDS: tuple[str, ...] = (
     "name",
-    "kind",
+    "uses",
+    "source_link",
     "street",
     "street2",
     "zip",
@@ -82,6 +93,7 @@ AUDIT_FIELDS: tuple[str, ...] = (
 )
 
 TEXT_FIELDS: tuple[str, ...] = (
+    "source_link",
     "street",
     "street2",
     "zip",
@@ -100,7 +112,13 @@ VERIFICATION_CLEARED_MESSAGE = (
     "Check the entry and mark it verified again."
 )
 
-KIND_LABELS = {"shoot": "shoot location", "hotel": "hotel", "hospital": "hospital", "other": "location"}
+USE_LABELS = {
+    "shoot": "Shooting location",
+    "hotel": "Hotel",
+    "hospital": "Hospital",
+    "restaurant": "Restaurant",
+    "other": "Other",
+}
 
 
 class LocationError(ValueError):
@@ -131,8 +149,23 @@ def visible_query(db: Session, membership):
     with `HOTEL_PERMISSION`."""
     query = scoped(db.query(Location), membership)
     if not can_see_hotels(membership):
-        query = query.filter(Location.kind != LOCATION_HOTEL)
+        # A place used ONLY as a hotel is crew information; one that is also
+        # a shooting location (or anything else) is visible as that.
+        query = query.filter(~Location.uses.contained_by([USE_HOTEL]))
     return query
+
+
+def visible_uses(membership, row: Location) -> list[str]:
+    """The uses a caller is shown: without `hotel` for one who may not see
+    hotels. In `LOCATION_USES` order."""
+    shown = [u for u in LOCATION_USES if u in (row.uses or [])]
+    if not can_see_hotels(membership):
+        shown = [u for u in shown if u != USE_HOTEL]
+    return shown
+
+
+def is_hotel(row: Location) -> bool:
+    return USE_HOTEL in (row.uses or [])
 
 
 def visible(db: Session, membership, location_id: uuid.UUID) -> Optional[Location]:
@@ -258,12 +291,21 @@ def _apply(db: Session, membership, row: Location, changes: dict) -> None:
             raise LocationError("This location has no name. Give it a name, for example “Studio Wien”.")
         row.name = " ".join(name.split())
         row.name_key = name_key(name)
-    if "kind" in changes and changes["kind"] is not None:
-        if changes["kind"] not in LOCATION_KINDS:  # pragma: no cover - the schema refuses first
-            raise LocationError("This kind of location does not exist. Pick shoot, hotel, hospital or other.")
-        if changes["kind"] == LOCATION_HOTEL and not can_see_hotels(membership):
-            raise LookupError("hotel")
-        row.kind = changes["kind"]
+    if "uses" in changes and changes["uses"] is not None:
+        wanted = [u for u in LOCATION_USES if u in set(changes["uses"])]
+        if not can_see_hotels(membership):
+            if USE_HOTEL in wanted:
+                raise LookupError("hotel")
+            # The caller cannot see the hotel use, so cannot have meant to
+            # remove it: an existing one stays.
+            if USE_HOTEL in (row.uses or []):
+                wanted = [u for u in LOCATION_USES if u in set(wanted) | {USE_HOTEL}]
+        if not wanted:
+            raise LocationError(
+                "This location has no use ticked. Tick at least one: Shooting location, Hotel, Hospital, "
+                "Restaurant or Other."
+            )
+        row.uses = wanted
     for field in TEXT_FIELDS:
         if field in changes:
             setattr(row, field, _text(changes[field]))
@@ -305,10 +347,8 @@ class Change:
 
 
 def create(db: Session, membership, changes: dict, *, actor: audit.Actor) -> Change:
-    row = Location(company_id=membership.company_id, kind=changes.get("kind") or "shoot", name="", name_key="")
-    if row.kind == LOCATION_HOTEL and not can_see_hotels(membership):
-        raise LookupError("hotel")
-    _apply(db, membership, row, changes)
+    row = Location(company_id=membership.company_id, uses=[], name="", name_key="")
+    _apply(db, membership, row, {"uses": [USE_SHOOT], **changes})
     _ensure_name_free(db, membership.company_id, row.name_key, except_id=None)
     db.add(row)
     db.flush()
@@ -323,7 +363,7 @@ def update(db: Session, membership, row: Location, changes: dict, *, actor: audi
     _apply(db, membership, row, changes)
     if row.name_key != name_key(before["name"]) and row.is_active:
         _ensure_name_free(db, row.company_id, row.name_key, except_id=row.id)
-    if row.kind != LOCATION_HOSPITAL and row.verified_on is not None:
+    if USE_HOSPITAL not in (row.uses or []) and row.verified_on is not None:
         # A hospital that became something else is no longer a verified
         # hospital; the verification belongs to the kind.
         changed_kind = True
@@ -356,9 +396,10 @@ def update(db: Session, membership, row: Location, changes: dict, *, actor: audi
 
 
 def verify(db: Session, row: Location, *, note: Optional[str], user_id: uuid.UUID, actor: audit.Actor, today: Optional[date] = None) -> Change:
-    if row.kind != LOCATION_HOSPITAL:
+    if USE_HOSPITAL not in (row.uses or []):
         raise LocationError(
-            f"“{row.name}” is a {KIND_LABELS[row.kind]}, not a hospital. Only a hospital can be marked verified."
+            f"“{row.name}” is not marked as a hospital. Only a hospital can be marked verified; tick "
+            "“Hospital” on it first if it is one."
         )
     if not row.is_active:
         raise LocationError(f"“{row.name}” is archived. Restore it before marking it verified.")
@@ -419,39 +460,29 @@ def _strip_name(block) -> str:
 
 
 def in_use_counts(db: Session, company_id: uuid.UUID, ids: list[uuid.UUID]) -> dict[uuid.UUID, int]:
-    """How many active strips, active days, strip hotel lists and open crew
-    rows use each location — in four grouped queries."""
+    """How many active projects, strips, days and hotel stays use each
+    location — four grouped queries."""
     from sqlalchemy import func
 
-    from ..models.crew import ASSIGNMENT_CANCELLED, CrewAssignment
-    from ..models.project import ProjectBlock, ProjectBlockHotel, ProjectDay
+    from ..models.location import HotelStay, ProjectLocation
+    from ..models.project import ProjectBlock, ProjectDay
 
     if not ids:
         return {}
     counts: dict[uuid.UUID, int] = {}
     queries = (
+        db.query(ProjectLocation.location_id, func.count())
+        .filter(ProjectLocation.company_id == company_id, ProjectLocation.location_id.in_(ids), ProjectLocation.is_active.is_(True))
+        .group_by(ProjectLocation.location_id),
         db.query(ProjectBlock.location_id, func.count())
         .filter(ProjectBlock.company_id == company_id, ProjectBlock.location_id.in_(ids), ProjectBlock.is_active.is_(True))
         .group_by(ProjectBlock.location_id),
         db.query(ProjectDay.location_id, func.count())
         .filter(ProjectDay.company_id == company_id, ProjectDay.location_id.in_(ids), ProjectDay.is_active.is_(True))
         .group_by(ProjectDay.location_id),
-        db.query(ProjectBlockHotel.location_id, func.count())
-        .join(ProjectBlock, ProjectBlock.id == ProjectBlockHotel.block_id)
-        .filter(
-            ProjectBlockHotel.company_id == company_id,
-            ProjectBlockHotel.location_id.in_(ids),
-            ProjectBlockHotel.is_active.is_(True),
-            ProjectBlock.is_active.is_(True),
-        )
-        .group_by(ProjectBlockHotel.location_id),
-        db.query(CrewAssignment.hotel_location_id, func.count())
-        .filter(
-            CrewAssignment.company_id == company_id,
-            CrewAssignment.hotel_location_id.in_(ids),
-            CrewAssignment.status != ASSIGNMENT_CANCELLED,
-        )
-        .group_by(CrewAssignment.hotel_location_id),
+        db.query(HotelStay.location_id, func.count())
+        .filter(HotelStay.company_id == company_id, HotelStay.location_id.in_(ids), HotelStay.is_active.is_(True))
+        .group_by(HotelStay.location_id),
     )
     for query in queries:
         for location_id, count in query.all():
@@ -460,15 +491,21 @@ def in_use_counts(db: Session, company_id: uuid.UUID, ids: list[uuid.UUID]) -> d
 
 
 def usage(db: Session, membership, row: Location) -> list[Use]:
-    """Every strip, day, strip hotel list and crew row that uses `row`, with
-    the project. Crew rows (a person's name) only for a caller who may see
-    crew; a hotel is only reachable for such a caller anyway."""
-    from ..models.crew import ASSIGNMENT_CANCELLED, CrewAssignment
+    """Every project, strip, day and hotel stay that uses `row`. Stays (a
+    person's name) only for a caller who may see hotels."""
+    from ..models.location import HotelStay, ProjectLocation
     from ..models.party import Party
-    from ..models.project import Project, ProjectBlock, ProjectBlockHotel, ProjectDay
+    from ..models.project import Project, ProjectBlock, ProjectDay
 
     company_id = membership.company_id
     uses: list[Use] = []
+    for project in (
+        db.query(Project)
+        .join(ProjectLocation, ProjectLocation.project_id == Project.id)
+        .filter(ProjectLocation.company_id == company_id, ProjectLocation.location_id == row.id, ProjectLocation.is_active.is_(True))
+        .order_by(Project.name, Project.id)
+    ):
+        uses.append(Use("project", project.id, project.name, project.project_number))
     for block, project in (
         db.query(ProjectBlock, Project)
         .join(Project, Project.id == ProjectBlock.project_id)
@@ -484,52 +521,22 @@ def usage(db: Session, membership, row: Location) -> list[Use]:
         .order_by(ProjectDay.date, ProjectDay.id)
     ):
         uses.append(
-            Use(
-                "day",
-                project.id,
-                project.name,
-                project.project_number,
-                block.id if block else None,
-                _strip_name(block) if block else None,
-                day.date,
-            )
+            Use("day", project.id, project.name, project.project_number,
+                block.id if block else None, _strip_name(block) if block else None, day.date)
         )
-    for block, project in (
-        db.query(ProjectBlock, Project)
-        .join(ProjectBlockHotel, ProjectBlockHotel.block_id == ProjectBlock.id)
-        .join(Project, Project.id == ProjectBlock.project_id)
-        .filter(
-            ProjectBlockHotel.company_id == company_id,
-            ProjectBlockHotel.location_id == row.id,
-            ProjectBlockHotel.is_active.is_(True),
-            ProjectBlock.is_active.is_(True),
-        )
-        .order_by(ProjectBlock.start_date, ProjectBlock.id)
-    ):
-        uses.append(Use("strip_hotel", project.id, project.name, project.project_number, block.id, _strip_name(block)))
     if can_see_hotels(membership):
-        for assignment, block, project, name in (
-            db.query(CrewAssignment, ProjectBlock, Project, Party.name)
-            .join(ProjectBlock, ProjectBlock.id == CrewAssignment.block_id)
-            .join(Project, Project.id == CrewAssignment.project_id)
-            .join(Party, Party.id == CrewAssignment.party_id)
-            .filter(
-                CrewAssignment.company_id == company_id,
-                CrewAssignment.hotel_location_id == row.id,
-                CrewAssignment.status != ASSIGNMENT_CANCELLED,
-            )
-            .order_by(ProjectBlock.start_date, Party.name, CrewAssignment.id)
+        for stay, project, name in (
+            db.query(HotelStay, Project, Party.name)
+            .join(Project, Project.id == HotelStay.project_id)
+            .join(Party, Party.id == HotelStay.party_id)
+            .filter(HotelStay.company_id == company_id, HotelStay.location_id == row.id, HotelStay.is_active.is_(True))
+            .order_by(HotelStay.check_in, Party.name, HotelStay.id)
         ):
-            uses.append(
-                Use("crew_hotel", project.id, project.name, project.project_number, block.id, _strip_name(block), party_name=name)
-            )
+            uses.append(Use("hotel_stay", project.id, project.name, project.project_number, date=stay.check_in, party_name=name))
     return uses
 
 
 # ─── Attaching a location ───────────────────────────────────────────────────
-
-#: The kinds a strip or a day may take as its location: where it is SHOT.
-PLACE_KINDS: tuple[str, ...] = ("shoot", "other")
 
 
 def _attachable(db: Session, membership, location_id: uuid.UUID, *, current: Optional[uuid.UUID]) -> Location:
@@ -538,66 +545,36 @@ def _attachable(db: Session, membership, location_id: uuid.UUID, *, current: Opt
         raise LookupError("location")
     if not row.is_active and row.id != current:
         raise LocationError(
-            f"“{row.name}” is archived. Restore it under Locations, or pick another location."
+            f"“{row.name}” is archived. Restore it under the project's Locations, or pick another location."
         )
     return row
 
 
 def place_for_day(db: Session, membership, location_id: Optional[uuid.UUID], *, current: Optional[uuid.UUID]) -> Optional[Location]:
-    """The location a strip or a day may be set to: shoot or other, active
-    (or the one it already has). None clears it."""
+    """The location a strip or a day may be set to: one marked as a
+    shooting location, active (or the one it already has). None clears it."""
     if location_id is None:
         return None
     row = _attachable(db, membership, location_id, current=current)
-    if row.kind not in PLACE_KINDS:
-        if row.kind == LOCATION_HOTEL:
-            raise LocationError(
-                f"“{row.name}” is a hotel. A strip's or a day's location is where it is shot: pick a shoot "
-                "location, or add the hotel under Hotels."
-            )
+    if USE_SHOOT not in (row.uses or []):
         raise LocationError(
-            f"“{row.name}” is a hospital. A strip's or a day's location is where it is shot: pick a shoot "
-            "location, or change this location's kind first."
+            f"“{row.name}” is not marked as a shooting location. Tick “Shooting location” on it first, "
+            "or pick another location."
         )
     return row
 
 
 def hotel(db: Session, membership, location_id: uuid.UUID, *, current: Optional[uuid.UUID] = None) -> Location:
-    """A location that may be used as a hotel: kind hotel, active (or the
-    one already set). A hotel the caller may not see is not found."""
+    """A location that may take hotel stays: marked as a hotel, active (or
+    the one already set). Not visible: not found."""
     if not can_see_hotels(membership):
         raise LookupError("hotel")
     row = _attachable(db, membership, location_id, current=current)
-    if row.kind != LOCATION_HOTEL:
+    if not is_hotel(row):
         raise LocationError(
-            f"“{row.name}” is a {KIND_LABELS[row.kind]}, not a hotel. Pick a hotel, or change this "
-            "location's kind to Hotel first."
+            f"“{row.name}” is not marked as a hotel. Tick “Hotel” on it first, or pick a hotel."
         )
     return row
-
-
-def strip_hotels(db: Session, company_id: uuid.UUID, block_ids) -> dict[uuid.UUID, list[Location]]:
-    """The hotels in use on each strip, by name."""
-    from ..models.project import ProjectBlockHotel
-
-    out: dict[uuid.UUID, list[Location]] = {}
-    block_ids = list(block_ids)
-    if not block_ids:
-        return out
-    rows = (
-        db.query(ProjectBlockHotel.block_id, Location)
-        .join(Location, Location.id == ProjectBlockHotel.location_id)
-        .filter(
-            ProjectBlockHotel.company_id == company_id,
-            ProjectBlockHotel.block_id.in_(block_ids),
-            ProjectBlockHotel.is_active.is_(True),
-        )
-        .order_by(Location.name_key, Location.id)
-        .all()
-    )
-    for block_id, location in rows:
-        out.setdefault(block_id, []).append(location)
-    return out
 
 
 def by_id(db: Session, company_id: uuid.UUID, ids) -> dict[uuid.UUID, Location]:
@@ -610,76 +587,383 @@ def by_id(db: Session, company_id: uuid.UUID, ids) -> dict[uuid.UUID, Location]:
     }
 
 
-def add_strip_hotel(db: Session, membership, block, location: Location, *, actor: audit.Actor) -> bool:
-    """Adds `location` to the strip's hotels; True when it was not there."""
-    from ..models.project import ProjectBlockHotel
+# ─── A project's locations (L1b) ────────────────────────────────────────────
 
-    row = (
-        db.query(ProjectBlockHotel)
-        .filter(ProjectBlockHotel.block_id == block.id, ProjectBlockHotel.location_id == location.id)
+
+def _pair(db: Session, project_id: uuid.UUID, location_id: uuid.UUID):
+    from ..models.location import ProjectLocation
+
+    return (
+        db.query(ProjectLocation)
+        .filter(ProjectLocation.project_id == project_id, ProjectLocation.location_id == location_id)
         .first()
     )
+
+
+def add_to_project(db: Session, project, location: Location, *, actor: audit.Actor, reason: Optional[str] = None) -> bool:
+    """Adds `location` to the project's list; True when it was not on it."""
+    from ..models.location import ProjectLocation
+
+    row = _pair(db, project.id, location.id)
     if row is not None and row.is_active:
         return False
     if row is None:
-        db.add(ProjectBlockHotel(company_id=block.company_id, block_id=block.id, location_id=location.id))
+        row = ProjectLocation(company_id=project.company_id, project_id=project.id, location_id=location.id)
+        db.add(row)
     else:
         row.is_active = True
     db.flush()
     audit.record(
-        db, actor, block, "project_block.hotel_added", None,
-        {"hotel_location_id": str(location.id), "hotel": location.name},
+        db, actor, row, "project_location.added", None,
+        {"project_id": str(project.id), "location_id": str(location.id), "location": location.name},
+        reason=reason,
     )
     return True
 
 
-def remove_strip_hotel(db: Session, block, location: Location, *, actor: audit.Actor) -> bool:
-    """Takes `location` off the strip's hotels. People who already sleep
-    there keep it — the list is what new choices are made from."""
-    from ..models.project import ProjectBlockHotel
+def ensure_in_project(db: Session, project, location: Optional[Location], *, actor: audit.Actor) -> None:
+    """A location used on a strip or a day is one of the project's."""
+    if location is not None:
+        add_to_project(db, project, location, actor=actor, reason="Used on the calendar.")
 
-    row = (
-        db.query(ProjectBlockHotel)
-        .filter(
-            ProjectBlockHotel.block_id == block.id,
-            ProjectBlockHotel.location_id == location.id,
-            ProjectBlockHotel.is_active.is_(True),
-        )
-        .first()
+
+def remove_from_project(db: Session, project, location: Location, *, actor: audit.Actor) -> None:
+    """Off the project's list. Refused while a strip, a day or a stay of the
+    project still uses it — the sentence says which."""
+    from ..models.location import HotelStay
+    from ..models.project import ProjectBlock, ProjectDay
+
+    strips = (
+        db.query(ProjectBlock)
+        .filter(ProjectBlock.project_id == project.id, ProjectBlock.location_id == location.id, ProjectBlock.is_active.is_(True))
+        .count()
     )
-    if row is None:
-        return False
+    days = (
+        db.query(ProjectDay)
+        .filter(ProjectDay.project_id == project.id, ProjectDay.location_id == location.id, ProjectDay.is_active.is_(True))
+        .count()
+    )
+    stays = (
+        db.query(HotelStay)
+        .filter(HotelStay.project_id == project.id, HotelStay.location_id == location.id, HotelStay.is_active.is_(True))
+        .count()
+    )
+    if strips or days or stays:
+        parts = []
+        if strips:
+            parts.append(f"{strips} {'strip' if strips == 1 else 'strips'}")
+        if days:
+            parts.append(f"{days} {'day' if days == 1 else 'days'}")
+        if stays:
+            parts.append(f"{stays} hotel {'guest' if stays == 1 else 'guests'}")
+        raise LocationError(
+            f"“{location.name}” is still used by {', '.join(parts)} of this project. Change those first, "
+            "then remove it from the project."
+        )
+    row = _pair(db, project.id, location.id)
+    if row is None or not row.is_active:
+        return
     row.is_active = False
     db.flush()
     audit.record(
-        db, actor, block, "project_block.hotel_removed",
-        {"hotel_location_id": str(location.id), "hotel": location.name}, None,
+        db, actor, row, "project_location.removed",
+        {"project_id": str(project.id), "location_id": str(location.id), "location": location.name}, None,
     )
-    return True
 
 
-def check_hotel_for_strip(db: Session, block, location: Location, *, current: Optional[uuid.UUID]) -> None:
-    """A person's hotel: one of the strip's hotels, or any hotel when the
-    strip has none listed. The one already set stays allowed."""
-    if location.id == current:
-        return
-    listed = strip_hotels(db, block.company_id, [block.id]).get(block.id, [])
-    if listed and location.id not in {h.id for h in listed}:
-        names = ", ".join(h.name for h in listed)
+def project_location_ids(db: Session, project_id: uuid.UUID) -> list[uuid.UUID]:
+    from ..models.location import ProjectLocation
+
+    return [
+        r.location_id
+        for r in db.query(ProjectLocation.location_id)
+        .filter(ProjectLocation.project_id == project_id, ProjectLocation.is_active.is_(True))
+    ]
+
+
+# ─── Hotel stays (L1b) ──────────────────────────────────────────────────────
+
+STAY_FIELDS: tuple[str, ...] = ("location_id", "party_id", "check_in", "check_out", "notes", "is_active")
+
+
+def crew_dates(db: Session, project_id: uuid.UUID, party_id: uuid.UUID) -> list[date]:
+    """The active days of the person's open assignments in the project."""
+    from ..models.crew import OCCUPYING_STATUSES, CrewAssignment, CrewAssignmentDay
+
+    return sorted(
+        {
+            d
+            for (d,) in db.query(CrewAssignmentDay.date)
+            .join(CrewAssignment, CrewAssignment.id == CrewAssignmentDay.assignment_id)
+            .filter(
+                CrewAssignment.project_id == project_id,
+                CrewAssignment.party_id == party_id,
+                CrewAssignment.status.in_(OCCUPYING_STATUSES),
+                CrewAssignmentDay.is_active.is_(True),
+            )
+        }
+    )
+
+
+def _is_crew_of(db: Session, project_id: uuid.UUID, party_id: uuid.UUID) -> bool:
+    from ..models.crew import OCCUPYING_STATUSES, CrewAssignment
+
+    return (
+        db.query(CrewAssignment)
+        .filter(
+            CrewAssignment.project_id == project_id,
+            CrewAssignment.party_id == party_id,
+            CrewAssignment.status.in_(OCCUPYING_STATUSES),
+        )
+        .first()
+        is not None
+    )
+
+
+def _check_dates(check_in: date, check_out: date) -> None:
+    if check_in >= check_out:
         raise LocationError(
-            f"“{location.name}” is not one of this strip's hotels ({names}). Pick one of them, or add "
-            "it to the strip's hotels first. (A strip with no hotels listed accepts any hotel.)"
+            "This stay checks out on or before its check-in. Set the check-out to a later day than the check-in."
         )
 
 
-def set_crew_hotel(db: Session, assignment, location: Optional[Location], *, actor: audit.Actor) -> None:
-    before = assignment.hotel_location_id
-    after = location.id if location is not None else None
-    if before == after:
-        return
-    assignment.hotel_location_id = after
-    db.flush()
-    audit.record(
-        db, actor, assignment, "crew_assignment.hotel_set",
-        {"hotel_location_id": before}, {"hotel_location_id": after},
+def add_stay(db: Session, project, location: Location, party, *, check_in: Optional[date], check_out: Optional[date],
+             notes: Optional[str], actor: audit.Actor):
+    """A crew member of this production at this hotel. Without dates: from
+    their first assigned day to the day after their last."""
+    from datetime import timedelta
+
+    from ..models.location import HotelStay
+
+    if not _is_crew_of(db, project.id, party.id):
+        raise LocationError(
+            f"{party.name} is not on the crew of this project. Add them to a strip first, then give them a hotel."
+        )
+    if check_in is None or check_out is None:
+        days = crew_dates(db, project.id, party.id)
+        if not days:
+            raise LocationError(
+                f"{party.name} has no days on this project yet, so the stay has no dates. Enter the check-in and check-out."
+            )
+        check_in = check_in or days[0]
+        check_out = check_out or days[-1] + timedelta(days=1)
+    _check_dates(check_in, check_out)
+    stay = HotelStay(
+        company_id=project.company_id, project_id=project.id, location_id=location.id, party_id=party.id,
+        check_in=check_in, check_out=check_out, notes=_text(notes),
     )
+    db.add(stay)
+    db.flush()
+    audit.record(db, actor, stay, "hotel_stay.added", None, audit.snapshot(stay, STAY_FIELDS), fields=STAY_FIELDS)
+    return stay
+
+
+def update_stay(db: Session, stay, changes: dict, *, actor: audit.Actor):
+    before = audit.snapshot(stay, STAY_FIELDS)
+    if "check_in" in changes and changes["check_in"] is not None:
+        stay.check_in = changes["check_in"]
+    if "check_out" in changes and changes["check_out"] is not None:
+        stay.check_out = changes["check_out"]
+    if "notes" in changes:
+        stay.notes = _text(changes["notes"])
+    _check_dates(stay.check_in, stay.check_out)
+    db.flush()
+    audit.record(db, actor, stay, "hotel_stay.updated", before, audit.snapshot(stay, STAY_FIELDS), fields=STAY_FIELDS)
+    return stay
+
+
+def remove_stay(db: Session, stay, *, actor: audit.Actor):
+    if not stay.is_active:
+        return stay
+    stay.is_active = False
+    db.flush()
+    audit.record(db, actor, stay, "hotel_stay.removed", {"is_active": True}, {"is_active": False})
+    return stay
+
+
+# ─── Booking confirmations (L1b) ────────────────────────────────────────────
+
+MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024
+#: What a confirmation may be, by its first bytes where that can tell, else
+#: by the name: PDF, an email (.eml), an image, plain text.
+_SIGNATURES = (
+    (b"%PDF-", "application/pdf"),
+    (b"\x89PNG\r\n\x1a\n", "image/png"),
+    (b"\xff\xd8\xff", "image/jpeg"),
+)
+_BY_EXTENSION = {".eml": "message/rfc822", ".txt": "text/plain", ".msg": "application/vnd.ms-outlook", ".webp": "image/webp"}
+
+
+def attachment_type(file_name: str, payload: bytes) -> str:
+    import os
+
+    for magic, content_type in _SIGNATURES:
+        if payload.startswith(magic):
+            return content_type
+    if payload[:4] == b"RIFF" and payload[8:12] == b"WEBP":
+        return "image/webp"
+    ext = os.path.splitext(file_name.lower())[1]
+    if ext in (".eml", ".txt"):
+        try:
+            payload.decode("utf-8")
+        except UnicodeDecodeError:
+            try:
+                payload.decode("latin-1")
+            except UnicodeDecodeError:  # pragma: no cover - latin-1 decodes anything
+                pass
+        return _BY_EXTENSION[ext]
+    if ext == ".msg":
+        return _BY_EXTENSION[ext]
+    raise LocationError(
+        f"“{file_name}” is not a PDF, an email (.eml or .msg), a picture or a text file. Save the confirmation "
+        "as one of those, or paste its text instead."
+    )
+
+
+def add_file_attachment(db: Session, project, location: Location, *, title: Optional[str], file_name: str,
+                        payload: bytes, user_id, actor: audit.Actor):
+    from . import s3_service
+    from ..models.location import ATTACHMENT_FILE, LocationAttachment
+
+    if not payload:
+        raise LocationError(f"“{file_name}” is empty. Pick the file again.")
+    if len(payload) > MAX_ATTACHMENT_BYTES:
+        raise LocationError(f"“{file_name}” is larger than 15 MB. Save a smaller copy, or paste the text instead.")
+    content_type = attachment_type(file_name, payload)
+    row = LocationAttachment(
+        company_id=project.company_id, project_id=project.id, location_id=location.id, kind=ATTACHMENT_FILE,
+        title=_text(title) or file_name, file_name=file_name[:255], content_type=content_type,
+        size_bytes=len(payload), created_by=user_id,
+    )
+    row.id = uuid.uuid4()
+    row.s3_key = f"companies/{project.company_id}/projects/{project.id}/locations/{location.id}/{row.id}"
+    s3_service.put_object(row.s3_key, payload, content_type=content_type)
+    db.add(row)
+    db.flush()
+    audit.record(db, actor, row, "location_attachment.added", None,
+                 {"title": row.title, "kind": row.kind, "file_name": row.file_name, "location": location.name})
+    return row
+
+
+def add_text_attachment(db: Session, project, location: Location, *, title: Optional[str], text: str, user_id,
+                        actor: audit.Actor):
+    from ..models.location import ATTACHMENT_TEXT, LocationAttachment
+
+    body = (text or "").strip()
+    if not body:
+        raise LocationError("The confirmation text is empty. Paste the email or message into the box.")
+    row = LocationAttachment(
+        company_id=project.company_id, project_id=project.id, location_id=location.id, kind=ATTACHMENT_TEXT,
+        title=_text(title) or "Booking confirmation", body_text=body, created_by=user_id,
+    )
+    db.add(row)
+    db.flush()
+    audit.record(db, actor, row, "location_attachment.added", None,
+                 {"title": row.title, "kind": row.kind, "location": location.name})
+    return row
+
+
+def remove_attachment(db: Session, row, *, actor: audit.Actor):
+    if row.is_active:
+        row.is_active = False
+        db.flush()
+        audit.record(db, actor, row, "location_attachment.removed", {"title": row.title}, None)
+    return row
+
+
+# ─── Hospitals near the shooting locations (L1b) ────────────────────────────
+
+
+@dataclass
+class HospitalOffer:
+    hospital: object  # osm_hospitals.OsmHospital
+    distance_km: float
+    nearest_to: str
+    existing_location_id: Optional[uuid.UUID]
+
+
+@dataclass
+class HospitalGroup:
+    shooting_locations: list[str]
+    offers: list[HospitalOffer]
+
+
+def hospital_suggestions(db: Session, membership, project, *, client=None, per_group: int = 3):
+    """Per group of shooting locations within 30 km of each other (pure
+    `billing/planning/geo.clusters`), the nearest hospitals OpenStreetMap
+    knows — ones with a confirmed emergency department first. Returns
+    (groups, names of shooting locations without coordinates)."""
+    from ..billing.planning import Point, clusters, distance_km
+    from ..config import settings
+    from . import osm_hospitals
+
+    ids = project_location_ids(db, project.id)
+    places = [
+        p for p in db.query(Location).filter(Location.company_id == membership.company_id, Location.id.in_(ids))
+        .order_by(Location.name_key, Location.id)
+        if USE_SHOOT in (p.uses or []) and p.is_active
+    ]
+    missing = [p.name for p in places if p.latitude is None]
+    located = [p for p in places if p.latitude is not None]
+    by_id_ = {p.id: p for p in located}
+    groups = clusters([Point(p.id, p.latitude, p.longitude) for p in located])
+    known = {
+        row.osm_ref: row.id
+        for row in db.query(Location).filter(
+            Location.company_id == membership.company_id, Location.osm_ref.isnot(None), Location.is_active.is_(True)
+        )
+    }
+    out: list[HospitalGroup] = []
+    radius = settings.hospital_search_radius_km * 1000
+    for group in groups:
+        members = [by_id_[i] for i in group]
+        best: dict[str, HospitalOffer] = {}
+        for member in members:
+            for found in osm_hospitals.near(member.latitude, member.longitude, radius, client=client):
+                km = distance_km(member.latitude, member.longitude, found.latitude, found.longitude)
+                current = best.get(found.osm_ref)
+                if current is None or km < current.distance_km:
+                    best[found.osm_ref] = HospitalOffer(found, round(km, 1), member.name, known.get(found.osm_ref))
+        ranked = sorted(best.values(), key=lambda o: (o.hospital.emergency is not True, o.distance_km, o.hospital.name))
+        out.append(HospitalGroup([m.name for m in members], ranked[:per_group]))
+    return out, missing
+
+
+def add_hospital_from_osm(db: Session, membership, project, offer: dict, *, actor: audit.Actor) -> Location:
+    """Creates (or finds, by its OpenStreetMap id) the hospital and adds it
+    to the project. The data is what the suggestion showed."""
+    existing = (
+        db.query(Location)
+        .filter(Location.company_id == membership.company_id, Location.osm_ref == offer["osm_ref"], Location.is_active.is_(True))
+        .first()
+    )
+    if existing is None:
+        changes = {
+            "name": offer["name"],
+            "uses": [USE_HOSPITAL],
+            "latitude": offer["latitude"],
+            "longitude": offer["longitude"],
+            "street": offer.get("street"),
+            "zip": offer.get("zip"),
+            "city": offer.get("city"),
+            "website": offer.get("website"),
+        }
+        if offer.get("phone"):
+            changes["emergency_phone"] = None
+            changes["phone"] = offer["phone"] if _PHONE.match(offer["phone"]) else None
+        if offer.get("country") and len(offer["country"]) == 2:
+            changes["country"] = offer["country"]
+        name = " ".join(offer["name"].split())
+        taken = db.query(Location).filter(
+            Location.company_id == membership.company_id, Location.name_key == name_key(name), Location.is_active.is_(True)
+        ).first()
+        if taken is not None:
+            changes["name"] = f"{name} ({offer.get('city') or 'OpenStreetMap'})"
+        existing = create(db, membership, changes, actor=actor).location
+        existing.osm_ref = offer["osm_ref"]
+        db.flush()
+    elif USE_HOSPITAL not in existing.uses:
+        existing.uses = [u for u in LOCATION_USES if u in set(existing.uses) | {USE_HOSPITAL}]
+        db.flush()
+    add_to_project(db, project, existing, actor=actor, reason="Suggested by the OpenStreetMap hospital search.")
+    return existing

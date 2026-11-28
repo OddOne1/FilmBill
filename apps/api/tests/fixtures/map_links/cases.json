@@ -1,81 +1,367 @@
 {
-  "readme": "Golden cases for billing/planning/map_links.py (L1). Every number is written out. `parse` cases: the text, then either the two numbers kept to six decimals or the refusal sentence. `map_link` and `directions` cases: the place(s) and the exact URL, or null.",
-  "parse": [
-    {"id": "comma-space", "why": "The common form: 48.2082, 16.3738 is latitude 48.208200 and longitude 16.373800.",
-     "text": "48.2082, 16.3738", "latitude": "48.208200", "longitude": "16.373800"},
-    {"id": "space", "why": "A space between the two numbers: 48.2082 16.3738.",
-     "text": "48.2082 16.3738", "latitude": "48.208200", "longitude": "16.373800"},
-    {"id": "semicolon", "why": "A semicolon, no space: 48.2082;16.3738.",
-     "text": "48.2082;16.3738", "latitude": "48.208200", "longitude": "16.373800"},
-    {"id": "decimal-commas", "why": "German decimal commas with a semicolon: 48,2082; 16,3738 is 48.2082 and 16.3738.",
-     "text": "48,2082; 16,3738", "latitude": "48.208200", "longitude": "16.373800"},
-    {"id": "decimal-commas-comma-separator", "why": "Decimal commas AND a comma between them: 48,2082, 16,3738.",
-     "text": "48,2082, 16,3738", "latitude": "48.208200", "longitude": "16.373800"},
-    {"id": "fourteen-decimals", "why": "A map's right-click pair, 48.20817433281537, 16.37381946802135, kept to six decimals half-up: 48.208174 and 16.373819.",
-     "text": "48.20817433281537, 16.37381946802135", "latitude": "48.208174", "longitude": "16.373819"},
-    {"id": "negative", "why": "Signs are kept: -33.8688 is inside -90..90 and -151.2093 inside -180..180, so the pair is accepted.",
-     "text": "-33.8688, -151.2093", "latitude": "-33.868800", "longitude": "-151.209300"},
-    {"id": "swapped", "why": "San Francisco pasted longitude first: -122.4194 is not a latitude (outside -90..90), and 37.7749 would be one, so the sentence says the longitude came first.",
-     "text": "-122.4194, 37.7749",
-     "refusal": "The latitude -122.4194 is outside -90 to 90. It looks like the longitude came first: the latitude goes first. For example 48.2082, 16.3738."},
-    {"id": "latitude-out-of-range", "why": "99, 16: a latitude of 99 does not exist.",
-     "text": "99, 16",
-     "refusal": "The latitude 99 is outside -90 to 90. It looks like the longitude came first: the latitude goes first. For example 48.2082, 16.3738."},
-    {"id": "longitude-out-of-range", "why": "48.2, 200: a longitude of 200 does not exist (and 200 is no latitude either).",
-     "text": "48.2, 200",
-     "refusal": "The longitude 200 is outside -180 to 180. Check the second number, for example 48.2082, 16.3738."},
-    {"id": "missing-half", "why": "Only 48.2082: one number is half a pair.",
-     "text": "48.2082",
-     "refusal": "These coordinates have only one number. Paste a latitude and a longitude, for example 48.2082, 16.3738."},
-    {"id": "words", "why": "An address is not a pair: its only number, 23, is one number.",
-     "text": "Spitalgasse 23, Wien",
-     "refusal": "These coordinates have only one number. Paste a latitude and a longitude, for example 48.2082, 16.3738."},
-    {"id": "three-numbers", "why": "48.2 16.3 12: three numbers are not a pair.",
-     "text": "48.2 16.3 12",
-     "refusal": "These coordinates could not be read. Paste two numbers, the latitude first, for example 48.2082, 16.3738."},
-    {"id": "empty", "why": "Nothing pasted.",
-     "text": "   ",
-     "refusal": "There are no coordinates here. Paste a latitude and a longitude, for example 48.2082, 16.3738."}
-  ],
-  "map_link": [
-    {"id": "coordinates", "why": "Coordinates 48.208200 / 16.373800 become query=48.2082,16.3738 (comma encoded as %2C, trailing zeros dropped).",
-     "place": {"latitude": "48.208200", "longitude": "16.373800"},
-     "link": "https://www.google.com/maps/search/?api=1&query=48.2082%2C16.3738"},
-    {"id": "coordinates-beat-the-address", "why": "When both exist the coordinates are used, not the address: 48.2207, 16.3477 and not Währinger Gürtel.",
-     "place": {"latitude": "48.220700", "longitude": "16.347700", "street": "Währinger Gürtel 18-20", "zip": "1090", "city": "Wien", "country": "AT"},
-     "link": "https://www.google.com/maps/search/?api=1&query=48.2207%2C16.3477"},
-    {"id": "half-a-pair-uses-the-address", "why": "Only a latitude (an inconsistent record) is not a position: the address is used.",
-     "place": {"latitude": "48.220700", "city": "Wien"},
-     "link": "https://www.google.com/maps/search/?api=1&query=Wien"},
-    {"id": "address-umlauts-and-spaces", "why": "Street, second line, 1090 Wien, AT; umlauts as UTF-8 percent codes, spaces as %20, commas as %2C.",
-     "place": {"street": "Währinger Gürtel 18-20", "street2": "Eingang Süd", "zip": "1090", "city": "Wien", "country": "AT"},
-     "link": "https://www.google.com/maps/search/?api=1&query=W%C3%A4hringer%20G%C3%BCrtel%2018-20%2C%20Eingang%20S%C3%BCd%2C%201090%20Wien%2C%20AT"},
-    {"id": "only-a-city", "why": "Only the city: query=Wien.",
-     "place": {"city": "Wien"},
-     "link": "https://www.google.com/maps/search/?api=1&query=Wien"},
-    {"id": "negative-coordinates", "why": "-33.868800 / -151.209300 keep their signs.",
-     "place": {"latitude": "-33.868800", "longitude": "-151.209300"},
-     "link": "https://www.google.com/maps/search/?api=1&query=-33.8688%2C-151.2093"},
-    {"id": "empty", "why": "No coordinates and no address: no link at all.",
-     "place": {"street": "  ", "city": null},
-     "link": null}
-  ],
-  "directions": [
-    {"id": "hotel-to-studio", "why": "From a hotel's coordinates 48.1986, 16.3417 to a studio's address Hauptstraße 1, 2340 Mödling, AT.",
-     "origin": {"latitude": "48.198600", "longitude": "16.341700"},
-     "destination": {"street": "Hauptstraße 1", "zip": "2340", "city": "Mödling", "country": "AT"},
-     "link": "https://www.google.com/maps/dir/?api=1&origin=48.1986%2C16.3417&destination=Hauptstra%C3%9Fe%201%2C%202340%20M%C3%B6dling%2C%20AT"},
-    {"id": "both-coordinates", "why": "48.1986, 16.3417 to 48.2082, 16.3738.",
-     "origin": {"latitude": "48.198600", "longitude": "16.341700"},
-     "destination": {"latitude": "48.208200", "longitude": "16.373800"},
-     "link": "https://www.google.com/maps/dir/?api=1&origin=48.1986%2C16.3417&destination=48.2082%2C16.3738"},
-    {"id": "no-destination", "why": "The destination has nothing to point at: no link.",
-     "origin": {"city": "Wien"},
-     "destination": {},
-     "link": null},
-    {"id": "no-origin", "why": "The origin has nothing to point at: no link.",
-     "origin": {},
-     "destination": {"city": "Wien"},
-     "link": null}
-  ]
+ "readme": "Golden cases for billing/planning/map_links.py (L1). Every number is written out. `parse` cases: the text, then either the two numbers kept to six decimals or the refusal sentence. `map_link` and `directions` cases: the place(s) and the exact URL, or null.",
+ "parse": [
+  {
+   "id": "comma-space",
+   "why": "The common form: 48.2082, 16.3738 is latitude 48.208200 and longitude 16.373800.",
+   "text": "48.2082, 16.3738",
+   "latitude": "48.208200",
+   "longitude": "16.373800"
+  },
+  {
+   "id": "space",
+   "why": "A space between the two numbers: 48.2082 16.3738.",
+   "text": "48.2082 16.3738",
+   "latitude": "48.208200",
+   "longitude": "16.373800"
+  },
+  {
+   "id": "semicolon",
+   "why": "A semicolon, no space: 48.2082;16.3738.",
+   "text": "48.2082;16.3738",
+   "latitude": "48.208200",
+   "longitude": "16.373800"
+  },
+  {
+   "id": "decimal-commas",
+   "why": "German decimal commas with a semicolon: 48,2082; 16,3738 is 48.2082 and 16.3738.",
+   "text": "48,2082; 16,3738",
+   "latitude": "48.208200",
+   "longitude": "16.373800"
+  },
+  {
+   "id": "decimal-commas-comma-separator",
+   "why": "Decimal commas AND a comma between them: 48,2082, 16,3738.",
+   "text": "48,2082, 16,3738",
+   "latitude": "48.208200",
+   "longitude": "16.373800"
+  },
+  {
+   "id": "fourteen-decimals",
+   "why": "A map's right-click pair, 48.20817433281537, 16.37381946802135, kept to six decimals half-up: 48.208174 and 16.373819.",
+   "text": "48.20817433281537, 16.37381946802135",
+   "latitude": "48.208174",
+   "longitude": "16.373819"
+  },
+  {
+   "id": "negative",
+   "why": "Signs are kept: -33.8688 is inside -90..90 and -151.2093 inside -180..180, so the pair is accepted.",
+   "text": "-33.8688, -151.2093",
+   "latitude": "-33.868800",
+   "longitude": "-151.209300"
+  },
+  {
+   "id": "swapped",
+   "why": "San Francisco pasted longitude first: -122.4194 is not a latitude (outside -90..90), and 37.7749 would be one, so the sentence says the longitude came first.",
+   "text": "-122.4194, 37.7749",
+   "refusal": "The latitude -122.4194 is outside -90 to 90. It looks like the longitude came first: the latitude goes first. For example 48.2082, 16.3738."
+  },
+  {
+   "id": "latitude-out-of-range",
+   "why": "99, 16: a latitude of 99 does not exist.",
+   "text": "99, 16",
+   "refusal": "The latitude 99 is outside -90 to 90. It looks like the longitude came first: the latitude goes first. For example 48.2082, 16.3738."
+  },
+  {
+   "id": "longitude-out-of-range",
+   "why": "48.2, 200: a longitude of 200 does not exist (and 200 is no latitude either).",
+   "text": "48.2, 200",
+   "refusal": "The longitude 200 is outside -180 to 180. Check the second number, for example 48.2082, 16.3738."
+  },
+  {
+   "id": "missing-half",
+   "why": "Only 48.2082: one number is half a pair.",
+   "text": "48.2082",
+   "refusal": "These coordinates have only one number. Paste a latitude and a longitude, for example 48.2082, 16.3738."
+  },
+  {
+   "id": "words",
+   "why": "An address is not a pair: its only number, 23, is one number.",
+   "text": "Spitalgasse 23, Wien",
+   "refusal": "These coordinates have only one number. Paste a latitude and a longitude, for example 48.2082, 16.3738."
+  },
+  {
+   "id": "three-numbers",
+   "why": "48.2 16.3 12: three numbers are not a pair.",
+   "text": "48.2 16.3 12",
+   "refusal": "These coordinates could not be read. Paste two numbers, the latitude first, for example 48.2082, 16.3738."
+  },
+  {
+   "id": "empty",
+   "why": "Nothing pasted.",
+   "text": "   ",
+   "refusal": "There are no coordinates here. Paste a latitude and a longitude, for example 48.2082, 16.3738."
+  }
+ ],
+ "map_link": [
+  {
+   "id": "coordinates",
+   "why": "Coordinates 48.208200 / 16.373800 become query=48.2082,16.3738 (comma encoded as %2C, trailing zeros dropped).",
+   "place": {
+    "latitude": "48.208200",
+    "longitude": "16.373800"
+   },
+   "link": "https://www.google.com/maps/search/?api=1&query=48.2082%2C16.3738"
+  },
+  {
+   "id": "coordinates-beat-the-address",
+   "why": "When both exist the coordinates are used, not the address: 48.2207, 16.3477 and not Währinger Gürtel.",
+   "place": {
+    "latitude": "48.220700",
+    "longitude": "16.347700",
+    "street": "Währinger Gürtel 18-20",
+    "zip": "1090",
+    "city": "Wien",
+    "country": "AT"
+   },
+   "link": "https://www.google.com/maps/search/?api=1&query=48.2207%2C16.3477"
+  },
+  {
+   "id": "half-a-pair-uses-the-address",
+   "why": "Only a latitude (an inconsistent record) is not a position: the address is used.",
+   "place": {
+    "latitude": "48.220700",
+    "city": "Wien"
+   },
+   "link": "https://www.google.com/maps/search/?api=1&query=Wien"
+  },
+  {
+   "id": "address-umlauts-and-spaces",
+   "why": "Street, second line, 1090 Wien, AT; umlauts as UTF-8 percent codes, spaces as %20, commas as %2C.",
+   "place": {
+    "street": "Währinger Gürtel 18-20",
+    "street2": "Eingang Süd",
+    "zip": "1090",
+    "city": "Wien",
+    "country": "AT"
+   },
+   "link": "https://www.google.com/maps/search/?api=1&query=W%C3%A4hringer%20G%C3%BCrtel%2018-20%2C%20Eingang%20S%C3%BCd%2C%201090%20Wien%2C%20AT"
+  },
+  {
+   "id": "only-a-city",
+   "why": "Only the city: query=Wien.",
+   "place": {
+    "city": "Wien"
+   },
+   "link": "https://www.google.com/maps/search/?api=1&query=Wien"
+  },
+  {
+   "id": "negative-coordinates",
+   "why": "-33.868800 / -151.209300 keep their signs.",
+   "place": {
+    "latitude": "-33.868800",
+    "longitude": "-151.209300"
+   },
+   "link": "https://www.google.com/maps/search/?api=1&query=-33.8688%2C-151.2093"
+  },
+  {
+   "id": "empty",
+   "why": "No coordinates and no address: no link at all.",
+   "place": {
+    "street": "  ",
+    "city": null
+   },
+   "link": null
+  }
+ ],
+ "directions": [
+  {
+   "id": "hotel-to-studio",
+   "why": "From a hotel's coordinates 48.1986, 16.3417 to a studio's address Hauptstraße 1, 2340 Mödling, AT.",
+   "origin": {
+    "latitude": "48.198600",
+    "longitude": "16.341700"
+   },
+   "destination": {
+    "street": "Hauptstraße 1",
+    "zip": "2340",
+    "city": "Mödling",
+    "country": "AT"
+   },
+   "link": "https://www.google.com/maps/dir/?api=1&origin=48.1986%2C16.3417&destination=Hauptstra%C3%9Fe%201%2C%202340%20M%C3%B6dling%2C%20AT"
+  },
+  {
+   "id": "both-coordinates",
+   "why": "48.1986, 16.3417 to 48.2082, 16.3738.",
+   "origin": {
+    "latitude": "48.198600",
+    "longitude": "16.341700"
+   },
+   "destination": {
+    "latitude": "48.208200",
+    "longitude": "16.373800"
+   },
+   "link": "https://www.google.com/maps/dir/?api=1&origin=48.1986%2C16.3417&destination=48.2082%2C16.3738"
+  },
+  {
+   "id": "no-destination",
+   "why": "The destination has nothing to point at: no link.",
+   "origin": {
+    "city": "Wien"
+   },
+   "destination": {},
+   "link": null
+  },
+  {
+   "id": "no-origin",
+   "why": "The origin has nothing to point at: no link.",
+   "origin": {},
+   "destination": {
+    "city": "Wien"
+   },
+   "link": null
+  }
+ ],
+ "map_urls": [
+  {
+   "id": "google-place-pin",
+   "why": "A place link: the pin !3d48.2209537!4d16.3477019 is where AKH Wien IS (six decimals: 48.220954, 16.347702), not the view centre @48.2207,16.3456; the name comes from /place/AKH+Wien/.",
+   "url": "https://www.google.com/maps/place/AKH+Wien/@48.2207,16.3456,17z/data=!3m1!4b1!4m6!3m5!1s0x47!8m2!3d48.2209537!4d16.3477019!16s",
+   "latitude": "48.220954",
+   "longitude": "16.347702",
+   "name": "AKH Wien",
+   "address": null,
+   "provider": "google"
+  },
+  {
+   "id": "google-view-centre",
+   "why": "A map view: /@48.2082,16.3738,15z.",
+   "url": "https://www.google.com/maps/@48.2082,16.3738,15z",
+   "latitude": "48.208200",
+   "longitude": "16.373800",
+   "name": null,
+   "address": null,
+   "provider": "google"
+  },
+  {
+   "id": "google-q",
+   "why": "maps.google.com/?q=48.2082,16.3738.",
+   "url": "https://maps.google.com/?q=48.2082,16.3738",
+   "latitude": "48.208200",
+   "longitude": "16.373800",
+   "name": null,
+   "address": null,
+   "provider": "google"
+  },
+  {
+   "id": "google-search-api",
+   "why": "The api=1 form with query=48.2082%2C16.3738 — what FilmBill itself builds.",
+   "url": "https://www.google.com/maps/search/?api=1&query=48.2082%2C16.3738",
+   "latitude": "48.208200",
+   "longitude": "16.373800",
+   "name": null,
+   "address": null,
+   "provider": "google"
+  },
+  {
+   "id": "google-search-path",
+   "why": "A pair in the path: /maps/search/48.2082,+16.3738.",
+   "url": "https://www.google.com/maps/search/48.2082,+16.3738",
+   "latitude": "48.208200",
+   "longitude": "16.373800",
+   "name": null,
+   "address": null,
+   "provider": "google"
+  },
+  {
+   "id": "google-address-only",
+   "why": "A search for an address carries no position: the address text Spitalgasse 23 Wien is kept for the form.",
+   "url": "https://www.google.com/maps/search/?api=1&query=Spitalgasse+23+Wien",
+   "latitude": null,
+   "longitude": null,
+   "name": null,
+   "address": "Spitalgasse 23 Wien",
+   "provider": "google"
+  },
+  {
+   "id": "consent-page",
+   "why": "An EU consent page: its continue= link is read instead (48.2, 16.3).",
+   "url": "https://consent.google.com/ml?continue=https://www.google.com/maps/@48.2,16.3,15z&gl=AT",
+   "latitude": "48.200000",
+   "longitude": "16.300000",
+   "name": null,
+   "address": null,
+   "provider": "google"
+  },
+  {
+   "id": "apple-ll",
+   "why": "Apple: ll=48.2082,16.3738 is the position, q=Stephansdom the name.",
+   "url": "https://maps.apple.com/?ll=48.2082,16.3738&q=Stephansdom",
+   "latitude": "48.208200",
+   "longitude": "16.373800",
+   "name": "Stephansdom",
+   "address": null,
+   "provider": "apple"
+  },
+  {
+   "id": "apple-address",
+   "why": "Apple with an address: Stephansplatz 3, 1010 Wien; ll 48.2085, 16.3731.",
+   "url": "https://maps.apple.com/?address=Stephansplatz%203,%201010%20Wien&ll=48.2085,16.3731&q=Stephansdom",
+   "latitude": "48.208500",
+   "longitude": "16.373100",
+   "name": "Stephansdom",
+   "address": "Stephansplatz 3, 1010 Wien",
+   "provider": "apple"
+  },
+  {
+   "id": "google-short",
+   "why": "A Google share link: no position here, it must be opened once.",
+   "url": "https://maps.app.goo.gl/abcDEF123",
+   "short": true,
+   "provider": "google"
+  },
+  {
+   "id": "apple-short",
+   "why": "An Apple short link (maps.apple/p/…): must be opened once.",
+   "url": "https://maps.apple/p/Xyz123",
+   "short": true,
+   "provider": "apple"
+  },
+  {
+   "id": "not-a-map-host",
+   "why": "example.com is neither Google nor Apple Maps.",
+   "url": "https://example.com/maps/@48,16",
+   "refusal": "“example.com” is not a Google Maps or Apple Maps link. Paste a link from one of the two, or the coordinates."
+  },
+  {
+   "id": "google-not-maps",
+   "why": "A Google web search is not a map.",
+   "url": "https://www.google.com/search?q=hotel",
+   "refusal": "This Google link is not a map. Open the place in Google Maps and copy that link."
+  },
+  {
+   "id": "goo-gl-not-maps",
+   "why": "goo.gl/xyz without /maps is not a map short link.",
+   "url": "https://goo.gl/xyz",
+   "refusal": "This short link is not a map link. Paste a link from Google Maps or Apple Maps."
+  },
+  {
+   "id": "map-without-place",
+   "why": "A Google Maps link with nothing that says where.",
+   "url": "https://www.google.com/maps/dir/",
+   "refusal": "This map link does not say where the place is. Open the place itself in the map and copy that link."
+  },
+  {
+   "id": "empty",
+   "why": "Nothing pasted.",
+   "url": "  ",
+   "refusal": "There is no link here. Paste a link from Google Maps or Apple Maps."
+  }
+ ],
+ "embed": [
+  {
+   "id": "pin",
+   "why": "A box of ±0.005° around 48.2082, 16.3738 (16.3688–16.3788 by 48.2032–48.2132) with the marker on the pin.",
+   "latitude": "48.208200",
+   "longitude": "16.373800",
+   "link": "https://www.openstreetmap.org/export/embed.html?bbox=16.3688%2C48.2032%2C16.3788%2C48.2132&layer=mapnik&marker=48.2082%2C16.3738"
+  },
+  {
+   "id": "none",
+   "why": "No coordinates: no map view.",
+   "latitude": null,
+   "longitude": "16.3738",
+   "link": null
+  }
+ ]
 }

@@ -8,7 +8,6 @@ import {
   ChevronsLeft,
   Clapperboard,
   LayoutDashboard,
-  MapPin,
   Package,
   Tags,
   Users,
@@ -65,10 +64,8 @@ const navItems: NavItem[] = [
   // crew needs to know what exists — but a purchase price is shown only with
   // `budgets.view`.
   { href: '/gear', label: 'Gear', icon: Package, permission: 'devices.view' },
-  // L1. Studios, hotels and hospitals as records. `locations.view` includes
-  // staff — the crew has to know where the shoot is — but hotels inside it
-  // are only listed for roles that see crew (D111).
-  { href: '/locations', label: 'Locations', icon: MapPin, permission: 'locations.view' },
+  // No Locations entry (L1b): locations belong to a project and live in its
+  // Locations tab; `/locations` redirects to the projects (next.config.js).
   // Hidden until P5, the bookkeeping document archive; see lib/nav-flags.ts.
   {
     href: '/archive',

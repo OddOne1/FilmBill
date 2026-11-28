@@ -53,7 +53,10 @@ from .company_factories import (
     make_crew_unavailability,
     make_gear_booking,
     make_item,
+    make_hotel_stay,
     make_location,
+    make_location_attachment,
+    make_project_location,
     make_item_category,
     make_number_series,
     make_party,
@@ -577,14 +580,27 @@ CASES: dict[str, object] = {
     "POST /projects/{project_id}/blocks/{block_id}/days/location": {
         "body": {"dates": ["2026-07-06"], "location_id": None}
     },
-    "POST /projects/{project_id}/blocks/{block_id}/hotels": {
-        "body": {},
-        "body_rows": {"location_id": "location_in_b"},
+    # L1b. B's project list, B's hotel guest and B's confirmation. Bodies
+    # name B's own rows, so a handler that looked them up without the
+    # company would find them.
+    "GET /projects/{project_id}/locations": {"body": None},
+    "POST /projects/{project_id}/locations": {"body": {}, "body_rows": {"location_id": "location_in_b"}},
+    "POST /projects/{project_id}/locations/{location_id}/remove": {"body": None},
+    "POST /projects/{project_id}/locations/{location_id}/stays": {
+        "body": {"check_in": "2026-07-06", "check_out": "2026-07-07"},
+        "body_rows": {"party_id": "party_in_b"},
     },
-    "POST /projects/{project_id}/blocks/{block_id}/hotels/{location_id}/remove": {"body": None},
-    "PUT /projects/{project_id}/crew/{assignment_id}/hotel": {
-        "body": {},
-        "body_rows": {"location_id": "location_in_b"},
+    "PATCH /projects/{project_id}/stays/{stay_id}": {"body": {"notes": "Stolen"}},
+    "POST /projects/{project_id}/stays/{stay_id}/remove": {"body": None},
+    "POST /projects/{project_id}/locations/{location_id}/attachments": {
+        "files": {"file": ("booking.pdf", b"%PDF-1.4 stolen", "application/pdf")}
+    },
+    "POST /projects/{project_id}/locations/{location_id}/attachments/text": {"body": {"text": "Stolen"}},
+    "GET /projects/{project_id}/attachments/{attachment_id}/download": {"body": None},
+    "POST /projects/{project_id}/attachments/{attachment_id}/remove": {"body": None},
+    "GET /projects/{project_id}/hospital-suggestions": {"body": None},
+    "POST /projects/{project_id}/hospital-suggestions/add": {
+        "body": {"osm_ref": "node/1", "name": "Stolen hospital", "latitude": "48.2", "longitude": "16.3"}
     },
     "GET /projects/{project_id}/crew": {"body": None},
     "POST /projects/{project_id}/blocks/{block_id}/crew": {
@@ -694,6 +710,7 @@ CASES: dict[str, object] = {
     "GET /locations": {"body": None},
     "POST /locations": {"body": {"name": "Stolen studio"}},
     "POST /locations/coordinates": {"body": {"text": "48.2082, 16.3738"}},
+    "POST /locations/resolve-link": {"body": {"url": "https://www.google.com/maps/@48.2082,16.3738,15z"}},
     "GET /locations/{location_id}": {"body": None},
     "PATCH /locations/{location_id}": {"body": {"notes": "Stolen"}},
     "GET /locations/{location_id}/usage": {"body": None},
@@ -745,6 +762,8 @@ OTHER_COMPANY_ROWS = {
     "{booking_id}": "gear_booking_in_b",
     "{user_id}": "user_in_b",
     "{location_id}": "location_in_b",
+    "{stay_id}": "stay_in_b",
+    "{attachment_id}": "attachment_in_b",
 }
 
 
@@ -916,8 +935,18 @@ def two_companies(pg_db):
     # L1: a hospital of B's — a kind every role in A that sees locations
     # sees, so a 404 is about the company and not about the hotel rule.
     location_in_b = make_location(pg_db, company_b, name="Their hospital", kind="hospital")
+    # L1b: a hotel guest and a confirmation of B's, at B's hospital (the
+    # kind does not matter to a stay row looked up by id).
+    make_project_location(pg_db, company_b, project_in_b, location_in_b)
+    stay_in_b = make_hotel_stay(
+        pg_db, company_b, project_in_b, location_in_b, party_in_b,
+        check_in=block_in_b.start_date, check_out=block_in_b.start_date + __import__("datetime").timedelta(days=1),
+    )
+    attachment_in_b = make_location_attachment(pg_db, company_b, project_in_b, location_in_b)
     return {
         "location_in_b": location_in_b,
+        "stay_in_b": stay_in_b,
+        "attachment_in_b": attachment_in_b,
         "user_in_b": bo,
         "ada": ada,
         "bo": bo,

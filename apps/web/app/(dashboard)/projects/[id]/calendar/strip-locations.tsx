@@ -1,29 +1,25 @@
 'use client'
 
 import * as React from 'react'
-import { X } from 'lucide-react'
 import { api, ApiError } from '@/lib/api'
 import { dayLabel, type IsoDate } from '@/lib/calendar-dates'
 import type { BlockChange, CalendarDay, CalendarStrip, LocationRef } from '@/types'
-import { LocationPicker } from '../../../locations/location-picker'
+import { LocationPicker } from '@/components/locations/location-picker'
 import type { StripActions } from './strip-panel'
 
 /**
  * The strip panel's Location and Hotels sections (L1).
  *
- * **Location**: the strip's location (shoot or other) with **New location…**;
+ * **Location**: the strip's location (a shooting location) with **New location…**;
  * under it the B2a free text, if any, as "Old text" with **Create location
  * from this text** (the create form opens with the name filled in — nothing
  * is created by itself); then every day with the location it happens at,
  * the API's `effective_location_ref`, and **Set for selected days**.
  *
- * **Hotels**: the hotels in use on the strip — only for somebody who may see
- * crew (`strip.hotels_visible`); a person's hotel is picked from these.
+ * Hotels and their guests live in the project's Locations tab (L1b).
  *
  * Every link is the API's `map_link`; nothing here builds one.
  */
-
-const PLACE_KINDS = ['shoot', 'other'] as const
 
 export function StripLocationSection({
   strip,
@@ -57,7 +53,7 @@ export function StripLocationSection({
         label="Strip location"
         testId="strip-location-picker"
         value={strip.location_ref}
-        kinds={[...PLACE_KINDS]}
+        use="shoot"
         canEdit={canEdit}
         onChange={setStrip}
         createName={createName}
@@ -109,7 +105,7 @@ export function StripLocationSection({
                   label="Location for selected days"
                   testId="strip-bulk-location"
                   value={null}
-                  kinds={[...PLACE_KINDS]}
+                  use="shoot"
                   canEdit
                   onChange={(id) => setSelected(id)}
                   createName={bulkName}
@@ -186,7 +182,7 @@ export function DayLocation({
         label={`Different location for ${day.date}`}
         testId="day-location-picker"
         value={day.location_ref}
-        kinds={[...PLACE_KINDS]}
+        use="shoot"
         canEdit={canEdit}
         onChange={save}
         clearLabel="Same as the strip"
@@ -204,68 +200,5 @@ export function DayLocation({
         </p>
       )}
     </div>
-  )
-}
-
-export function StripHotels({
-  strip,
-  base,
-  canEdit,
-  actions,
-}: {
-  strip: CalendarStrip
-  base: string
-  canEdit: boolean
-  actions: StripActions
-}) {
-  if (!strip.hotels_visible) return null
-  const hotels = strip.hotels ?? []
-  return (
-    <section data-testid="strip-hotels" aria-label="Hotels" className="mt-4">
-      <p className="text-xs font-medium text-text-secondary">Hotels</p>
-      {hotels.length === 0 && (
-        <p className="text-2xs text-text-tertiary">
-          {canEdit
-            ? 'No hotels on this strip. Add the hotels the crew stay at; each person’s hotel is then picked from them.'
-            : 'No hotels on this strip.'}
-        </p>
-      )}
-      <ul className="mt-1 space-y-0.5 text-xs">
-        {hotels.map((hotel) => (
-          <li key={hotel.id} data-testid="strip-hotel" className="flex items-center gap-2">
-            <PlaceName place={hotel} />
-            {canEdit && (
-              <button
-                type="button"
-                aria-label={`Remove ${hotel.name} from the strip's hotels`}
-                onClick={() =>
-                  void actions.run(
-                    () => api.post<BlockChange>(`${base}/hotels/${hotel.id}/remove`),
-                    'The hotel could not be removed',
-                  )
-                }
-                className="ml-auto text-text-tertiary hover:text-text-primary"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            )}
-          </li>
-        ))}
-      </ul>
-      {canEdit && (
-        <LocationPicker
-          label="Add a hotel"
-          testId="strip-hotel-picker"
-          value={null}
-          kinds={['hotel']}
-          canEdit
-          onChange={(id) =>
-            id
-              ? actions.run(() => api.post<BlockChange>(`${base}/hotels`, { location_id: id }), 'The hotel could not be added')
-              : undefined
-          }
-        />
-      )}
-    </section>
   )
 }

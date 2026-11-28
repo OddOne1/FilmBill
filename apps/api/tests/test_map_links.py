@@ -123,3 +123,46 @@ def test_map_links_alone_loads_no_orm_and_no_web_framework():
 
 def test_the_probe_can_fail():
     assert "sqlalchemy" in _probe("import apps.api.models")
+
+
+# ─── L1b: pasted Google / Apple Maps links, the map view ────────────────────
+
+from apps.api.billing.planning import embed_link, parse_map_url  # noqa: E402
+
+
+def _check_url(case: dict) -> None:
+    got = parse_map_url(case["url"])
+    if "refusal" in case:
+        assert (got.refusal, got.latitude) == (case["refusal"], None), case["why"]
+    elif case.get("short"):
+        assert (got.short, got.provider, got.latitude, got.refusal) == (True, case["provider"], None, None), case["why"]
+    else:
+        lat = format(got.latitude, "f") if got.latitude is not None else None
+        lng = format(got.longitude, "f") if got.longitude is not None else None
+        assert (lat, lng, got.name, got.address, got.provider, got.refusal) == (
+            case["latitude"], case["longitude"], case["name"], case["address"], case["provider"], None,
+        ), case["why"]
+
+
+@pytest.mark.parametrize("case", CASES["map_urls"], ids=lambda c: c["id"])
+def test_map_url_golden(case):
+    _check_url(case)
+
+
+@pytest.mark.parametrize("case", CASES["embed"], ids=lambda c: c["id"])
+def test_embed_golden(case):
+    lat = Decimal(case["latitude"]) if case["latitude"] else None
+    lng = Decimal(case["longitude"]) if case["longitude"] else None
+    assert embed_link(lat, lng) == case["link"], case["why"]
+
+
+def test_the_url_cases_cover_both_providers_and_short_links():
+    ids = {c["id"] for c in CASES["map_urls"]}
+    assert {"google-place-pin", "google-view-centre", "apple-ll", "google-short", "apple-short", "not-a-map-host"} <= ids
+
+
+def test_the_url_comparison_notices_a_wrong_position():
+    case = dict(next(c for c in CASES["map_urls"] if c["id"] == "google-place-pin"))
+    case["latitude"] = "48.220700"  # the view centre, not the pin
+    with pytest.raises(AssertionError):
+        _check_url(case)

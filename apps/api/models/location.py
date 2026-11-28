@@ -35,13 +35,16 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Integer,
+    JSON,
     Numeric,
     String,
     Text,
+    UniqueConstraint,
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 try:
@@ -55,11 +58,17 @@ except ImportError:  # pragma: no cover
     from models.company import CompanyScoped
 
 
-LOCATION_SHOOT = "shoot"
-LOCATION_HOTEL = "hotel"
-LOCATION_HOSPITAL = "hospital"
-LOCATION_OTHER = "other"
-LOCATION_KINDS: tuple[str, ...] = (LOCATION_SHOOT, LOCATION_HOTEL, LOCATION_HOSPITAL, LOCATION_OTHER)
+#: L1b: a location has a SET of uses (Mathias, 2026-11-28: "one place,
+#: several uses"). A hotel or hospital is a shooting location only when the
+#: shooting use is ticked on purpose.
+USE_SHOOT = "shoot"
+USE_HOTEL = "hotel"
+USE_HOSPITAL = "hospital"
+USE_RESTAURANT = "restaurant"
+USE_OTHER = "other"
+LOCATION_USES: tuple[str, ...] = (USE_SHOOT, USE_HOTEL, USE_HOSPITAL, USE_RESTAURANT, USE_OTHER)
+# L1 names, kept for readability where one use is meant.
+LOCATION_SHOOT, LOCATION_HOTEL, LOCATION_HOSPITAL, LOCATION_OTHER = USE_SHOOT, USE_HOTEL, USE_HOSPITAL, USE_OTHER
 
 
 class Location(CompanyScoped, Base):
@@ -69,7 +78,15 @@ class Location(CompanyScoped, Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     #: `lower(name)` with inner whitespace collapsed — the uniqueness key.
     name_key: Mapped[str] = mapped_column(String(255), nullable=False)
-    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    #: L1b. One or more of `LOCATION_USES` (was L1's single `kind`).
+    #: `.with_variant(JSON, "sqlite")` for the same reason as `parties.tags`:
+    #: one test file builds the schema on SQLite.
+    uses: Mapped[list[str]] = mapped_column(ARRAY(String(16)).with_variant(JSON, "sqlite"), nullable=False)
+    #: L1b. The map link it was made from, as pasted (Google or Apple).
+    source_link: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    #: L1b. `node/123` etc. when added from the OpenStreetMap hospital
+    #: search — one active location per company and OSM object.
+    osm_ref: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
     street: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     street2: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
@@ -115,8 +132,10 @@ class Location(CompanyScoped, Base):
 
     __table_args__ = (
         CheckConstraint(
-            "kind IN ('shoot', 'hotel', 'hospital', 'other')", name="ck_locations_kind"
-        ),
+            "cardinality(uses) >= 1 AND uses <@ "
+            "ARRAY['shoot', 'hotel', 'hospital', 'restaurant', 'other']::varchar(16)[]",
+            name="ck_locations_uses",
+        ).ddl_if(dialect="postgresql"),
         CheckConstraint(
             "(latitude IS NULL) = (longitude IS NULL)", name="ck_locations_coordinates_pair"
         ),
@@ -134,6 +153,119 @@ class Location(CompanyScoped, Base):
             unique=True,
             postgresql_where=text("is_active"),
         ),
-        Index("ix_locations_company_kind", "company_id", "kind"),
+        Index(
+            "uq_locations_company_osm_active",
+            "company_id",
+            "osm_ref",
+            unique=True,
+            postgresql_where=text("is_active AND osm_ref IS NOT NULL"),
+        ),
         Index("ix_locations_contact_party", "contact_party_id"),
+    )
+
+
+class ProjectLocation(CompanyScoped, Base):
+    """L1b. A location this project uses — what its Locations tab lists. A
+    location used on a strip or a day is added here by that use; anything
+    else is added by hand. Removing it sets `is_active` false; adding it again
+    reactivates the same row (`uq_project_locations_pair`)."""
+
+    __tablename__ = "project_locations"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("projects.id", ondelete="RESTRICT"), nullable=False
+    )
+    location_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("locations.id", ondelete="RESTRICT"), nullable=False
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("project_id", "location_id", name="uq_project_locations_pair"),
+        Index("ix_project_locations_location", "location_id"),
+    )
+
+
+class HotelStay(CompanyScoped, Base):
+    """L1b. One crew member of the production at one hotel, from check-in to
+    check-out (the check-out date is the morning they leave). Several stays
+    per person are allowed (two hotels on a long shoot). Removed with
+    `is_active`. Crew information: visible only with `parties.view`."""
+
+    __tablename__ = "hotel_stays"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("projects.id", ondelete="RESTRICT"), nullable=False
+    )
+    location_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("locations.id", ondelete="RESTRICT"), nullable=False
+    )
+    party_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("parties.id", ondelete="RESTRICT"), nullable=False
+    )
+    check_in: Mapped[date] = mapped_column(Date, nullable=False)
+    check_out: Mapped[date] = mapped_column(Date, nullable=False)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint("check_in < check_out", name="ck_hotel_stays_dates"),
+        Index("ix_hotel_stays_project", "project_id"),
+        Index("ix_hotel_stays_location", "location_id"),
+        Index("ix_hotel_stays_party", "party_id"),
+    )
+
+
+ATTACHMENT_FILE = "file"
+ATTACHMENT_TEXT = "text"
+
+
+class LocationAttachment(CompanyScoped, Base):
+    """L1b. A booking confirmation for a location in a project: a stored file
+    (PDF, an email saved as .eml, an image, a .txt) or pasted text. Removed
+    with `is_active`; the stored object is kept. Crew information for a
+    hotel: visible only with `parties.view`."""
+
+    __tablename__ = "location_attachments"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("projects.id", ondelete="RESTRICT"), nullable=False
+    )
+    location_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("locations.id", ondelete="RESTRICT"), nullable=False
+    )
+    kind: Mapped[str] = mapped_column(String(8), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    file_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    content_type: Mapped[Optional[str]] = mapped_column(String(127), nullable=True)
+    size_bytes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    s3_key: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    body_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint("kind IN ('file', 'text')", name="ck_location_attachments_kind"),
+        CheckConstraint(
+            "(kind = 'file' AND s3_key IS NOT NULL) OR (kind = 'text' AND body_text IS NOT NULL)",
+            name="ck_location_attachments_content",
+        ),
+        Index("ix_location_attachments_project_location", "project_id", "location_id"),
     )

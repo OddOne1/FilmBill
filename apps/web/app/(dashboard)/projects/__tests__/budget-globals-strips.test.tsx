@@ -40,7 +40,6 @@ const CALENDAR: ProjectCalendar = {
       start_date: '2026-03-04',
       end_date: '2026-03-04',
       is_active: true,
-      hotels_visible: false,
       counts: { shoot: 1 },
       days: [
         {

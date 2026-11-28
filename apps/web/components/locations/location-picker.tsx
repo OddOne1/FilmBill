@@ -4,8 +4,8 @@ import * as React from 'react'
 import { ExternalLink, Plus, X } from 'lucide-react'
 import { api } from '@/lib/api'
 import { Input } from '@/components/ui/input'
-import type { Location, LocationKind, LocationList, LocationRef } from '@/types'
-import { KIND_LABEL, LocationForm } from './location-form'
+import type { Location, LocationList, LocationRef, PlaceUse } from '@/types'
+import { LocationForm, usesText } from './location-form'
 
 /**
  * Pick a location (L1): a search over `GET /locations` limited to the kinds
@@ -19,7 +19,8 @@ import { KIND_LABEL, LocationForm } from './location-form'
 export function LocationPicker({
   label,
   value,
-  kinds,
+  use,
+  projectId = null,
   canEdit,
   onChange,
   createName,
@@ -29,8 +30,11 @@ export function LocationPicker({
 }: {
   label: string
   value: LocationRef | null | undefined
-  /** Which kinds may be picked; the first is what "New location…" makes. */
-  kinds: LocationKind[]
+  /** Only locations with this use may be picked (null: any); "New
+   *  location…" makes one with it ticked. */
+  use: PlaceUse | null
+  /** Picked or created locations join this project's list. */
+  projectId?: string | null
   canEdit: boolean
   onChange: (locationId: string | null) => unknown
   /** Opens the create form with this name already in it ("Create location
@@ -57,15 +61,15 @@ export function LocationPicker({
     const handle = setTimeout(() => {
       const params = new URLSearchParams()
       if (query.trim()) params.set('q', query.trim())
-      if (kinds.length === 1) params.set('kind', kinds[0])
+      if (use) params.set('use', use)
       const suffix = params.toString()
       api
         .get<LocationList>(`/locations${suffix ? `?${suffix}` : ''}`)
-        .then((list) => setResults(list.locations.filter((l) => kinds.includes(l.kind))))
+        .then((list) => setResults(list.locations.filter((l) => !use || l.uses.includes(use))))
         .catch(() => setResults([]))
     }, 150)
     return () => clearTimeout(handle)
-  }, [open, query, kinds])
+  }, [open, query, use])
 
   return (
     <div data-testid={testId} className="text-xs">
@@ -131,7 +135,7 @@ export function LocationPicker({
                   >
                     <span className="flex-1 truncate">{location.name}</span>
                     <span className="text-2xs text-text-tertiary">
-                      {KIND_LABEL[location.kind]}
+                      {usesText(location.uses)}
                       {location.city ? ` · ${location.city}` : ''}
                     </span>
                   </button>
@@ -162,8 +166,8 @@ export function LocationPicker({
       {creating !== null && canEdit && (
         <LocationForm
           initialName={creating}
-          initialKind={kinds[0]}
-          kinds={kinds}
+          initialUses={[use ?? 'shoot']}
+          projectId={projectId}
           canEdit
           onClose={() => setCreating(null)}
           onSaved={async (location) => {

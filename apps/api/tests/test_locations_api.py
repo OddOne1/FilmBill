@@ -84,20 +84,20 @@ def _actions(pg_db, location_id):
 # ─── The record ─────────────────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize("kind", ["shoot", "hotel", "hospital", "other"])
-def test_every_kind_creates(pg_client, pg_db, world, kind):
+@pytest.mark.parametrize("kind", ["shoot", "hotel", "hospital", "restaurant", "other"])
+def test_every_use_creates(pg_client, pg_db, world, kind):
     made = _ok(
         pg_client,
         world,
         name=f"A {kind}",
-        kind=kind,
+        uses=[kind],
         street="Spitalgasse 23",
         zip="1090",
         city="Wien",
         country="at",
         phone="+43 1 40400",
     )
-    assert (made["kind"], made["country"], made["city"], made["is_active"]) == (kind, "AT", "Wien", True)
+    assert (made["uses"], made["country"], made["city"], made["is_active"]) == ([kind], "AT", "Wien", True)
     assert made["map_link"] == "https://www.google.com/maps/search/?api=1&query=Spitalgasse%2023%2C%201090%20Wien%2C%20AT"
     row = pg_db.get(Location, made["id"])
     assert (row.company_id, row.name_key) == (world["company"].id, f"a {kind}")
@@ -215,7 +215,7 @@ def _hospital(pg_client, world):
         pg_client,
         world,
         name="AKH Wien",
-        kind="hospital",
+        uses=["hospital"],
         street="Währinger Gürtel 18-20",
         zip="1090",
         city="Wien",
@@ -305,20 +305,21 @@ def test_only_a_hospital_can_be_marked_verified(pg_client, world):
     refused = _verify(pg_client, world, studio["id"])
     assert refused.status_code == 422
     assert refused.json()["detail"] == (
-        "“Studio Wien” is a shoot location, not a hospital. Only a hospital can be marked verified."
+        "“Studio Wien” is not marked as a hospital. Only a hospital can be marked verified; tick "
+        "“Hospital” on it first if it is one."
     )
 
 
 # ─── Listing ────────────────────────────────────────────────────────────────
 
 
-def test_search_kind_filter_and_archived(pg_client, world):
+def test_search_use_filter_and_archived(pg_client, world):
     _ok(pg_client, world, name="Studio Wien", city="Wien")
-    _ok(pg_client, world, name="Hotel Test", kind="hotel", city="Mödling")
+    _ok(pg_client, world, name="Hotel Test", uses=["hotel"], city="Mödling")
     gone = _ok(pg_client, world, name="Old barn", city="Tulln")
     pg_client.post(f"/locations/{gone['id']}/archive", headers=_h(world))
     assert _names(pg_client, world) == ["Hotel Test", "Studio Wien"]
-    assert _names(pg_client, world, kind="hotel") == ["Hotel Test"]
+    assert _names(pg_client, world, use="hotel") == ["Hotel Test"]
     assert _names(pg_client, world, q="mödl") == ["Hotel Test"]
     assert _names(pg_client, world, include_archived=True) == ["Hotel Test", "Studio Wien", "Old barn"]
 
@@ -372,7 +373,7 @@ def test_staff_list_shoot_locations_and_no_hotel(pg_client, pg_db, world):
     make_location(pg_db, world["company"], name="Hotel Wien", kind="hotel", city="Wien")
     staff = _user(pg_db, world, CompanyRole.staff)
     assert _names(pg_client, world, staff, q="Wien") == ["Studio Wien"]
-    assert _names(pg_client, world, staff, kind="hotel") == []
+    assert _names(pg_client, world, staff, use="hotel") == []
     # Control: the owner sees both with the same search.
     assert _names(pg_client, world, q="Wien") == ["Hotel Wien", "Studio Wien"]
 
@@ -382,10 +383,10 @@ def test_without_crew_access_a_hotel_cannot_be_created(pg_client, pg_db, world, 
         permissions.PERMISSIONS, "parties.view", permissions.PERMISSIONS["parties.view"] - {CompanyRole.producer}
     )
     producer = _user(pg_db, world, CompanyRole.producer)
-    assert _create(pg_client, world, user=producer, name="Hotel X", kind="hotel").status_code == 404
-    made = _create(pg_client, world, user=producer, name="Studio X", kind="shoot")
+    assert _create(pg_client, world, user=producer, name="Hotel X", uses=["hotel"]).status_code == 404
+    made = _create(pg_client, world, user=producer, name="Studio X", uses=["shoot"])
     assert made.status_code == 201
-    assert _patch(pg_client, world, made.json()["location"]["id"], {"kind": "hotel"}, user=producer).status_code == 404
+    assert _patch(pg_client, world, made.json()["location"]["id"], {"uses": ["shoot", "hotel"]}, user=producer).status_code == 404
 
 
 def test_staff_do_not_see_the_on_site_contacts_name(pg_client, pg_db, world):
@@ -424,3 +425,75 @@ def test_there_is_no_delete_route_for_locations(pg_client, world):
     assert deletes == []
     made = _ok(pg_client, world)
     assert pg_client.delete(f"/locations/{made['id']}", headers=_h(world)).status_code == 405
+
+
+
+# ─── L1b: several uses ──────────────────────────────────────────────────────
+
+
+def test_a_place_can_have_several_uses_and_needs_one(pg_client, pg_db, world):
+    both = _ok(pg_client, world, name="Hotel Sacher", uses=["hotel", "shoot"])
+    assert both["uses"] == ["shoot", "hotel"]
+    none = _patch(pg_client, world, both["id"], {"uses": []})
+    assert (none.status_code, none.json()["detail"]) == (
+        422,
+        "This location has no use ticked. Tick at least one: Shooting location, Hotel, Hospital, Restaurant or Other.",
+    )
+    assert _names(pg_client, world, use="shoot") == ["Hotel Sacher"]
+    assert _names(pg_client, world, use="restaurant") == []
+
+
+def test_staff_see_a_hotel_that_is_also_a_shooting_location_without_its_hotel_use(pg_client, pg_db, world):
+    make_location(pg_db, world["company"], name="Hotel Sacher", uses=["shoot", "hotel"])
+    make_location(pg_db, world["company"], name="Hotel Zwei", kind="hotel")
+    staff = _user(pg_db, world, CompanyRole.staff)
+    listed = pg_client.get("/locations", headers=_h(world, staff)).json()["locations"]
+    assert [(row["name"], row["uses"]) for row in listed] == [("Hotel Sacher", ["shoot"])]
+
+
+def test_a_user_who_cannot_see_hotels_keeps_an_existing_hotel_use(pg_client, pg_db, world, monkeypatch):
+    sacher = make_location(pg_db, world["company"], name="Hotel Sacher", uses=["shoot", "hotel"])
+    monkeypatch.setitem(
+        permissions.PERMISSIONS, "parties.view", permissions.PERMISSIONS["parties.view"] - {CompanyRole.producer}
+    )
+    producer = _user(pg_db, world, CompanyRole.producer)
+    saved = _patch(pg_client, world, sacher.id, {"uses": ["shoot", "restaurant"]}, user=producer)
+    assert saved.status_code == 200
+    pg_db.expire_all()
+    assert pg_db.get(Location, sacher.id).uses == ["shoot", "hotel", "restaurant"]
+
+
+def test_the_map_view_is_the_servers(pg_client, world):
+    made = _ok(pg_client, world, coordinates="48.2082, 16.3738")
+    assert made["embed_link"] == (
+        "https://www.openstreetmap.org/export/embed.html?bbox=16.3688%2C48.2032%2C16.3788%2C48.2132"
+        "&layer=mapnik&marker=48.2082%2C16.3738"
+    )
+    assert _ok(pg_client, world, name="No pin")["embed_link"] is None
+
+
+def test_a_pasted_full_link_is_read_without_a_request(pg_client, world, monkeypatch):
+    import httpx
+
+    def no_network(*args, **kwargs):
+        raise AssertionError("a full link must not cause a request")
+
+    # The real network transport: the test client uses its own, so only an
+    # outbound request would reach this.
+    monkeypatch.setattr(httpx.HTTPTransport, "handle_request", no_network)
+    read = pg_client.post(
+        "/locations/resolve-link",
+        headers=_h(world),
+        json={"url": "https://www.google.com/maps/place/AKH+Wien/@48.22,16.34,17z/data=!3d48.2209537!4d16.3477019"},
+    ).json()
+    assert (read["ok"], read["name"], read["latitude"], read["longitude"], read["display"]) == (
+        True, "AKH Wien", "48.220954", "16.347702", "Latitude 48.220954, Longitude 16.347702",
+    )
+    assert read["embed_link"].startswith("https://www.openstreetmap.org/export/embed.html?bbox=")
+    refused = pg_client.post("/locations/resolve-link", headers=_h(world), json={"url": "https://example.com/x"}).json()
+    assert (refused["ok"], refused["refusal"]) == (
+        False, "“example.com” is not a Google Maps or Apple Maps link. Paste a link from one of the two, or the coordinates.",
+    )
+    made = _ok(pg_client, world, name="AKH Wien", uses=["hospital"], coordinates="48.220954, 16.347702",
+               source_link="https://maps.app.goo.gl/abc")
+    assert made["source_link"] == "https://maps.app.goo.gl/abc"

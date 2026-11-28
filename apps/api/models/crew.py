@@ -172,11 +172,6 @@ class CrewAssignment(CompanyScoped, Base):
     booked_by: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
-    #: L1. Where this person sleeps on this strip: a location of kind
-    #: `hotel`, from the strip's hotel list when it has one.
-    hotel_location_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("locations.id", ondelete="RESTRICT"), nullable=True
-    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -200,7 +195,6 @@ class CrewAssignment(CompanyScoped, Base):
         Index("ix_crew_assignments_project", "project_id"),
         Index("ix_crew_assignments_block", "block_id"),
         Index("ix_crew_assignments_party", "party_id"),
-        Index("ix_crew_assignments_hotel", "hotel_location_id"),
     )
 
 

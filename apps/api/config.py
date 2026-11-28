@@ -58,6 +58,15 @@ class Settings(BaseSettings):
     #: comfortably inside this.
     gotenberg_timeout_seconds: int = 30
 
+    # ── OpenStreetMap hospital search (L1b) ───────────────────────────────
+    #
+    # The Overpass API asked for hospitals near a project's shooting
+    # locations. No key; only a coordinate is sent. Point it at your own
+    # Overpass instance if you run one.
+    overpass_url: str = "https://overpass-api.de/api/interpreter"
+    #: How far around each shooting location to look, in km.
+    hospital_search_radius_km: int = 30
+
     # Email settings - supports AWS SES or any SMTP server
     # If mail_provider is "ses", uses AWS SES with aws_mail_* credentials
     # If mail_provider is "smtp", uses standard SMTP with smtp_* settings

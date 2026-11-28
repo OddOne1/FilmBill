@@ -1,5 +1,7 @@
-"""Locations (L1 part 1): list, create, edit, archive, restore, mark a
-hospital verified, where a location is used, and reading a pasted pair.
+"""Locations (L1, L1b): list, create, edit, archive, restore, mark a
+hospital verified, where a location is used, reading a pasted pair or a
+pasted Google / Apple Maps link. A project's own list, its hotel guests and
+booking confirmations are in `routers/project_locations.py`.
 
 **Permissions.** Reading needs `locations.view` (everybody who can see
 projects, staff included); a hotel also needs `parties.view` — without it a
@@ -33,7 +35,9 @@ from ..schemas.location import (
     CoordinatesParsed,
     LocationChange,
     LocationCreate,
-    LocationKind,
+    MapLinkResolve,
+    MapLinkResolved,
+    PlaceUse,
     LocationList,
     LocationRef,
     LocationResponse,
@@ -42,7 +46,7 @@ from ..schemas.location import (
     LocationUse,
     LocationVerify,
 )
-from ..services import audit, location_service as service
+from ..services import audit, location_service as service, map_link_resolver
 
 router = APIRouter(tags=["locations"])
 
@@ -63,15 +67,17 @@ def _location(db: Session, membership: Membership, location_id: uuid.UUID) -> Lo
     return row
 
 
-def ref(row: Optional[Location]) -> Optional[LocationRef]:
+def ref(row: Optional[Location], membership: Optional[Membership] = None) -> Optional[LocationRef]:
     """A location as a strip, a day or a crew row carries it, with the
-    server's map link."""
+    server's map link and map view. Without `membership` every use is
+    shown (callers that already decided the caller may see this row)."""
     if row is None:
         return None
     return LocationRef(
         id=row.id,
         name=row.name,
-        kind=row.kind,
+        uses=service.visible_uses(membership, row) if membership is not None else list(row.uses),
+        embed_link=map_links.embed_link(row.latitude, row.longitude),
         city=row.city,
         latitude=row.latitude,
         longitude=row.longitude,
@@ -99,7 +105,9 @@ def responses(db: Session, membership: Membership, rows: list[Location]) -> list
             LocationResponse(
                 id=row.id,
                 name=row.name,
-                kind=row.kind,
+                uses=service.visible_uses(membership, row),
+                source_link=row.source_link,
+                from_openstreetmap=row.osm_ref is not None,
                 street=row.street,
                 street2=row.street2,
                 zip=row.zip,
@@ -123,6 +131,7 @@ def responses(db: Session, membership: Membership, rows: list[Location]) -> list
                 verification_note=row.verification_note,
                 is_active=row.is_active,
                 map_link=map_links.map_link(row),
+                embed_link=map_links.embed_link(row.latitude, row.longitude),
                 in_use=counts.get(row.id, 0),
                 created_at=row.created_at,
                 updated_at=row.updated_at,
@@ -146,7 +155,7 @@ def _change(db: Session, membership: Membership, change: service.Change) -> Loca
 @router.get("/locations", response_model=LocationList)
 def list_locations(
     q: Optional[str] = Query(default=None, max_length=200),
-    kind: Optional[LocationKind] = Query(default=None),
+    use: Optional[PlaceUse] = Query(default=None),
     include_archived: bool = Query(default=False),
     db: Session = Depends(get_db),
     membership: Membership = Depends(require("locations.view")),
@@ -155,8 +164,8 @@ def list_locations(
     query = service.visible_query(db, membership)
     if not include_archived:
         query = query.filter(Location.is_active.is_(True))
-    if kind is not None:
-        query = query.filter(Location.kind == kind)
+    if use is not None:
+        query = query.filter(Location.uses.contains([use]))
     if q and q.strip():
         like = f"%{q.strip()}%"
         query = query.filter(
@@ -185,6 +194,33 @@ def parse_coordinates(
         longitude=parsed.longitude,
         display=map_links.coordinates_text(parsed.latitude, parsed.longitude),
         refusal=parsed.refusal,
+    )
+
+
+@router.post("/locations/resolve-link", response_model=MapLinkResolved)
+def resolve_link(
+    body: MapLinkResolve,
+    membership: Membership = Depends(require("locations.view")),
+):
+    """L1b. A pasted Google or Apple Maps link: the position, a name and an
+    address text where the link carries them, and the map view. A full link
+    is read without any request; a short share link is opened once
+    (`services/map_link_resolver.py`)."""
+    try:
+        info = map_link_resolver.resolve(body.url)
+    except map_link_resolver.ResolveError as error:
+        return MapLinkResolved(ok=False, refusal=str(error))
+    if info.refusal:
+        return MapLinkResolved(ok=False, provider=info.provider, refusal=info.refusal)
+    return MapLinkResolved(
+        ok=True,
+        latitude=info.latitude,
+        longitude=info.longitude,
+        name=info.name,
+        address=info.address,
+        provider=info.provider,
+        display=map_links.coordinates_text(info.latitude, info.longitude),
+        embed_link=map_links.embed_link(info.latitude, info.longitude),
     )
 
 
@@ -238,8 +274,33 @@ def create_location(
     membership: Membership = Depends(require("locations.edit")),
 ):
     actor = audit.actor_from(request, membership=membership)
-    change = _run(db, lambda: service.create(db, membership, body.model_dump(exclude_unset=True) | {"name": body.name, "kind": body.kind}, actor=actor))
+    project = None
+    if body.project_id is not None:
+        project = _project_for_edit(db, membership, body.project_id)
+    changes = body.model_dump(exclude_unset=True, exclude={"project_id"}) | {"name": body.name}
+
+    def make():
+        change = service.create(db, membership, changes, actor=actor)
+        if project is not None:
+            service.add_to_project(db, project, change.location, actor=actor)
+        return change
+
+    change = _run(db, make)
     return _change(db, membership, change)
+
+
+def _project_for_edit(db: Session, membership: Membership, project_id: uuid.UUID):
+    """L1b. Creating a location straight into a project changes the
+    project: `projects.edit`, and the project must be the caller's."""
+    from ..models.project import Project
+    from ..services.permissions import scoped
+
+    if not membership.can("projects.edit"):
+        _not_found()
+    project = scoped(db.query(Project), membership).filter(Project.id == project_id).first()
+    if project is None:
+        _not_found()
+    return project
 
 
 @router.patch("/locations/{location_id}", response_model=LocationChange)

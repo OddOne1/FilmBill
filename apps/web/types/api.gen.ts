@@ -3797,6 +3797,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/locations/resolve-link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resolve Link
+         * @description L1b. A pasted Google or Apple Maps link: the position, a name and an
+         *     address text where the link carries them, and the map view. A full link
+         *     is read without any request; a short share link is opened once
+         *     (`services/map_link_resolver.py`).
+         */
+        post: operations["resolve_link_locations_resolve_link_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/locations/{location_id}": {
         parameters: {
             query?: never;
@@ -4694,6 +4717,44 @@ export interface paths {
         patch: operations["update_project_projects__project_id__patch"];
         trace?: never;
     };
+    "/projects/{project_id}/attachments/{attachment_id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download Attachment
+         * @description A short-lived link to the stored file (the public presign client,
+         *     rule 16). A text confirmation has no file: its text is in the list.
+         */
+        get: operations["download_attachment_projects__project_id__attachments__attachment_id__download_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}/attachments/{attachment_id}/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Remove Attachment */
+        post: operations["remove_attachment_projects__project_id__attachments__attachment_id__remove_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{project_id}/blocks": {
         parameters: {
             query?: never;
@@ -4782,7 +4843,7 @@ export interface paths {
         /**
          * Set Days Location
          * @description "Set for selected days": these days of the strip get this location
-         *     of their own (shoot or other); null gives them back the strip's. Each
+         *     of their own (a shooting location); null gives them back the strip's. Each
          *     changed day is audited as `project_day.updated`.
          */
         post: operations["set_days_location_projects__project_id__blocks__block_id__days_location_post"];
@@ -4849,48 +4910,6 @@ export interface paths {
          *     is stored.
          */
         post: operations["preview_gear_projects__project_id__blocks__block_id__gear_preview_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/projects/{project_id}/blocks/{block_id}/hotels": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Add Strip Hotel
-         * @description A hotel in use on this strip — what a person's hotel is picked
-         *     from. Needs to see hotels (`parties.view`, D111).
-         */
-        post: operations["add_strip_hotel_projects__project_id__blocks__block_id__hotels_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/projects/{project_id}/blocks/{block_id}/hotels/{location_id}/remove": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Remove Strip Hotel
-         * @description Takes the hotel off the strip's list. People already sleeping there
-         *     keep it on their row.
-         */
-        post: operations["remove_strip_hotel_projects__project_id__blocks__block_id__hotels__location_id__remove_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5083,28 +5102,6 @@ export interface paths {
          *     new role without a rate copies the person's effective rate in it.
          */
         patch: operations["update_crew_projects__project_id__crew__assignment_id__patch"];
-        trace?: never;
-    };
-    "/projects/{project_id}/crew/{assignment_id}/hotel": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /**
-         * Set Crew Hotel
-         * @description L1. Where this person sleeps on this strip: a hotel from the strip's
-         *     hotels, or any hotel when the strip lists none; null clears it. Needs
-         *     to see hotels; without that this is a 404.
-         */
-        put: operations["set_crew_hotel_projects__project_id__crew__assignment_id__hotel_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
         trace?: never;
     };
     "/projects/{project_id}/crew/{assignment_id}/remove": {
@@ -5344,6 +5341,159 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{project_id}/hospital-suggestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Hospital Suggestions
+         * @description Per group of the project's shooting locations (within 30 km of each
+         *     other), the nearest hospitals OpenStreetMap knows — confirmed emergency
+         *     departments first. Nothing is added; each one is added by a click.
+         */
+        get: operations["hospital_suggestions_projects__project_id__hospital_suggestions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}/hospital-suggestions/add": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Suggested Hospital
+         * @description One suggestion, as shown, becomes a hospital location of the company
+         *     (or the one already made from the same OpenStreetMap entry) on this
+         *     project's list.
+         */
+        post: operations["add_suggested_hospital_projects__project_id__hospital_suggestions_add_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}/locations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Project Locations
+         * @description Every location the project uses: added by hand, or by a strip or a
+         *     day. Hotel guests and a hotel's confirmations only for who may see
+         *     crew.
+         */
+        get: operations["list_project_locations_projects__project_id__locations_get"];
+        put?: never;
+        /**
+         * Add Project Location
+         * @description Add a location the company already has (from any project).
+         */
+        post: operations["add_project_location_projects__project_id__locations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}/locations/{location_id}/attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add File Attachment
+         * @description A confirmation as a file: PDF, an email (.eml / .msg), a picture or
+         *     a .txt, at most 15 MB, kept in the company's storage.
+         */
+        post: operations["add_file_attachment_projects__project_id__locations__location_id__attachments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}/locations/{location_id}/attachments/text": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Text Attachment
+         * @description A confirmation as pasted text — an email or a message.
+         */
+        post: operations["add_text_attachment_projects__project_id__locations__location_id__attachments_text_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}/locations/{location_id}/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Remove Project Location
+         * @description Off the project's list (the location itself stays for other
+         *     projects). Refused while a strip, a day or a guest still uses it.
+         */
+        post: operations["remove_project_location_projects__project_id__locations__location_id__remove_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}/locations/{location_id}/stays": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Stay
+         * @description A crew member of this production at this hotel, with their own
+         *     dates (default: first assigned day to the day after the last).
+         */
+        post: operations["add_stay_projects__project_id__locations__location_id__stays_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{project_id}/status": {
         parameters: {
             query?: never;
@@ -5362,6 +5512,40 @@ export interface paths {
          *     diffing every `project.updated` event.
          */
         post: operations["change_status_projects__project_id__status_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}/stays/{stay_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Stay */
+        patch: operations["update_stay_projects__project_id__stays__stay_id__patch"];
+        trace?: never;
+    };
+    "/projects/{project_id}/stays/{stay_id}/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Remove Stay */
+        post: operations["remove_stay_projects__project_id__stays__stay_id__remove_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5981,6 +6165,53 @@ export interface components {
             /** Price Hint */
             price_hint?: string | null;
         };
+        /** AttachmentDownload */
+        AttachmentDownload: {
+            /** Url */
+            url: string;
+        };
+        /** AttachmentResponse */
+        AttachmentResponse: {
+            /** Body Text */
+            body_text?: string | null;
+            /** Content Type */
+            content_type?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By Name */
+            created_by_name?: string | null;
+            /** File Name */
+            file_name?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "file" | "text";
+            /**
+             * Location Id
+             * Format: uuid
+             */
+            location_id: string;
+            /** Size Bytes */
+            size_bytes?: number | null;
+            /** Title */
+            title: string;
+        };
+        /** AttachmentText */
+        AttachmentText: {
+            /** Text */
+            text: string;
+            /** Title */
+            title?: string | null;
+        };
         /**
          * AuditEventPage
          * @description One page of events, newest first.
@@ -6411,6 +6642,16 @@ export interface components {
             position?: number | null;
             /** Type */
             type?: ("prep" | "shoot" | "travel" | "wrap" | "post" | "office" | "off") | null;
+        };
+        /** Body_add_file_attachment_projects__project_id__locations__location_id__attachments_post */
+        Body_add_file_attachment_projects__project_id__locations__location_id__attachments_post: {
+            /**
+             * File
+             * Format: binary
+             */
+            file: string;
+            /** Title */
+            title?: string | null;
         };
         /** Body_apply_actuals_import_budgets__budget_id__actuals_import_post */
         Body_apply_actuals_import_budgets__budget_id__actuals_import_post: {
@@ -8215,13 +8456,6 @@ export interface components {
              * Format: date
              */
             end_date: string;
-            /** Hotels */
-            hotels?: components["schemas"]["LocationRef"][];
-            /**
-             * Hotels Visible
-             * @default false
-             */
-            hotels_visible: boolean;
             /**
              * Id
              * Format: uuid
@@ -8953,7 +9187,11 @@ export interface components {
              * @default []
              */
             days: components["schemas"]["CrewAssignmentDayResponse"][];
-            hotel?: components["schemas"]["LocationRef"] | null;
+            /**
+             * Hotel Stays
+             * @default []
+             */
+            hotel_stays: components["schemas"]["CrewHotelStay"][];
             /**
              * Hotel Visible
              * @default false
@@ -8985,8 +9223,6 @@ export interface components {
             role_item_id?: string | null;
             /** Role Name */
             role_name?: string | null;
-            /** Route Link */
-            route_link?: string | null;
             /**
              * Status
              * @enum {string}
@@ -9185,12 +9421,30 @@ export interface components {
             reason: string;
         };
         /**
-         * CrewHotelSet
-         * @description L1. A person's hotel on this strip; null clears it.
+         * CrewHotelStay
+         * @description L1b. A stay as a crew row shows it. `route_link`: directions from the
+         *     hotel to the effective location of the person's first day on this strip
+         *     inside the stay — a link built by the server; nothing is fetched.
          */
-        CrewHotelSet: {
-            /** Location Id */
-            location_id?: string | null;
+        CrewHotelStay: {
+            /**
+             * Check In
+             * Format: date
+             */
+            check_in: string;
+            /**
+             * Check Out
+             * Format: date
+             */
+            check_out: string;
+            hotel: components["schemas"]["LocationRef"];
+            /** Route Link */
+            route_link?: string | null;
+            /**
+             * Stay Id
+             * Format: uuid
+             */
+            stay_id: string;
         };
         /** CrewImportApplyResponse */
         CrewImportApplyResponse: {
@@ -11010,6 +11264,152 @@ export interface components {
             detail?: components["schemas"]["ValidationError"][];
         };
         /**
+         * HospitalAdd
+         * @description A suggestion, as it was shown, to add to the project.
+         */
+        HospitalAdd: {
+            /** City */
+            city?: string | null;
+            /** Country */
+            country?: string | null;
+            /** Latitude */
+            latitude: number | string;
+            /** Longitude */
+            longitude: number | string;
+            /** Name */
+            name: string;
+            /** Osm Ref */
+            osm_ref: string;
+            /** Phone */
+            phone?: string | null;
+            /** Street */
+            street?: string | null;
+            /** Website */
+            website?: string | null;
+            /** Zip */
+            zip?: string | null;
+        };
+        /** HospitalGroupResponse */
+        HospitalGroupResponse: {
+            /** Offers */
+            offers: components["schemas"]["HospitalOfferResponse"][];
+            /** Shooting Locations */
+            shooting_locations: string[];
+        };
+        /** HospitalOfferResponse */
+        HospitalOfferResponse: {
+            /** City */
+            city?: string | null;
+            /** Country */
+            country?: string | null;
+            /** Distance Km */
+            distance_km: number;
+            /** Emergency */
+            emergency?: boolean | null;
+            /** Existing Location Id */
+            existing_location_id?: string | null;
+            /**
+             * In Project
+             * @default false
+             */
+            in_project: boolean;
+            /** Latitude */
+            latitude?: string | null;
+            /** Longitude */
+            longitude?: string | null;
+            /** Map Link */
+            map_link?: string | null;
+            /** Name */
+            name: string;
+            /** Nearest To */
+            nearest_to: string;
+            /** Osm Ref */
+            osm_ref: string;
+            /** Phone */
+            phone?: string | null;
+            /** Street */
+            street?: string | null;
+            /** Website */
+            website?: string | null;
+            /** Zip */
+            zip?: string | null;
+        };
+        /** HospitalSuggestions */
+        HospitalSuggestions: {
+            /** Error */
+            error?: string | null;
+            /** Groups */
+            groups: components["schemas"]["HospitalGroupResponse"][];
+            /** Missing Coordinates */
+            missing_coordinates?: string[];
+            /**
+             * Source
+             * @default OpenStreetMap
+             */
+            source: string;
+        };
+        /**
+         * HotelStayCreate
+         * @description A crew member of the production at this hotel. Without dates: their
+         *     first assigned day to the day after their last.
+         */
+        HotelStayCreate: {
+            /** Check In */
+            check_in?: string | null;
+            /** Check Out */
+            check_out?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /**
+             * Party Id
+             * Format: uuid
+             */
+            party_id: string;
+        };
+        /** HotelStayResponse */
+        HotelStayResponse: {
+            /**
+             * Check In
+             * Format: date
+             */
+            check_in: string;
+            /**
+             * Check Out
+             * Format: date
+             */
+            check_out: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Location Id
+             * Format: uuid
+             */
+            location_id: string;
+            /** Nights */
+            nights: number;
+            /** Notes */
+            notes?: string | null;
+            /**
+             * Party Id
+             * Format: uuid
+             */
+            party_id: string;
+            /** Party Name */
+            party_name: string;
+        };
+        /** HotelStayUpdate */
+        HotelStayUpdate: {
+            /** Check In */
+            check_in?: string | null;
+            /** Check Out */
+            check_out?: string | null;
+            /** Notes */
+            notes?: string | null;
+        };
+        /**
          * ImportApplyResponse
          * @description The same table, after the fact. `applied` is the count that landed.
          */
@@ -11477,12 +11877,6 @@ export interface components {
             email?: string | null;
             /** Emergency Phone */
             emergency_phone?: string | null;
-            /**
-             * Kind
-             * @default shoot
-             * @enum {string}
-             */
-            kind: "shoot" | "hotel" | "hospital" | "other";
             /** Latitude */
             latitude?: number | string | null;
             /** Longitude */
@@ -11493,10 +11887,16 @@ export interface components {
             notes?: string | null;
             /** Phone */
             phone?: string | null;
+            /** Project Id */
+            project_id?: string | null;
+            /** Source Link */
+            source_link?: string | null;
             /** Street */
             street?: string | null;
             /** Street2 */
             street2?: string | null;
+            /** Uses */
+            uses?: ("shoot" | "hotel" | "hospital" | "restaurant" | "other")[] | null;
             /** Website */
             website?: string | null;
             /** Zip */
@@ -11516,6 +11916,8 @@ export interface components {
         LocationRef: {
             /** City */
             city?: string | null;
+            /** Embed Link */
+            embed_link?: string | null;
             /**
              * Id
              * Format: uuid
@@ -11526,11 +11928,6 @@ export interface components {
              * @default true
              */
             is_active: boolean;
-            /**
-             * Kind
-             * @enum {string}
-             */
-            kind: "shoot" | "hotel" | "hospital" | "other";
             /** Latitude */
             latitude?: string | null;
             /** Longitude */
@@ -11539,6 +11936,8 @@ export interface components {
             map_link?: string | null;
             /** Name */
             name: string;
+            /** Uses */
+            uses: ("shoot" | "hotel" | "hospital" | "restaurant" | "other")[];
         };
         /** LocationResponse */
         LocationResponse: {
@@ -11563,8 +11962,15 @@ export interface components {
             created_at: string;
             /** Email */
             email?: string | null;
+            /** Embed Link */
+            embed_link?: string | null;
             /** Emergency Phone */
             emergency_phone?: string | null;
+            /**
+             * From Openstreetmap
+             * @default false
+             */
+            from_openstreetmap: boolean;
             /**
              * Id
              * Format: uuid
@@ -11580,11 +11986,6 @@ export interface components {
              * @default true
              */
             is_active: boolean;
-            /**
-             * Kind
-             * @enum {string}
-             */
-            kind: "shoot" | "hotel" | "hospital" | "other";
             /** Latitude */
             latitude?: string | null;
             /** Longitude */
@@ -11597,6 +11998,8 @@ export interface components {
             notes?: string | null;
             /** Phone */
             phone?: string | null;
+            /** Source Link */
+            source_link?: string | null;
             /** Street */
             street?: string | null;
             /** Street2 */
@@ -11606,6 +12009,8 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+            /** Uses */
+            uses: ("shoot" | "hotel" | "hospital" | "restaurant" | "other")[];
             /** Verification Note */
             verification_note?: string | null;
             /**
@@ -11640,8 +12045,6 @@ export interface components {
             email?: string | null;
             /** Emergency Phone */
             emergency_phone?: string | null;
-            /** Kind */
-            kind?: ("shoot" | "hotel" | "hospital" | "other") | null;
             /** Latitude */
             latitude?: number | string | null;
             /** Longitude */
@@ -11652,10 +12055,14 @@ export interface components {
             notes?: string | null;
             /** Phone */
             phone?: string | null;
+            /** Source Link */
+            source_link?: string | null;
             /** Street */
             street?: string | null;
             /** Street2 */
             street2?: string | null;
+            /** Uses */
+            uses?: ("shoot" | "hotel" | "hospital" | "restaurant" | "other")[] | null;
             /** Website */
             website?: string | null;
             /** Zip */
@@ -11683,7 +12090,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "strip" | "day" | "strip_hotel" | "crew_hotel";
+            kind: "project" | "strip" | "day" | "hotel_stay";
             /** Party Name */
             party_name?: string | null;
             /**
@@ -11733,6 +12140,37 @@ export interface components {
             note: string;
             /** Valid Until */
             valid_until?: string | null;
+        };
+        /** MapLinkResolve */
+        MapLinkResolve: {
+            /** Url */
+            url: string;
+        };
+        /**
+         * MapLinkResolved
+         * @description What a pasted Google or Apple Maps link says: the position, a name
+         *     and an address text where the link carries them, the map view — or the
+         *     sentence why not.
+         */
+        MapLinkResolved: {
+            /** Address */
+            address?: string | null;
+            /** Display */
+            display?: string | null;
+            /** Embed Link */
+            embed_link?: string | null;
+            /** Latitude */
+            latitude?: string | null;
+            /** Longitude */
+            longitude?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Ok */
+            ok: boolean;
+            /** Provider */
+            provider?: string | null;
+            /** Refusal */
+            refusal?: string | null;
         };
         /** MemberCreate */
         MemberCreate: {
@@ -13263,6 +13701,38 @@ export interface components {
             /** Type */
             type: string;
         };
+        /** ProjectLocationAdd */
+        ProjectLocationAdd: {
+            /**
+             * Location Id
+             * Format: uuid
+             */
+            location_id: string;
+        };
+        /** ProjectLocationEntry */
+        ProjectLocationEntry: {
+            /** Attachments */
+            attachments?: components["schemas"]["AttachmentResponse"][];
+            /** Day Dates */
+            day_dates?: string[];
+            location: components["schemas"]["LocationResponse"];
+            /** Stays */
+            stays?: components["schemas"]["HotelStayResponse"][];
+            /** Strip Names */
+            strip_names?: string[];
+        };
+        /** ProjectLocations */
+        ProjectLocations: {
+            /** Hotels Visible */
+            hotels_visible: boolean;
+            /** Locations */
+            locations: components["schemas"]["ProjectLocationEntry"][];
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+        };
         /** ProjectPage */
         ProjectPage: {
             /** Limit */
@@ -13802,14 +14272,6 @@ export interface components {
             reason: string;
             /** Serial Number */
             serial_number: string;
-        };
-        /** StripHotelAdd */
-        StripHotelAdd: {
-            /**
-             * Location Id
-             * Format: uuid
-             */
-            location_id: string;
         };
         /**
          * TaxClassResponse
@@ -21071,7 +21533,7 @@ export interface operations {
         parameters: {
             query?: {
                 q?: string | null;
-                kind?: ("shoot" | "hotel" | "hospital" | "other") | null;
+                use?: ("shoot" | "hotel" | "hospital" | "restaurant" | "other") | null;
                 include_archived?: boolean;
             };
             header?: {
@@ -21159,6 +21621,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CoordinatesParsed"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resolve_link_locations_resolve_link_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MapLinkResolve"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MapLinkResolved"];
                 };
             };
             /** @description Validation Error */
@@ -22876,6 +23373,74 @@ export interface operations {
             };
         };
     };
+    download_attachment_projects__project_id__attachments__attachment_id__download_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+                attachment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttachmentDownload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_attachment_projects__project_id__attachments__attachment_id__remove_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+                attachment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectLocations"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     create_block_projects__project_id__blocks_post: {
         parameters: {
             query?: never;
@@ -23166,79 +23731,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GearBookingsPreview"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    add_strip_hotel_projects__project_id__blocks__block_id__hotels_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-Company-Id"?: string | null;
-            };
-            path: {
-                project_id: string;
-                block_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["StripHotelAdd"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BlockChangeResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    remove_strip_hotel_projects__project_id__blocks__block_id__hotels__location_id__remove_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-Company-Id"?: string | null;
-            };
-            path: {
-                project_id: string;
-                block_id: string;
-                location_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BlockChangeResponse"];
                 };
             };
             /** @description Validation Error */
@@ -23586,44 +24078,6 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["CrewAssignmentUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CrewAssignmentResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    set_crew_hotel_projects__project_id__crew__assignment_id__hotel_put: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-Company-Id"?: string | null;
-            };
-            path: {
-                project_id: string;
-                assignment_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CrewHotelSet"];
             };
         };
         responses: {
@@ -24085,6 +24539,294 @@ export interface operations {
             };
         };
     };
+    hospital_suggestions_projects__project_id__hospital_suggestions_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HospitalSuggestions"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_suggested_hospital_projects__project_id__hospital_suggestions_add_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HospitalAdd"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectLocations"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_project_locations_projects__project_id__locations_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectLocations"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_project_location_projects__project_id__locations_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectLocationAdd"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectLocations"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_file_attachment_projects__project_id__locations__location_id__attachments_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+                location_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_add_file_attachment_projects__project_id__locations__location_id__attachments_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectLocations"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_text_attachment_projects__project_id__locations__location_id__attachments_text_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+                location_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AttachmentText"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectLocations"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_project_location_projects__project_id__locations__location_id__remove_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+                location_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectLocations"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_stay_projects__project_id__locations__location_id__stays_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+                location_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HotelStayCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectLocations"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     change_status_projects__project_id__status_post: {
         parameters: {
             query?: never;
@@ -24109,6 +24851,78 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProjectResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_stay_projects__project_id__stays__stay_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+                stay_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HotelStayUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectLocations"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_stay_projects__project_id__stays__stay_id__remove_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+                stay_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectLocations"];
                 };
             };
             /** @description Validation Error */

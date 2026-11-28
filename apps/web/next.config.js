@@ -23,6 +23,9 @@ const nextConfig = {
       // UI-1: crew are people, so there is no Crew page any more; they are
       // the Crew tab of the Contacts list.
       { source: '/crew', destination: '/contacts?tab=crew', permanent: false },
+      // L1b: locations live in each project (its Locations tab); there is no
+      // general Locations page any more.
+      { source: '/locations', destination: '/projects', permanent: false },
     ]
   },
 }

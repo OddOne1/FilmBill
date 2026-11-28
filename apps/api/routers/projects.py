@@ -586,12 +586,15 @@ def update_day(
         )
 
     if changes.get("location_id") is not None:
-        # L1. A day's own location: `locations.view`, shoot or other, active
+        # L1. A day's own location: `locations.view`, a shooting location, active
         # (or the one it already has). Not visible: 404.
         if not membership.can("locations.view"):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Location not found")
         try:
-            location_service.place_for_day(db, membership, changes["location_id"], current=row.location_id)
+            place = location_service.place_for_day(db, membership, changes["location_id"], current=row.location_id)
+            location_service.ensure_in_project(
+                db, project, place, actor=audit.actor_from(request, membership=membership)
+            )
         except LookupError:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Location not found") from None
         except location_service.LocationError as error:

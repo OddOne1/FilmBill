@@ -11,7 +11,7 @@ import { datesBetween, dayLabel, weekdayLetter, type IsoDate } from '@/lib/calen
 import type { BlockChange, BlockUpdate, CalendarDay, CalendarStrip, ProjectDayUpdate } from '@/types'
 import { DAY_TYPES } from '../../projects-chrome'
 import { countsSentence, dayByDate, stripName, typeColour, typeLabel, typeText } from './shared'
-import { DayLocation, StripHotels, StripLocationSection } from './strip-locations'
+import { DayLocation, StripLocationSection } from './strip-locations'
 
 /**
  * The side panel for one strip: its fields, its days as chips, and the
@@ -235,7 +235,6 @@ export function StripPanel({
       {isStrip && (
         <>
           <StripLocationSection strip={strip} base={base} canEdit={canEdit} actions={actions} selected={selected} />
-          <StripHotels strip={strip} base={base} canEdit={canEdit} actions={actions} />
         </>
       )}
 

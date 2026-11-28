@@ -266,13 +266,9 @@ class CalendarStripResponse(BaseModel):
     end_date: dt.date
     #: The B2a free text, unchanged — shown as "Old text" where set.
     location: Optional[str] = None
-    #: L1. The strip's location record (shoot or other).
+    #: L1. The strip's location record (a shooting location).
     location_id: Optional[uuid.UUID] = None
     location_ref: Optional[LocationRef] = None
-    #: L1. The hotels in use on the strip — empty, with `hotels_visible`
-    #: false, for a caller who may not see hotels.
-    hotels: list[LocationRef] = Field(default_factory=list)
-    hotels_visible: bool = False
     default_call_time: Optional[dt.time] = None
     default_wrap_time: Optional[dt.time] = None
     notes: Optional[str] = None
@@ -321,8 +317,8 @@ class BlockUpdate(BaseModel):
     label: Optional[str] = Field(default=None, max_length=255)
     type: Optional[ProjectDayType] = None
     location: Optional[str] = Field(default=None, max_length=255)
-    #: L1. The strip's location: a location of kind shoot or other; null
-    #: clears it. Moving or resizing the strip never touches it.
+    #: L1. The strip's location: a location marked as a shooting location;
+    #: null clears it. Moving or resizing the strip never touches it.
     location_id: Optional[uuid.UUID] = None
     default_call_time: Optional[dt.time] = None
     default_wrap_time: Optional[dt.time] = None
@@ -398,8 +394,3 @@ class BlockDaysLocation(BaseModel):
     dates: list[dt.date] = Field(min_length=1, max_length=731)
     location_id: Optional[uuid.UUID] = None
 
-
-class StripHotelAdd(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    location_id: uuid.UUID
