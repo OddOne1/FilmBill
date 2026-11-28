@@ -1,0 +1,26 @@
+Before anything else, run `git remote -v`. This prompt is for the FilmBill repo (OddOne1/FilmBill). If the remote is anything else, stop, say so, and do nothing.
+
+# Claude Code prompt — FilmBill L1b: locations inside the project, map links, hotel stays with confirmations, hospitals found automatically
+
+> Follows L1 (prompt 38, merged `6b2a13b`, CI green). Written from Mathias's review of L1 on 2026-11-28. **The call sheet (C1) becomes prompt 40.** Read CLAUDE.md and obey it (scoping + isolation tests, migrations only, generated types, behavioural tests, real-FAIL mutations, three-tier report, audit in the caller's transaction, no hard delete of business records, rule 17e floors, 404 for missing permission, B1.2 messages). Each part its own commit, green on its own; merge to `origin/main`, push, report CI (all five jobs).
+
+## Mathias's decisions (2026-11-28, answered in chat)
+1. **Locations live in the project.** A **Locations** tab on the project (next to Days, Crew, Gear); the sidebar item goes (`/locations` redirects to `/projects`). Records stay **shared across projects**: a project lists the locations it uses, and a location from any earlier project can be added again with one pick.
+2. **Hospitals are found automatically via OpenStreetMap** (Overpass API, no key, no account; URL configurable, default `https://overpass-api.de/api/interpreter`, generic User-Agent): for each shooting location with coordinates, the nearest hospitals with an emergency department. **Several hospitals** are suggested when shooting locations are far apart (default: shooting locations more than 30 km apart get their own nearest hospital). Suggestions are added with one click; nothing is added silently.
+3. **Google and Apple Maps links can be pasted.** Full links are read without a network call (`/@lat,lng`, `!3d…!4d…`, `q=`/`query=`/`ll=`/`sll=`/`coordinate=`, `/place/<name>/`, Apple `address=`); **short share links** (`maps.app.goo.gl`, `goo.gl/maps`, Apple short links) are opened once by the server to read where they point — only those hosts, at most 5 redirects, 5 s timeout, nothing else fetched. Name, address and coordinates are prefilled from what the link carries. The form shows a **map view** (OpenStreetMap embed, no key) — the same view the call sheet will use.
+4. **One place, several uses.** `kind` becomes a set of **uses**: Shooting location, Hotel, Hospital, Restaurant, Other (at least one). A hotel or hospital is a shooting location only when that use is ticked on purpose; a strip's or a day's location must have the **Shooting location** use. Existing rows: `uses = [kind]`; a location already used on a strip gets the shooting use as well.
+
+## Hotels (Mathias, 2026-11-28)
+- In the project's Locations tab each hotel lists its **guests**: crew members of this production (people with a scheduled or booked assignment in the project), each with their own **check-in and check-out dates** (default: the day before / after their assigned days? — default to their first assigned day and the day after their last; adjustable; check-in before check-out). A person may have stays in several hotels.
+- **Booking confirmations** attach to the hotel within the project: a file (PDF, `.eml`, image, `.txt`) stored in S3 (browser URLs only via the `S3_PUBLIC_ENDPOINT` presign client, rule 16) or pasted text (an email or a message). Each with a title, who added it and when; removable (soft).
+- This **replaces** L1's strip hotel list and the per-assignment hotel: migrate `project_block_hotels` into the project's locations and `crew_assignments.hotel_location_id` into stays (dates = the assignment's first day to the day after its last), then drop both. The crew row shows the person's hotel(s) for its days with the **Route** link (hotel → effective location of the first day in the stay), read-only there; editing is in the Locations tab.
+- Stays and confirmations are crew information: `parties.view` to see (D111/D150 unchanged), `projects.edit` + `parties.view` to change.
+
+## Restaurants and other places
+Use **Restaurant** (lunch, dinner, catering pick-up) and **Other** (parking, base camp, station) are listed in the tab in their own sections.
+
+## Tests and mutations (at least)
+Pure: link parser golden cases (each URL shape, short-link detection, a link with no position), distance/cluster table (one cluster, two clusters 30 km+ apart). The short-link resolver and the Overpass client each get a test proving they actually ran (a local HTTP server, rule 17b), plus the refusal for a host not on the list. Real DB: uses migration, project locations, stays (dates, guests must be crew of the project), confirmations (file and text), isolation rows, permission matrix incl. staff (no hotel use, no stays, no confirmations). Web: tab sections, paste-a-link prefill, map view renders the API's embed URL, guests with dates, confirmation upload and text, hospital suggestions added on click. **Mutations:** a staff user sees a stay; the parser prefers `/@` over `!3d!4d`; a short link to a host not on the list is followed; the web builds the embed URL itself.
+
+## Documentation
+SCOPE: supersede D148–D150, D152, D154 where they conflict (mark them "superseded by D…"), new D-numbers for decisions 1–4, hotels, restaurants. §13: an L1b row. Report in `docs/reports/L1b-report.md`.
