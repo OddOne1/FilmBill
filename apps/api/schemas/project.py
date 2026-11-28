@@ -29,6 +29,8 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .location import LocationRef
+
 from ..models.project import PROJECT_DAY_TYPES, PROJECT_STATUSES
 
 ProjectStatus = Literal["planning", "active", "wrapped", "archived"]
@@ -56,6 +58,8 @@ class ProjectDayResponse(BaseModel):
     date: dt.date
     type: str
     location: Optional[str] = None
+    #: L1. The day's own location record, if it has one.
+    location_id: Optional[uuid.UUID] = None
     call_time: Optional[dt.time] = None
     wrap_time: Optional[dt.time] = None
     notes: Optional[str] = None
@@ -87,6 +91,9 @@ class ProjectDayUpdate(BaseModel):
     date: Optional[dt.date] = None
     type: Optional[ProjectDayType] = None
     location: Optional[str] = Field(default=None, max_length=255)
+    #: L1. A location of kind shoot or other for this day only; null clears
+    #: it, and the day falls back to its strip's location.
+    location_id: Optional[uuid.UUID] = None
     call_time: Optional[dt.time] = None
     wrap_time: Optional[dt.time] = None
     notes: Optional[str] = None
@@ -226,6 +233,14 @@ class CalendarDayResponse(BaseModel):
     wrap_time: Optional[dt.time] = None
     notes: Optional[str] = None
     effective_location: Optional[str] = None
+    #: L1. The location RECORDS: the day's own (`location_ref`), and the one
+    #: it happens at (`effective_location_ref`) — its own, else its strip's,
+    #: with `effective_location_source` saying which. An archived one is
+    #: still returned, `is_active: false`.
+    location_id: Optional[uuid.UUID] = None
+    location_ref: Optional[LocationRef] = None
+    effective_location_ref: Optional[LocationRef] = None
+    effective_location_source: Optional[Literal["day", "strip"]] = None
     effective_call_time: Optional[dt.time] = None
     effective_wrap_time: Optional[dt.time] = None
     is_override: bool = False
@@ -249,7 +264,15 @@ class CalendarStripResponse(BaseModel):
     label: Optional[str] = None
     start_date: dt.date
     end_date: dt.date
+    #: The B2a free text, unchanged — shown as "Old text" where set.
     location: Optional[str] = None
+    #: L1. The strip's location record (shoot or other).
+    location_id: Optional[uuid.UUID] = None
+    location_ref: Optional[LocationRef] = None
+    #: L1. The hotels in use on the strip — empty, with `hotels_visible`
+    #: false, for a caller who may not see hotels.
+    hotels: list[LocationRef] = Field(default_factory=list)
+    hotels_visible: bool = False
     default_call_time: Optional[dt.time] = None
     default_wrap_time: Optional[dt.time] = None
     notes: Optional[str] = None
@@ -298,6 +321,9 @@ class BlockUpdate(BaseModel):
     label: Optional[str] = Field(default=None, max_length=255)
     type: Optional[ProjectDayType] = None
     location: Optional[str] = Field(default=None, max_length=255)
+    #: L1. The strip's location: a location of kind shoot or other; null
+    #: clears it. Moving or resizing the strip never touches it.
+    location_id: Optional[uuid.UUID] = None
     default_call_time: Optional[dt.time] = None
     default_wrap_time: Optional[dt.time] = None
     notes: Optional[str] = None
@@ -361,3 +387,19 @@ class BlockChangeResponse(BaseModel):
     #: The project's counts after the action, so the screen can update its
     #: header from this response rather than counting.
     counts: dict[str, int] = Field(default_factory=dict)
+
+
+class BlockDaysLocation(BaseModel):
+    """L1. "Set for selected days": these days of the strip get this
+    location of their own; null gives them back the strip's."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    dates: list[dt.date] = Field(min_length=1, max_length=731)
+    location_id: Optional[uuid.UUID] = None
+
+
+class StripHotelAdd(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    location_id: uuid.UUID

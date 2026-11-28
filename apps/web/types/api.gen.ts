@@ -4770,6 +4770,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{project_id}/blocks/{block_id}/days/location": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set Days Location
+         * @description "Set for selected days": these days of the strip get this location
+         *     of their own (shoot or other); null gives them back the strip's. Each
+         *     changed day is audited as `project_day.updated`.
+         */
+        post: operations["set_days_location_projects__project_id__blocks__block_id__days_location_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{project_id}/blocks/{block_id}/duplicate": {
         parameters: {
             query?: never;
@@ -4827,6 +4849,48 @@ export interface paths {
          *     is stored.
          */
         post: operations["preview_gear_projects__project_id__blocks__block_id__gear_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}/blocks/{block_id}/hotels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Strip Hotel
+         * @description A hotel in use on this strip — what a person's hotel is picked
+         *     from. Needs to see hotels (`parties.view`, D111).
+         */
+        post: operations["add_strip_hotel_projects__project_id__blocks__block_id__hotels_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}/blocks/{block_id}/hotels/{location_id}/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Remove Strip Hotel
+         * @description Takes the hotel off the strip's list. People already sleeping there
+         *     keep it on their row.
+         */
+        post: operations["remove_strip_hotel_projects__project_id__blocks__block_id__hotels__location_id__remove_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5019,6 +5083,28 @@ export interface paths {
          *     new role without a rate copies the person's effective rate in it.
          */
         patch: operations["update_crew_projects__project_id__crew__assignment_id__patch"];
+        trace?: never;
+    };
+    "/projects/{project_id}/crew/{assignment_id}/hotel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Crew Hotel
+         * @description L1. Where this person sleeps on this strip: a hotel from the strip's
+         *     hotels, or any hotel when the strip lists none; null clears it. Needs
+         *     to see hotels; without that this is a 404.
+         */
+        put: operations["set_crew_hotel_projects__project_id__crew__assignment_id__hotel_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/projects/{project_id}/crew/{assignment_id}/remove": {
@@ -6253,6 +6339,17 @@ export interface components {
             /** Type */
             type?: ("prep" | "shoot" | "travel" | "wrap" | "post" | "office" | "off") | null;
         };
+        /**
+         * BlockDaysLocation
+         * @description L1. "Set for selected days": these days of the strip get this
+         *     location of their own; null gives them back the strip's.
+         */
+        BlockDaysLocation: {
+            /** Dates */
+            dates: string[];
+            /** Location Id */
+            location_id?: string | null;
+        };
         /** BlockDaysRequest */
         BlockDaysRequest: {
             /** Days */
@@ -6306,6 +6403,8 @@ export interface components {
             label?: string | null;
             /** Location */
             location?: string | null;
+            /** Location Id */
+            location_id?: string | null;
             /** Notes */
             notes?: string | null;
             /** Position */
@@ -8055,6 +8154,9 @@ export interface components {
             effective_call_time?: string | null;
             /** Effective Location */
             effective_location?: string | null;
+            effective_location_ref?: components["schemas"]["LocationRef"] | null;
+            /** Effective Location Source */
+            effective_location_source?: ("day" | "strip") | null;
             /** Effective Wrap Time */
             effective_wrap_time?: string | null;
             /**
@@ -8074,6 +8176,9 @@ export interface components {
             is_override: boolean;
             /** Location */
             location?: string | null;
+            /** Location Id */
+            location_id?: string | null;
+            location_ref?: components["schemas"]["LocationRef"] | null;
             /** Notes */
             notes?: string | null;
             /** Type */
@@ -8110,6 +8215,13 @@ export interface components {
              * Format: date
              */
             end_date: string;
+            /** Hotels */
+            hotels?: components["schemas"]["LocationRef"][];
+            /**
+             * Hotels Visible
+             * @default false
+             */
+            hotels_visible: boolean;
             /**
              * Id
              * Format: uuid
@@ -8129,6 +8241,9 @@ export interface components {
             label?: string | null;
             /** Location */
             location?: string | null;
+            /** Location Id */
+            location_id?: string | null;
+            location_ref?: components["schemas"]["LocationRef"] | null;
             /** Notes */
             notes?: string | null;
             /** Position */
@@ -8838,6 +8953,12 @@ export interface components {
              * @default []
              */
             days: components["schemas"]["CrewAssignmentDayResponse"][];
+            hotel?: components["schemas"]["LocationRef"] | null;
+            /**
+             * Hotel Visible
+             * @default false
+             */
+            hotel_visible: boolean;
             /**
              * Id
              * Format: uuid
@@ -8864,6 +8985,8 @@ export interface components {
             role_item_id?: string | null;
             /** Role Name */
             role_name?: string | null;
+            /** Route Link */
+            route_link?: string | null;
             /**
              * Status
              * @enum {string}
@@ -9060,6 +9183,14 @@ export interface components {
             party_id: string;
             /** Reason */
             reason: string;
+        };
+        /**
+         * CrewHotelSet
+         * @description L1. A person's hotel on this strip; null clears it.
+         */
+        CrewHotelSet: {
+            /** Location Id */
+            location_id?: string | null;
         };
         /** CrewImportApplyResponse */
         CrewImportApplyResponse: {
@@ -11378,6 +11509,37 @@ export interface components {
             /** Locations */
             locations: components["schemas"]["LocationResponse"][];
         };
+        /**
+         * LocationRef
+         * @description A location as a strip, a day or a crew row shows it.
+         */
+        LocationRef: {
+            /** City */
+            city?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "shoot" | "hotel" | "hospital" | "other";
+            /** Latitude */
+            latitude?: string | null;
+            /** Longitude */
+            longitude?: string | null;
+            /** Map Link */
+            map_link?: string | null;
+            /** Name */
+            name: string;
+        };
         /** LocationResponse */
         LocationResponse: {
             /** Access Notes */
@@ -12988,6 +13150,8 @@ export interface components {
             is_active: boolean;
             /** Location */
             location?: string | null;
+            /** Location Id */
+            location_id?: string | null;
             /** Notes */
             notes?: string | null;
             /**
@@ -13018,6 +13182,8 @@ export interface components {
             date?: string | null;
             /** Location */
             location?: string | null;
+            /** Location Id */
+            location_id?: string | null;
             /** Notes */
             notes?: string | null;
             /** Type */
@@ -13636,6 +13802,14 @@ export interface components {
             reason: string;
             /** Serial Number */
             serial_number: string;
+        };
+        /** StripHotelAdd */
+        StripHotelAdd: {
+            /**
+             * Location Id
+             * Format: uuid
+             */
+            location_id: string;
         };
         /**
          * TaxClassResponse
@@ -22853,6 +23027,44 @@ export interface operations {
             };
         };
     };
+    set_days_location_projects__project_id__blocks__block_id__days_location_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+                block_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BlockDaysLocation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlockChangeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     duplicate_block_projects__project_id__blocks__block_id__duplicate_post: {
         parameters: {
             query?: never;
@@ -22954,6 +23166,79 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GearBookingsPreview"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_strip_hotel_projects__project_id__blocks__block_id__hotels_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+                block_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StripHotelAdd"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlockChangeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_strip_hotel_projects__project_id__blocks__block_id__hotels__location_id__remove_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+                block_id: string;
+                location_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlockChangeResponse"];
                 };
             };
             /** @description Validation Error */
@@ -23301,6 +23586,44 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["CrewAssignmentUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CrewAssignmentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_crew_hotel_projects__project_id__crew__assignment_id__hotel_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Company-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+                assignment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CrewHotelSet"];
             };
         };
         responses: {

@@ -44,7 +44,7 @@ from ..schemas.project import (
     ProjectStatusRequest,
     ProjectUpdate,
 )
-from ..services import audit, project_service
+from ..services import audit, location_service, project_service
 from ..services.permissions import scoped
 
 router = APIRouter(tags=["projects"])
@@ -584,6 +584,18 @@ def update_day(
             day_type=moved_type,
             exclude_id=row.id,
         )
+
+    if changes.get("location_id") is not None:
+        # L1. A day's own location: `locations.view`, shoot or other, active
+        # (or the one it already has). Not visible: 404.
+        if not membership.can("locations.view"):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Location not found")
+        try:
+            location_service.place_for_day(db, membership, changes["location_id"], current=row.location_id)
+        except LookupError:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Location not found") from None
+        except location_service.LocationError as error:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)) from None
 
     before = audit.snapshot(row, project_service.PROJECT_DAY_AUDITED)
     for field_name, value in changes.items():

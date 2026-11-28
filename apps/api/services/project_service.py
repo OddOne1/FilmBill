@@ -63,6 +63,7 @@ PROJECT_DAY_AUDITED: tuple[str, ...] = (
     "date",
     "type",
     "location",
+    "location_id",
     "call_time",
     "wrap_time",
     "notes",

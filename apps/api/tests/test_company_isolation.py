@@ -572,6 +572,20 @@ CASES: dict[str, object] = {
     # B2c-1. Crew on B's calendar: B's project, strip and assignment, and
     # B's person's unavailability. Bodies name nil ids: the project or party
     # in the PATH is the boundary and is looked up first.
+    # L1. Locations on B's strip and B's person: the project in the PATH is
+    # the boundary; `{location_id}` on the remove is B's hospital.
+    "POST /projects/{project_id}/blocks/{block_id}/days/location": {
+        "body": {"dates": ["2026-07-06"], "location_id": None}
+    },
+    "POST /projects/{project_id}/blocks/{block_id}/hotels": {
+        "body": {},
+        "body_rows": {"location_id": "location_in_b"},
+    },
+    "POST /projects/{project_id}/blocks/{block_id}/hotels/{location_id}/remove": {"body": None},
+    "PUT /projects/{project_id}/crew/{assignment_id}/hotel": {
+        "body": {},
+        "body_rows": {"location_id": "location_in_b"},
+    },
     "GET /projects/{project_id}/crew": {"body": None},
     "POST /projects/{project_id}/blocks/{block_id}/crew": {
         "body": {"people": [{"party_id": "00000000-0000-0000-0000-000000000000"}]}

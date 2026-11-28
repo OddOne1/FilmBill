@@ -56,6 +56,7 @@ const SHOOT: CalendarStrip = {
   notes: null,
   position: null,
   is_active: true,
+  hotels_visible: false,
   counts: { shoot: 3 },
   days: datesBetween('2026-07-06', '2026-07-08').map((date) => ({
     id: `d-${date}`,
@@ -114,6 +115,7 @@ function assignment(overrides: Partial<CrewAssignment> = {}): CrewAssignment {
       { date: '2026-07-08', call_time: null, wrap_time: null, effective_call_time: '08:00:00', effective_wrap_time: null, day_type: 'shoot' },
     ],
     clashes: [CLASH],
+    hotel_visible: false,
     created_at: '2026-11-27T10:00:00Z',
     ...overrides,
   }

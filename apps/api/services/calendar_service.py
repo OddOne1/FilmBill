@@ -38,6 +38,7 @@ BLOCK_AUDITED: tuple[str, ...] = (
     "start_date",
     "end_date",
     "location",
+    "location_id",
     "default_call_time",
     "default_wrap_time",
     "notes",
@@ -53,7 +54,7 @@ BLOCK_REMOVED = "project_block.removed"
 BLOCK_DAYS_SET = "project_block.days_set"
 
 #: The fields that make a day "carry data" — what a resize asks about.
-DAY_DATA_FIELDS: tuple[str, ...] = ("location", "call_time", "wrap_time", "notes")
+DAY_DATA_FIELDS: tuple[str, ...] = ("location", "location_id", "call_time", "wrap_time", "notes")
 
 
 def say(day: date) -> str:
@@ -506,6 +507,7 @@ def duplicate_block(
         start_date=block.start_date + timedelta(days=offset),
         end_date=block.end_date + timedelta(days=offset),
         location=block.location,
+        location_id=block.location_id,
         default_call_time=block.default_call_time,
         default_wrap_time=block.default_wrap_time,
         notes=block.notes,

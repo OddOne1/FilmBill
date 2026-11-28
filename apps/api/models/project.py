@@ -254,7 +254,15 @@ class ProjectBlock(CompanyScoped, Base):
     label: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     start_date: Mapped[date] = mapped_column(Date, nullable=False)
     end_date: Mapped[date] = mapped_column(Date, nullable=False)
+    #: The free text B2a stored. Kept unchanged by L1 and shown as "Old
+    #: text" next to the picker, with a manual "Create location from this
+    #: text"; nothing converts it by itself.
     location: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    #: L1. The strip's default location (kind shoot or other) — every day of
+    #: the strip that has none of its own happens here.
+    location_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("locations.id", ondelete="RESTRICT"), nullable=True
+    )
     #: What a day of this strip shows when it has no call or wrap of its own.
     default_call_time: Mapped[Optional[Any]] = mapped_column(Time, nullable=True)
     default_wrap_time: Mapped[Optional[Any]] = mapped_column(Time, nullable=True)
@@ -282,6 +290,36 @@ class ProjectBlock(CompanyScoped, Base):
             "start_date <= end_date", name="ck_project_blocks_dates_in_order"
         ),
         Index("ix_project_blocks_company_project", "company_id", "project_id"),
+        Index("ix_project_blocks_location", "location_id"),
+    )
+
+
+class ProjectBlockHotel(CompanyScoped, Base):
+    """L1. A hotel in use on a strip — the list a person's hotel is picked
+    from. One row per strip and hotel (`uq_project_block_hotels_pair`);
+    removing it sets `is_active` false and adding it again reactivates the
+    same row, so nothing is ever deleted."""
+
+    __tablename__ = "project_block_hotels"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    block_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("project_blocks.id", ondelete="RESTRICT"), nullable=False
+    )
+    location_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("locations.id", ondelete="RESTRICT"), nullable=False
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("block_id", "location_id", name="uq_project_block_hotels_pair"),
+        Index("ix_project_block_hotels_location", "location_id"),
     )
 
 
@@ -325,6 +363,10 @@ class ProjectDay(CompanyScoped, Base):
     #: One of `PROJECT_DAY_TYPES`.
     type: Mapped[str] = mapped_column(String(16), nullable=False)
     location: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    #: L1. A day that happens somewhere other than its strip's location.
+    location_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("locations.id", ondelete="RESTRICT"), nullable=True
+    )
     #: Times rather than timestamps: a call time is a wall-clock time on that
     #: day, and storing it as an instant would mean choosing a timezone for a
     #: field whose whole meaning is "be there when the sheet says".

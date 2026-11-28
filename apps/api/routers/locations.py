@@ -35,6 +35,7 @@ from ..schemas.location import (
     LocationCreate,
     LocationKind,
     LocationList,
+    LocationRef,
     LocationResponse,
     LocationUpdate,
     LocationUsage,
@@ -60,6 +61,23 @@ def _location(db: Session, membership: Membership, location_id: uuid.UUID) -> Lo
     if row is None:
         _not_found()
     return row
+
+
+def ref(row: Optional[Location]) -> Optional[LocationRef]:
+    """A location as a strip, a day or a crew row carries it, with the
+    server's map link."""
+    if row is None:
+        return None
+    return LocationRef(
+        id=row.id,
+        name=row.name,
+        kind=row.kind,
+        city=row.city,
+        latitude=row.latitude,
+        longitude=row.longitude,
+        is_active=row.is_active,
+        map_link=map_links.map_link(row),
+    )
 
 
 def responses(db: Session, membership: Membership, rows: list[Location]) -> list[LocationResponse]:

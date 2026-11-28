@@ -412,11 +412,274 @@ class Use:
     party_name: Optional[str] = None
 
 
+def _strip_name(block) -> str:
+    from .crew_assignment_service import strip_name
+
+    return strip_name(block)
+
+
 def in_use_counts(db: Session, company_id: uuid.UUID, ids: list[uuid.UUID]) -> dict[uuid.UUID, int]:
-    """How many things use each location. Nothing attaches to a location
-    until part 2 of L1 adds the strip, day and crew links."""
-    return {}
+    """How many active strips, active days, strip hotel lists and open crew
+    rows use each location — in four grouped queries."""
+    from sqlalchemy import func
+
+    from ..models.crew import ASSIGNMENT_CANCELLED, CrewAssignment
+    from ..models.project import ProjectBlock, ProjectBlockHotel, ProjectDay
+
+    if not ids:
+        return {}
+    counts: dict[uuid.UUID, int] = {}
+    queries = (
+        db.query(ProjectBlock.location_id, func.count())
+        .filter(ProjectBlock.company_id == company_id, ProjectBlock.location_id.in_(ids), ProjectBlock.is_active.is_(True))
+        .group_by(ProjectBlock.location_id),
+        db.query(ProjectDay.location_id, func.count())
+        .filter(ProjectDay.company_id == company_id, ProjectDay.location_id.in_(ids), ProjectDay.is_active.is_(True))
+        .group_by(ProjectDay.location_id),
+        db.query(ProjectBlockHotel.location_id, func.count())
+        .join(ProjectBlock, ProjectBlock.id == ProjectBlockHotel.block_id)
+        .filter(
+            ProjectBlockHotel.company_id == company_id,
+            ProjectBlockHotel.location_id.in_(ids),
+            ProjectBlockHotel.is_active.is_(True),
+            ProjectBlock.is_active.is_(True),
+        )
+        .group_by(ProjectBlockHotel.location_id),
+        db.query(CrewAssignment.hotel_location_id, func.count())
+        .filter(
+            CrewAssignment.company_id == company_id,
+            CrewAssignment.hotel_location_id.in_(ids),
+            CrewAssignment.status != ASSIGNMENT_CANCELLED,
+        )
+        .group_by(CrewAssignment.hotel_location_id),
+    )
+    for query in queries:
+        for location_id, count in query.all():
+            counts[location_id] = counts.get(location_id, 0) + count
+    return counts
 
 
 def usage(db: Session, membership, row: Location) -> list[Use]:
-    return []
+    """Every strip, day, strip hotel list and crew row that uses `row`, with
+    the project. Crew rows (a person's name) only for a caller who may see
+    crew; a hotel is only reachable for such a caller anyway."""
+    from ..models.crew import ASSIGNMENT_CANCELLED, CrewAssignment
+    from ..models.party import Party
+    from ..models.project import Project, ProjectBlock, ProjectBlockHotel, ProjectDay
+
+    company_id = membership.company_id
+    uses: list[Use] = []
+    for block, project in (
+        db.query(ProjectBlock, Project)
+        .join(Project, Project.id == ProjectBlock.project_id)
+        .filter(ProjectBlock.company_id == company_id, ProjectBlock.location_id == row.id, ProjectBlock.is_active.is_(True))
+        .order_by(ProjectBlock.start_date, ProjectBlock.id)
+    ):
+        uses.append(Use("strip", project.id, project.name, project.project_number, block.id, _strip_name(block)))
+    for day, block, project in (
+        db.query(ProjectDay, ProjectBlock, Project)
+        .join(Project, Project.id == ProjectDay.project_id)
+        .outerjoin(ProjectBlock, ProjectBlock.id == ProjectDay.block_id)
+        .filter(ProjectDay.company_id == company_id, ProjectDay.location_id == row.id, ProjectDay.is_active.is_(True))
+        .order_by(ProjectDay.date, ProjectDay.id)
+    ):
+        uses.append(
+            Use(
+                "day",
+                project.id,
+                project.name,
+                project.project_number,
+                block.id if block else None,
+                _strip_name(block) if block else None,
+                day.date,
+            )
+        )
+    for block, project in (
+        db.query(ProjectBlock, Project)
+        .join(ProjectBlockHotel, ProjectBlockHotel.block_id == ProjectBlock.id)
+        .join(Project, Project.id == ProjectBlock.project_id)
+        .filter(
+            ProjectBlockHotel.company_id == company_id,
+            ProjectBlockHotel.location_id == row.id,
+            ProjectBlockHotel.is_active.is_(True),
+            ProjectBlock.is_active.is_(True),
+        )
+        .order_by(ProjectBlock.start_date, ProjectBlock.id)
+    ):
+        uses.append(Use("strip_hotel", project.id, project.name, project.project_number, block.id, _strip_name(block)))
+    if can_see_hotels(membership):
+        for assignment, block, project, name in (
+            db.query(CrewAssignment, ProjectBlock, Project, Party.name)
+            .join(ProjectBlock, ProjectBlock.id == CrewAssignment.block_id)
+            .join(Project, Project.id == CrewAssignment.project_id)
+            .join(Party, Party.id == CrewAssignment.party_id)
+            .filter(
+                CrewAssignment.company_id == company_id,
+                CrewAssignment.hotel_location_id == row.id,
+                CrewAssignment.status != ASSIGNMENT_CANCELLED,
+            )
+            .order_by(ProjectBlock.start_date, Party.name, CrewAssignment.id)
+        ):
+            uses.append(
+                Use("crew_hotel", project.id, project.name, project.project_number, block.id, _strip_name(block), party_name=name)
+            )
+    return uses
+
+
+# ─── Attaching a location ───────────────────────────────────────────────────
+
+#: The kinds a strip or a day may take as its location: where it is SHOT.
+PLACE_KINDS: tuple[str, ...] = ("shoot", "other")
+
+
+def _attachable(db: Session, membership, location_id: uuid.UUID, *, current: Optional[uuid.UUID]) -> Location:
+    row = visible(db, membership, location_id)
+    if row is None:
+        raise LookupError("location")
+    if not row.is_active and row.id != current:
+        raise LocationError(
+            f"“{row.name}” is archived. Restore it under Locations, or pick another location."
+        )
+    return row
+
+
+def place_for_day(db: Session, membership, location_id: Optional[uuid.UUID], *, current: Optional[uuid.UUID]) -> Optional[Location]:
+    """The location a strip or a day may be set to: shoot or other, active
+    (or the one it already has). None clears it."""
+    if location_id is None:
+        return None
+    row = _attachable(db, membership, location_id, current=current)
+    if row.kind not in PLACE_KINDS:
+        if row.kind == LOCATION_HOTEL:
+            raise LocationError(
+                f"“{row.name}” is a hotel. A strip's or a day's location is where it is shot: pick a shoot "
+                "location, or add the hotel under Hotels."
+            )
+        raise LocationError(
+            f"“{row.name}” is a hospital. A strip's or a day's location is where it is shot: pick a shoot "
+            "location, or change this location's kind first."
+        )
+    return row
+
+
+def hotel(db: Session, membership, location_id: uuid.UUID, *, current: Optional[uuid.UUID] = None) -> Location:
+    """A location that may be used as a hotel: kind hotel, active (or the
+    one already set). A hotel the caller may not see is not found."""
+    if not can_see_hotels(membership):
+        raise LookupError("hotel")
+    row = _attachable(db, membership, location_id, current=current)
+    if row.kind != LOCATION_HOTEL:
+        raise LocationError(
+            f"“{row.name}” is a {KIND_LABELS[row.kind]}, not a hotel. Pick a hotel, or change this "
+            "location's kind to Hotel first."
+        )
+    return row
+
+
+def strip_hotels(db: Session, company_id: uuid.UUID, block_ids) -> dict[uuid.UUID, list[Location]]:
+    """The hotels in use on each strip, by name."""
+    from ..models.project import ProjectBlockHotel
+
+    out: dict[uuid.UUID, list[Location]] = {}
+    block_ids = list(block_ids)
+    if not block_ids:
+        return out
+    rows = (
+        db.query(ProjectBlockHotel.block_id, Location)
+        .join(Location, Location.id == ProjectBlockHotel.location_id)
+        .filter(
+            ProjectBlockHotel.company_id == company_id,
+            ProjectBlockHotel.block_id.in_(block_ids),
+            ProjectBlockHotel.is_active.is_(True),
+        )
+        .order_by(Location.name_key, Location.id)
+        .all()
+    )
+    for block_id, location in rows:
+        out.setdefault(block_id, []).append(location)
+    return out
+
+
+def by_id(db: Session, company_id: uuid.UUID, ids) -> dict[uuid.UUID, Location]:
+    ids = {i for i in ids if i is not None}
+    if not ids:
+        return {}
+    return {
+        row.id: row
+        for row in db.query(Location).filter(Location.company_id == company_id, Location.id.in_(ids))
+    }
+
+
+def add_strip_hotel(db: Session, membership, block, location: Location, *, actor: audit.Actor) -> bool:
+    """Adds `location` to the strip's hotels; True when it was not there."""
+    from ..models.project import ProjectBlockHotel
+
+    row = (
+        db.query(ProjectBlockHotel)
+        .filter(ProjectBlockHotel.block_id == block.id, ProjectBlockHotel.location_id == location.id)
+        .first()
+    )
+    if row is not None and row.is_active:
+        return False
+    if row is None:
+        db.add(ProjectBlockHotel(company_id=block.company_id, block_id=block.id, location_id=location.id))
+    else:
+        row.is_active = True
+    db.flush()
+    audit.record(
+        db, actor, block, "project_block.hotel_added", None,
+        {"hotel_location_id": str(location.id), "hotel": location.name},
+    )
+    return True
+
+
+def remove_strip_hotel(db: Session, block, location: Location, *, actor: audit.Actor) -> bool:
+    """Takes `location` off the strip's hotels. People who already sleep
+    there keep it — the list is what new choices are made from."""
+    from ..models.project import ProjectBlockHotel
+
+    row = (
+        db.query(ProjectBlockHotel)
+        .filter(
+            ProjectBlockHotel.block_id == block.id,
+            ProjectBlockHotel.location_id == location.id,
+            ProjectBlockHotel.is_active.is_(True),
+        )
+        .first()
+    )
+    if row is None:
+        return False
+    row.is_active = False
+    db.flush()
+    audit.record(
+        db, actor, block, "project_block.hotel_removed",
+        {"hotel_location_id": str(location.id), "hotel": location.name}, None,
+    )
+    return True
+
+
+def check_hotel_for_strip(db: Session, block, location: Location, *, current: Optional[uuid.UUID]) -> None:
+    """A person's hotel: one of the strip's hotels, or any hotel when the
+    strip has none listed. The one already set stays allowed."""
+    if location.id == current:
+        return
+    listed = strip_hotels(db, block.company_id, [block.id]).get(block.id, [])
+    if listed and location.id not in {h.id for h in listed}:
+        names = ", ".join(h.name for h in listed)
+        raise LocationError(
+            f"“{location.name}” is not one of this strip's hotels ({names}). Pick one of them, or add "
+            "it to the strip's hotels first. (A strip with no hotels listed accepts any hotel.)"
+        )
+
+
+def set_crew_hotel(db: Session, assignment, location: Optional[Location], *, actor: audit.Actor) -> None:
+    before = assignment.hotel_location_id
+    after = location.id if location is not None else None
+    if before == after:
+        return
+    assignment.hotel_location_id = after
+    db.flush()
+    audit.record(
+        db, actor, assignment, "crew_assignment.hotel_set",
+        {"hotel_location_id": before}, {"hotel_location_id": after},
+    )

@@ -56,6 +56,7 @@ const SHOOT: CalendarStrip = {
   notes: null,
   position: null,
   is_active: true,
+  hotels_visible: false,
   counts: { shoot: 3 },
   days: datesBetween('2026-07-06', '2026-07-08').map((date) => ({
     id: `d-${date}`,

@@ -246,9 +246,12 @@ POST /parties/{party_id}/unavailability/{unavailability_id}/remove
 POST /projects
 POST /projects/{project_id}/blocks
 POST /projects/{project_id}/blocks/{block_id}/crew
+POST /projects/{project_id}/blocks/{block_id}/days/location
 POST /projects/{project_id}/blocks/{block_id}/duplicate
 POST /projects/{project_id}/blocks/{block_id}/gear
 POST /projects/{project_id}/blocks/{block_id}/gear/preview
+POST /projects/{project_id}/blocks/{block_id}/hotels
+POST /projects/{project_id}/blocks/{block_id}/hotels/{location_id}/remove
 POST /projects/{project_id}/blocks/{block_id}/move
 POST /projects/{project_id}/blocks/{block_id}/remove
 POST /projects/{project_id}/blocks/{block_id}/resize
@@ -282,3 +285,4 @@ PUT /devices/{device_id}/rental
 PUT /me/crew
 PUT /me/crew/roles
 PUT /projects/{project_id}/blocks/{block_id}/days
+PUT /projects/{project_id}/crew/{assignment_id}/hotel

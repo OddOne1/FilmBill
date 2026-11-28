@@ -54,6 +54,7 @@ from ..schemas.crew_assignments import (
     CrewBulkStatusChange,
     CrewBulkStatusResult,
     CrewClashResponse,
+    CrewHotelSet,
     CrewStatusChange,
     CrewStripCounts,
     ProjectCrewResponse,
@@ -63,8 +64,10 @@ from ..schemas.crew_assignments import (
     UnavailabilityResponse,
     UnavailabilityUpdate,
 )
-from ..services import audit, crew_assignment_service as service, crew_roles_service, party_service
+from ..billing.planning import map_links
+from ..services import audit, crew_assignment_service as service, crew_roles_service, location_service, party_service
 from ..services.permissions import scoped
+from .locations import ref as location_ref
 
 router = APIRouter()
 
@@ -200,6 +203,20 @@ def responses(db: Session, membership: Membership, rows: list[CrewAssignment]) -
             ProjectDay.is_active.is_(True),
         )
     }
+    # L1. Hotels, and the location each person's first day happens at —
+    # the day's own, else the strip's — for the Route link.
+    hotels_visible = location_service.can_see_hotels(membership)
+    first_place: dict[uuid.UUID, Optional[uuid.UUID]] = {}
+    for r in rows:
+        block = blocks.get(r.block_id)
+        first = days[r.id][0].date if days[r.id] else None
+        pday = project_days.get((r.block_id, first)) if first else None
+        first_place[r.id] = (pday.location_id if pday else None) or (block.location_id if block else None)
+    places = location_service.by_id(
+        db,
+        company_id,
+        list(first_place.values()) + ([r.hotel_location_id for r in rows] if hotels_visible else []),
+    )
     clashes = service.clashes_for(
         db,
         company_id,
@@ -246,6 +263,13 @@ def responses(db: Session, membership: Membership, rows: list[CrewAssignment]) -
                 booked_by_name=user_names.get(row.booked_by) if row.booked_by else None,
                 days=day_rows,
                 clashes=[_clash(c) for c in clashes.get(row.id, [])],
+                hotel_visible=hotels_visible,
+                hotel=location_ref(places.get(row.hotel_location_id)) if hotels_visible and row.hotel_location_id else None,
+                route_link=(
+                    map_links.directions_link(places.get(row.hotel_location_id), places.get(first_place[row.id]))
+                    if hotels_visible and row.hotel_location_id and first_place[row.id]
+                    else None
+                ),
                 created_at=row.created_at,
             )
         )
@@ -490,6 +514,44 @@ def set_crew_status_bulk(
         ],
         assignments=responses(db, membership, [row for row, _ in rows]),
     )
+
+
+@router.put(
+    "/projects/{project_id}/crew/{assignment_id}/hotel",
+    response_model=CrewAssignmentResponse,
+    tags=["projects"],
+)
+def set_crew_hotel(
+    project_id: uuid.UUID,
+    assignment_id: uuid.UUID,
+    body: CrewHotelSet,
+    request: Request,
+    db: Session = Depends(get_db),
+    membership: Membership = Depends(can_change),
+):
+    """L1. Where this person sleeps on this strip: a hotel from the strip's
+    hotels, or any hotel when the strip lists none; null clears it. Needs
+    to see hotels; without that this is a 404."""
+    project = _project(db, membership, project_id)
+    row = _assignment(db, membership, project, assignment_id)
+    if not location_service.can_see_hotels(membership):
+        _not_found()
+    hotel = None
+    try:
+        if body.location_id is not None:
+            hotel = location_service.hotel(db, membership, body.location_id, current=row.hotel_location_id)
+            location_service.check_hotel_for_strip(
+                db, db.get(ProjectBlock, row.block_id), hotel, current=row.hotel_location_id
+            )
+        location_service.set_crew_hotel(db, row, hotel, actor=audit.actor_from(request, membership=membership))
+    except LookupError:
+        db.rollback()
+        _not_found()
+    except location_service.LocationError as error:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)) from None
+    db.commit()
+    return _one(db, membership, row)
 
 
 @router.post(

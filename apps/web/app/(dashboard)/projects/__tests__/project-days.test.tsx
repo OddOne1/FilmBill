@@ -83,6 +83,7 @@ function strip(
     notes: null,
     position: null,
     is_active: true,
+    hotels_visible: false,
     days,
     counts: {},
     ...overrides,

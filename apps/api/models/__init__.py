@@ -34,6 +34,7 @@ from .project import (
     BudgetSection,
     Project,
     ProjectBlock,
+    ProjectBlockHotel,
     ProjectDay,
 )
 from .crew import CrewAssignment, CrewAssignmentDay, CrewUnavailability, PartyCrewRole
@@ -86,6 +87,7 @@ __all__ = [
     "PartyVatCheck",
     "Project",
     "ProjectBlock",
+    "ProjectBlockHotel",
     "ProjectDay",
     "Budget",
     "BudgetSection",
